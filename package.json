@@ -1,0 +1,9 @@
+{
+  "name": "shikigen",
+  "private": true,
+  "scripts": {
+    "dev:web": "pnpm --filter @shikigen/web dev",
+    "dev:api": "cd apps/api && uv run uvicorn app.main:app --reload --port 8000",
+    "dev": "pnpm run dev:web & pnpm run dev:api"
+  }
+}

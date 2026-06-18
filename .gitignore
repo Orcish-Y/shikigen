@@ -1,0 +1,35 @@
+# IDE — IntelliJ / PyCharm
+.idea/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# AI agent tools (non-Claude)
+.agents/skills/
+.codex/
+.claude/
+
+# Local settings overrides
+**/settings.local.json
+
+# Node
+node_modules/
+**/node_modules/
+
+# Next.js
+.next/
+out/
+
+# Python
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+.venv/
+**/.venv/
+
+# OS
+.DS_Store
+Thumbs.db
