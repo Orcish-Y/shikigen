@@ -1506,7 +1506,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "deepagents", specifier = ">=0.1.0" },
+    { name = "deepagents", specifier = ">=0.6.10" },
     { name = "fastapi", specifier = ">=0.115.0" },
     { name = "langchain-anthropic", specifier = ">=0.3.0" },
     { name = "langchain-core", specifier = ">=0.3.0" },
