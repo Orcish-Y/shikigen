@@ -89,3 +89,14 @@ def create_chat_agent(
 ) -> ChatAgent:
     """工厂函数：创建 ChatAgent 实例。"""
     return ChatAgent(model=model, system_prompt=system_prompt)
+
+
+if __name__ == "__main__":
+    import os
+    from dotenv import load_dotenv
+
+    load_dotenv()
+
+    model = os.getenv("MODEL", "deepseek:deepseek-v4-flash")
+    agent = ChatAgent(model=model, system_prompt="你是一个有用的 AI 助手，是一只柔情猫娘，名字叫做柔爪。")
+    agent.run()
