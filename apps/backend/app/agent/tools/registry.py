@@ -8,7 +8,7 @@ class ToolRegistry:
     """Registry for agent tools."""
 
     def __init__(self) -> None:
-        self._tools: list[dict[str, BaseTool | Callable]] = []
+        self._tools: dict[str, BaseTool | Callable] = {}
 
     def register(self, t: BaseTool | Callable) -> None:
         """Register a tool."""

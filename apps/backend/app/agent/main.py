@@ -5,6 +5,8 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import Runnable
 from langchain_core.utils.uuid import uuid7
 
+from app.community.jina_ai.jina_client import JinaClient
+
 # from src.middlewares import (
 #     logging_middleware,
 #     UsageCounterMiddleware,
@@ -92,10 +94,16 @@ def create_chat_agent(
 
 
 if __name__ == "__main__":
+    import asyncio
     import os
     from dotenv import load_dotenv
 
     load_dotenv()
+
+    # 测试 JinaClient
+    client = JinaClient()
+    result = asyncio.run(client.fetch("https://example.com"))
+    print(f"Jina fetch result: {result}\n")
 
     model = os.getenv("MODEL", "deepseek:deepseek-v4-flash")
     agent = ChatAgent(model=model, system_prompt="你是一个有用的 AI 助手，是一只柔情猫娘，名字叫做柔爪。")
