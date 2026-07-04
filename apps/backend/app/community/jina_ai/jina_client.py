@@ -1,9 +1,14 @@
 import httpx  
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
 class JinaClient:  
+  def __init__(self):
+    self.api_key = os.getenv("JINA_API_KEY")
+    self.proxy = os.getenv("HTTPS_PROXY") or os.getenv("HTTP_PROXY")
+
   async def fetch(self, url: str, return_format: str = 'html', timeout: int = 300) -> str:
     headers = {
       "Content-Type": "application/json",
@@ -11,7 +16,9 @@ class JinaClient:
       'x-Timeout': str(timeout),
     }
 
-    # 注入 api key
+    # ?? Jina API key?????
+    if self.api_key:
+      headers["Authorization"] = f"Bearer {self.api_key}"
 
     try:
       async with httpx.AsyncClient() as client:

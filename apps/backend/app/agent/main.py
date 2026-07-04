@@ -1,6 +1,11 @@
 from dataclasses import dataclass, field
 
-from langchain.agents import create_agent
+import json
+from datetime import datetime
+from pathlib import Path
+
+from app.agent.agent_factory import create_agent
+
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import Runnable
 from langchain_core.utils.uuid import uuid7
@@ -12,6 +17,21 @@ from app.community.jina_ai.jina_client import JinaClient
 #     UsageCounterMiddleware,
 #     UsageCounterState,
 # )
+
+
+
+def _to_serializable(obj):
+    """递归转换 LangChain 消息对象和元组为 JSON 可序列化类型。"""
+    from langchain_core.messages import BaseMessage as _BaseMessage
+    if isinstance(obj, _BaseMessage):
+        return obj.model_dump()
+    if isinstance(obj, tuple):
+        return [_to_serializable(item) for item in obj]
+    if isinstance(obj, dict):
+        return {key: _to_serializable(val) for key, val in obj.items()}
+    if isinstance(obj, list):
+        return [_to_serializable(item) for item in obj]
+    return obj
 
 
 @dataclass
@@ -43,19 +63,32 @@ class ChatAgent:
         self.messages.append(HumanMessage(user_input))
         response = ""
 
+        # 本次调用的所有 chunk 保存到一个文件
+        out_dir = Path("temp")
+        out_dir.mkdir(exist_ok=True)
+        out_path = out_dir / f"{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.json"
+        chunks: list[dict] = []
+
         for chunk in self._agent.stream(
             {"messages": self.messages},
             version="v2",
             config=self._config,
             stream_mode=["messages", "values"],
         ):
+            chunks.append(chunk)
             if chunk["type"] == "messages":
                 token, _ = chunk["data"]
-                print(token.content, end="", flush=True)
-                response += token.content
+                if getattr(token, "type", None) != "tool":
+                    print(token.content, end="", flush=True)
+                    response += token.content
+                
             elif chunk["type"] == "values":
                 # agent 内部状态直接接管消息历史
                 self.messages = chunk["data"]["messages"]
+
+        # 循环结束后一次性写入所有 chunk
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump(_to_serializable(chunks), f, ensure_ascii=False, indent=2)
 
         print()
         self._trim_history()
@@ -102,8 +135,6 @@ if __name__ == "__main__":
 
     # 测试 JinaClient
     client = JinaClient()
-    result = asyncio.run(client.fetch("https://example.com"))
-    print(f"Jina fetch result: {result}\n")
 
     model = os.getenv("MODEL", "deepseek:deepseek-v4-flash")
     agent = ChatAgent(model=model, system_prompt="你是一个有用的 AI 助手，是一只柔情猫娘，名字叫做柔爪。")

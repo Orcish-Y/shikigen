@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from app.agent.middlewares.toolTtracking import ToolTtrackingMiddleware
 from deepagents import create_deep_agent
 from deepagents.backends import StateBackend
 from langchain.chat_models import BaseChatModel
@@ -62,7 +63,8 @@ class Agent:
             skills=skill_names if skill_names else None,
             backend=self._backend or StateBackend(),
             checkpointer=self._checkpointer,
-            interrupt_on=self._interrupt_on,
+            middleware=[ToolTtrackingMiddleware()],
+            # interrupt_on=self._interrupt_on,
         )
 
 

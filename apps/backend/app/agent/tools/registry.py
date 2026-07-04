@@ -1,24 +1,22 @@
 """Tool registry — manages registered tools."""
 
-from typing import Callable
-
+from app.community.jina_ai.tool import web_fetch_tool
 from langchain_core.tools import BaseTool
 
 class ToolRegistry:
     """Registry for agent tools."""
-
-    def __init__(self) -> None:
-        self._tools: dict[str, BaseTool | Callable] = {}
-
-    def register(self, t: BaseTool | Callable) -> None:
+    tools = [web_fetch_tool]
+    
+    def register(self, t: BaseTool) -> None:
         """Register a tool."""
         name = t.name if isinstance(t, BaseTool) else getattr(t, "__name__", str(t))
-        self._tools[name] = t
+        self.tools.append(t)
 
-    def get_tools(self) -> list[BaseTool | Callable]:
+    def get_tools(self) -> list[BaseTool]:
         """Return all registered tools."""
-        return list(self._tools.values())
+        return list(self.tools)
 
     def remove(self, name: str) -> None:
         """Remove a tool by name."""
-        self._tools.pop(name, None)
+        self.tools = [t for t in self.tools if getattr(t, "name", str(t)) != name]
+

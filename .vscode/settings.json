@@ -7,5 +7,24 @@
     "Jina",
     "markdownify",
     "readabilipy"
-  ]
+  ],
+  "[python]": {
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true,
+    "editor.detectIndentation": false,
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.wordWrap": "wordWrapColumn",
+    "editor.wordWrapColumn": 100,
+    "editor.rulers": [
+      100
+    ]
+  },
+  "editor.formatOnSave": true,
+  "editor.tabSize": 2,
+  "editor.insertSpaces": true,
+  "ruff.path": [
+    "/apps/backend/.venv/Scripts/ruff.exe"
+  ],
+  "black-formatter.enable": false
 }
