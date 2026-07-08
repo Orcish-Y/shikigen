@@ -29,7 +29,10 @@ __pycache__/
 *.pyo
 .venv/
 **/.venv/
+apps/backend/uv.lock
 
 # OS
 .DS_Store
 Thumbs.db
+
+apps/backend/temp/
