@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import sys
 import uuid
 from pathlib import Path
@@ -29,15 +30,17 @@ def consume_tool_calls(call: ToolCallData) -> None:
   print(f"\nTool result: {call['output']}")
 
 
-stream_manager = StreamManager()  # type: ignore
+stream_manager = StreamManager()
 
 
 async def main():
+  logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+  )
   # Avoid creating surrogate characters if a terminal sends malformed UTF-8.
   sys.stdin.reconfigure(encoding="utf-8", errors="replace")
   print("你好主人，有什么可以帮助你的？\n")
-
-  abort_event = asyncio.Event()
 
   while True:
     try:
@@ -55,6 +58,7 @@ async def main():
     messages.append(HumanMessage(content=replace_surrogates(user_input)))
     run_id = str(uuid.uuid4())
     stream = stream_manager.create(run_id)
+    abort_event = asyncio.Event()
 
     agent_task = asyncio.create_task(
       run_agent_loop(

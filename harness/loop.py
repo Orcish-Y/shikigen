@@ -25,7 +25,7 @@ async def run_agent_loop(
     async for value in event_stream.values:
       messages[:] = value["messages"]
 
-  async def handle_messages(event_stream: object) -> str:
+  async def handle_messages(event_stream: object) -> None:
     async for message in event_stream.messages:
       async for text_delta in message.text:
         stream.publish("message", {"text": text_delta})
@@ -46,54 +46,52 @@ async def run_agent_loop(
         },
       )
 
-  async def grouped_task_events(stream):
+  async def consume_event_stream(event_stream: object) -> None:
     async with asyncio.TaskGroup() as group:
-      group.create_task(handle_values(stream))
-      group.create_task(handle_messages(stream))
-      group.create_task(handle_tool_calls(stream))
+      group.create_task(handle_values(event_stream))
+      group.create_task(handle_messages(event_stream))
+      group.create_task(handle_tool_calls(event_stream))
 
-  abort_task = asyncio.create_task(abort_event.wait())
-
+  consume_task: asyncio.Task[None] | None = None
+  abort_task: asyncio.Task[bool] | None = None
   try:
     async with await agent.astream_events(
       {"messages": messages},
       version="v3",
     ) as event_stream:
       stream.publish("metadata", {"run_id": run_id})
+      consume_task = asyncio.create_task(consume_event_stream(event_stream))
 
       if abort_event is None:
-        # await asyncio.gather(*get_event(event_stream))
-        await asyncio.create_task(grouped_task_events(event_stream))
+        await consume_task
         stream.publish("status", {"status": "completed"})
         return
 
-      consume_future = asyncio.create_task(grouped_task_events(event_stream))
+      abort_task = asyncio.create_task(abort_event.wait())
 
       done, pending = await asyncio.wait(
-        {consume_future, abort_task},
+        {consume_task, abort_task},
         return_when=asyncio.FIRST_COMPLETED,
       )
 
       for task in pending:
         task.cancel()
 
-      if consume_future in done:
-        await consume_future
+      if consume_task in done:
+        await consume_task
         stream.publish("status", {"status": "completed"})
       else:
-        await asyncio.gather(consume_future, return_exceptions=True)
+        await asyncio.gather(consume_task, return_exceptions=True)
         stream.publish("status", {"status": "cancelled"})
   except Exception as error:
     stream.publish("error", {"message": str(error)})
     raise
   finally:
     stream.close()
-    for task in (consume_future, abort_task):
+    tasks = [task for task in (consume_task, abort_task) if task is not None]
+    for task in tasks:
       if not task.done():
         task.cancel()
 
-    await asyncio.gather(
-      consume_future,
-      abort_task,
-      return_exceptions=True,
-    )
+    if tasks:
+      await asyncio.gather(*tasks, return_exceptions=True)

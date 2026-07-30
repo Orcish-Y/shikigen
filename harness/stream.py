@@ -33,13 +33,7 @@ class ErrorData(TypedDict):
 class StatusData(TypedDict):
   """状态事件载荷。"""
 
-  status: str
-
-
-class EndData(TypedDict, total=False):
-  """结束事件载荷。"""
-
-  reason: str
+  status: Literal["completed", "cancelled"]
 
 
 type EventName = Literal[
@@ -48,11 +42,8 @@ type EventName = Literal[
   "tool_call",
   "error",
   "status",
-  "end",
 ]
-type EventData = (
-  MetadataData | MessageData | ToolCallData | ErrorData | StatusData | EndData
-)
+type EventData = MetadataData | MessageData | ToolCallData | ErrorData | StatusData
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,7 +59,6 @@ type StreamEventVariant = (
   | StreamEvent[Literal["tool_call"], ToolCallData]
   | StreamEvent[Literal["error"], ErrorData]
   | StreamEvent[Literal["status"], StatusData]
-  | StreamEvent[Literal["end"], EndData]
 )
 
 
@@ -76,7 +66,8 @@ class Stream:
   """单个 run 的事件流。生产者 publish，消费者 subscribe 迭代。"""
 
   def __init__(self):
-    self._queue: asyncio.Queue[StreamEventVariant | None] = asyncio.Queue()
+    self._events: list[StreamEventVariant] = []
+    self._subscribers: set[asyncio.Queue[StreamEventVariant | None]] = set()
     self._closed = False
     self._next_id = 0
 
@@ -95,36 +86,50 @@ class Stream:
   @overload
   def publish(self, event: Literal["status"], data: StatusData) -> None: ...
 
-  @overload
-  def publish(self, event: Literal["end"], data: EndData) -> None: ...
-
   def publish(self, event: EventName, data: EventData) -> None:
     """生产者发布事件。"""
     if self._closed:
       raise RuntimeError("Stream is closed")
     stream_event = StreamEvent(id=str(self._next_id), event=event, data=data)
-    self._queue.put_nowait(cast(StreamEventVariant, stream_event))
+    variant = cast(StreamEventVariant, stream_event)
+    self._events.append(variant)
+    for subscriber in self._subscribers:
+      subscriber.put_nowait(variant)
     self._next_id += 1
 
   def subscribe(self) -> AsyncIterator[StreamEventVariant]:
-    """消费者订阅事件流。"""
+    """订阅完整事件流；每个消费者独立接收全部事件。"""
+
+    queue: asyncio.Queue[StreamEventVariant | None] = asyncio.Queue()
+    for event in self._events:
+      queue.put_nowait(event)
+
+    if self._closed:
+      queue.put_nowait(None)
+    else:
+      self._subscribers.add(queue)
 
     async def generator() -> AsyncIterator[StreamEventVariant]:
-      while True:
-        if self._closed and self._queue.empty():
-          break
-        event = await self._queue.get()
-        if event is None:
-          break
+      try:
+        while True:
+          event = await queue.get()
+          if event is None:
+            break
 
-        yield event
+          yield event
+      finally:
+        self._subscribers.discard(queue)
 
     return generator()
 
   def close(self) -> None:
-    """标记结束，唤醒等待的消费者。"""
+    """标记结束，唤醒所有等待的消费者。"""
+    if self._closed:
+      return
+
     self._closed = True
-    self._queue.put_nowait(None)
+    for subscriber in self._subscribers:
+      subscriber.put_nowait(None)
 
 
 # StreamManager
