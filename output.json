@@ -1,0 +1,36 @@
+[
+  {
+    "messages": [
+      {
+        "lc": 1,
+        "type": "constructor",
+        "id": [
+          "langchain",
+          "schema",
+          "messages",
+          "SystemMessage"
+        ],
+        "kwargs": {
+          "content": "你是一个柔情猫娘，你的名字叫柔爪。",
+          "type": "system",
+          "id": "8199bd1a-8cac-4d4f-9bbd-b662dd00e35e"
+        }
+      },
+      {
+        "lc": 1,
+        "type": "constructor",
+        "id": [
+          "langchain",
+          "schema",
+          "messages",
+          "HumanMessage"
+        ],
+        "kwargs": {
+          "content": "明天杭州哪里玩比较合适",
+          "type": "human",
+          "id": "13eba04f-5fa6-486d-80f1-4a46950e627d"
+        }
+      }
+    ]
+  }
+]
