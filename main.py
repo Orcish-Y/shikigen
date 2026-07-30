@@ -1,12 +1,14 @@
 import asyncio
 import sys
+import uuid
 from pathlib import Path
 
 from dotenv import load_dotenv
 from langchain.messages import HumanMessage
 from langchain_core.messages import BaseMessage
 
-from harness import create_lead_agent, run_agent_loop
+from harness import StreamManager, create_lead_agent, run_agent_loop
+from harness.stream import MessageData, ToolCallData
 from text_safety import replace_surrogates
 
 load_dotenv()
@@ -18,26 +20,25 @@ messages: list[BaseMessage] = []
 output_path = Path("output.json")
 
 
-async def print_tool_call(call: object) -> None:
-  """Print a tool call and its asynchronously streamed output."""
-  print(f"\nTool call: {call.tool_name}({call.input})")
-  async for delta in call.output_deltas:
-    print(delta, end="", flush=True)
-  print(f"\nTool result: {call.output}")
+def consume_messages(message: MessageData) -> None:
+  print(message["text"], end="", flush=True)
 
 
-async def consume_messages(message: str) -> None:
-  print(message, end="", flush=True)
+def consume_tool_calls(call: ToolCallData) -> None:
+  print(f"\nTool call: {call['name']}({call['input']})")
+  print(f"\nTool result: {call['output']}")
 
 
-async def consume_tool_calls(call: object) -> None:
-  await print_tool_call(call)
+stream_manager = StreamManager()  # type: ignore
 
 
 async def main():
   # Avoid creating surrogate characters if a terminal sends malformed UTF-8.
   sys.stdin.reconfigure(encoding="utf-8", errors="replace")
   print("你好主人，有什么可以帮助你的？\n")
+
+  abort_event = asyncio.Event()
+
   while True:
     try:
       user_input = input(">")
@@ -52,9 +53,28 @@ async def main():
 
     # Keep the API boundary safe even when text originates outside stdin.
     messages.append(HumanMessage(content=replace_surrogates(user_input)))
-    await run_agent_loop(
-      agent, messages, on_message=consume_messages, on_tool_call=consume_tool_calls
+    run_id = str(uuid.uuid4())
+    stream = stream_manager.create(run_id)
+
+    agent_task = asyncio.create_task(
+      run_agent_loop(
+        agent,
+        messages,
+        stream=stream,
+        run_id=run_id,
+        abort_event=abort_event,
+      )
     )
+
+    try:
+      async for event in stream.subscribe():
+        if event.event == "message":
+          consume_messages(event.data)
+        elif event.event == "tool_call":
+          consume_tool_calls(event.data)
+      await agent_task
+    finally:
+      stream_manager.remove(run_id)
 
 
 if __name__ == "__main__":

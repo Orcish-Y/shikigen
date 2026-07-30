@@ -14,3 +14,7 @@ wheels/
 lim.json
 
 1.txt
+
+doc/
+
+.env

@@ -12,12 +12,23 @@
 - 接受他的幽默感（猫娘 agent 之类）
 
 ## 当前进度
+
+### 阶段 1：Agent Loop ✅
 - [x] 理解 Agent Loop 的核心概念（LLM → 工具 → LLM 的循环）
 - [x] 能独立用 `create_agent` + `astream_events` 搭建可运行的 agent
 - [x] 能定义 `@tool` 并正确管理消息历史
-- [ ] 工具注册中心（ToolRegistry）
-- [ ] Middleware 链
-- [ ] 事件流/StreamBridge
+- [x] 多频道流式消费（messages / tool_calls / values）
+
+### 阶段 2：工具 + Middleware + 工厂 ✅
+- [x] 工具注册中心（ToolRegistry）
+- [x] Middleware 链（ErrorHandling + Logging）
+- [x] Agent 工厂（create_lead_agent）
+- [x] 执行循环抽象（run_agent_loop）
+
+### 阶段 3：Runtime 基础设施 🔄
+- [x] StreamManager / pub-sub 事件流
+- [x] Abort 取消机制（asyncio.wait + FIRST_COMPLETED race）
+- [ ] RunManager（run 生命周期）← 当前任务
 - [ ] Checkpoint 持久化
 
 ## 技术环境

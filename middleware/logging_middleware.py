@@ -12,10 +12,6 @@ from langchain.agents.middleware import (
 from langgraph.runtime import Runtime
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(
-  level=logging.INFO,
-  format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-)
 
 
 class LoggingMiddleware(AgentMiddleware):
