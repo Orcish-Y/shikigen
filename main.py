@@ -9,6 +9,7 @@ from langchain.messages import HumanMessage
 from langchain_core.messages import BaseMessage
 
 from harness import StreamManager, create_lead_agent, run_agent_loop
+from harness.run_manager import RunManager, RunRecord, RunStatus
 from harness.stream import MessageData, ToolCallData
 from text_safety import replace_surrogates
 
@@ -31,6 +32,30 @@ def consume_tool_calls(call: ToolCallData) -> None:
 
 
 stream_manager = StreamManager()
+run_manager = RunManager(stream_manager)
+
+
+async def consume_agent_events(
+  record: RunRecord,
+  agent_task: asyncio.Task[None],
+  manager: RunManager,
+) -> None:
+  terminal_status: RunStatus | None = None
+
+  async for event in record.stream.subscribe():
+    if event.event == "message":
+      consume_messages(event.data)
+    elif event.event == "tool_call":
+      consume_tool_calls(event.data)
+    elif event.event == "status":
+      terminal_status = RunStatus(event.data["status"])
+
+  await agent_task
+
+  if terminal_status is None:
+    raise RuntimeError("Agent completed without a terminal status")
+
+  manager.set_status(record.run_id, terminal_status)
 
 
 async def main():
@@ -41,6 +66,7 @@ async def main():
   # Avoid creating surrogate characters if a terminal sends malformed UTF-8.
   sys.stdin.reconfigure(encoding="utf-8", errors="replace")
   print("你好主人，有什么可以帮助你的？\n")
+  thread_id = str(uuid.uuid4())
 
   while True:
     try:
@@ -56,29 +82,30 @@ async def main():
 
     # Keep the API boundary safe even when text originates outside stdin.
     messages.append(HumanMessage(content=replace_surrogates(user_input)))
-    run_id = str(uuid.uuid4())
-    stream = stream_manager.create(run_id)
-    abort_event = asyncio.Event()
+    record = run_manager.create(thread_id=thread_id)
 
     agent_task = asyncio.create_task(
       run_agent_loop(
         agent,
         messages,
-        stream=stream,
-        run_id=run_id,
-        abort_event=abort_event,
+        stream=record.stream,
+        run_id=record.run_id,
+        abort_event=record.abort_event,
       )
     )
 
+    record.task = agent_task
+    record.status = RunStatus.RUNNING
+
     try:
-      async for event in stream.subscribe():
-        if event.event == "message":
-          consume_messages(event.data)
-        elif event.event == "tool_call":
-          consume_tool_calls(event.data)
-      await agent_task
+      await consume_agent_events(record, agent_task, run_manager)
+
+    except Exception as error:
+      run_manager.set_status(record.run_id, RunStatus.ERROR)
+      print(f"\nError: {error}")
+
     finally:
-      stream_manager.remove(run_id)
+      run_manager.remove(record.run_id)
 
 
 if __name__ == "__main__":
