@@ -5,7 +5,7 @@ import logging
 from langchain_core.tools import BaseTool
 
 from tools.add import add
-from tools.filesystem import read_file, write_file
+from tools.filesystem import bash, grep, list_dir, read_file, write_file
 from tools.get_current_time import get_current_time
 from tools.web_fetch import web_fetch_tool
 from tools.web_search_client import web_search_tool
@@ -45,6 +45,16 @@ def create_default_registry() -> ToolRegistry:
   """创建并返回一个预填了所有本地工具的注册表。"""
   registry = ToolRegistry()
   registry.register_many(
-    [get_current_time, add, read_file, write_file, web_fetch_tool, web_search_tool]
+    [
+      get_current_time,
+      add,
+      read_file,
+      write_file,
+      list_dir,
+      bash,
+      grep,
+      web_fetch_tool,
+      web_search_tool,
+    ]
   )
   return registry
