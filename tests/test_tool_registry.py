@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import Mock
 
-from tools import ToolRegistry
+from tools import ToolRegistry, create_default_registry
 
 
 def tool_named(name: str) -> Mock:
@@ -39,3 +39,9 @@ class ToolRegistryTests(unittest.TestCase):
 
     self.assertEqual(first_registry.names, ["first"])
     self.assertEqual(second_registry.names, [])
+
+  def test_default_registry_includes_filesystem_tools(self) -> None:
+    registry = create_default_registry()
+
+    self.assertIn("read_file", registry.names)
+    self.assertIn("write_file", registry.names)
