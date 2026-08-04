@@ -2,8 +2,10 @@ import logging
 
 from langchain.agents import create_agent
 from langchain.chat_models import BaseChatModel
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.state import CompiledStateGraph
 
+from harness.checkpoint.json_checkpointer import JsonCheckpointer
 from middleware.logging_middleware import LoggingMiddleware
 from middleware.tool_error_handling_middleware import ToolErrorHandlingMiddleware
 from tools import ToolRegistry, create_default_registry
@@ -16,6 +18,7 @@ def create_lead_agent(
   tool_registry: ToolRegistry | None = None,  # 可选：工具注册表
   middlewares: list | None = None,  # 可选：额外 middleware
   system_prompt: str | None = None,  # 可选：系统提示词
+  checkpointer: BaseCheckpointSaver | None = None,
 ) -> CompiledStateGraph:
 
   tools = tool_registry.list() if tool_registry else create_default_registry().list()
@@ -28,6 +31,7 @@ def create_lead_agent(
       LoggingMiddleware(),
       *(middlewares or []),
     ],
+    checkpointer=checkpointer or JsonCheckpointer(),
     system_prompt=system_prompt or "You are a helpful assistant.",
   )
 

@@ -25,11 +25,17 @@
 - [x] Agent 工厂（create_lead_agent）
 - [x] 执行循环抽象（run_agent_loop）
 
-### 阶段 3：Runtime 基础设施 🔄
+### 阶段 3：Runtime 基础设施 ✅
 - [x] StreamManager / pub-sub 事件流
 - [x] Abort 取消机制（asyncio.wait + FIRST_COMPLETED race）
-- [ ] RunManager（run 生命周期）← 当前任务
-- [ ] Checkpoint 持久化
+- [x] RunManager（run 生命周期）
+- [x] Checkpoint 持久化（BaseCheckpointSaver 完整实现）
+
+### 阶段 4：扩展与优化
+- [ ] Token 统计与使用追踪
+- [ ] 真实 web 工具（httpx + readability）
+- [ ] 多轮 Goal 续跑
+- [ ] 子 Agent 委派
 
 ## 技术环境
 - Python 3.12, uv 包管理, ruff linter

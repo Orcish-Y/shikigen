@@ -4,6 +4,7 @@ import unittest
 from langchain_core.messages import HumanMessage
 
 from harness.loop import run_agent_loop
+from harness.run_manager import RunRecord
 from harness.stream import Stream
 
 
@@ -82,13 +83,11 @@ class FailingAgent:
 class RunAgentLoopTests(unittest.IsolatedAsyncioTestCase):
   async def test_publishes_one_complete_event_for_each_tool_call(self):
     stream = Stream()
-    messages = []
 
     await run_agent_loop(
       Agent(),
-      messages,
-      run_id="run-1",
-      stream=stream,
+      HumanMessage(content="hello"),
+      record=RunRecord(run_id="run-1", thread_id="thread-1", stream=stream),
     )
 
     events = [event async for event in stream.subscribe()]
@@ -113,10 +112,13 @@ class RunAgentLoopTests(unittest.IsolatedAsyncioTestCase):
 
     await run_agent_loop(
       BlockingAgent(),
-      [],
-      run_id="run-1",
-      stream=stream,
-      abort_event=abort_event,
+      HumanMessage(content="hello"),
+      record=RunRecord(
+        run_id="run-1",
+        thread_id="thread-1",
+        stream=stream,
+        abort_event=abort_event,
+      ),
     )
 
     events = [event async for event in stream.subscribe()]
@@ -129,10 +131,8 @@ class RunAgentLoopTests(unittest.IsolatedAsyncioTestCase):
     with self.assertRaisesRegex(ValueError, "stream setup failed"):
       await run_agent_loop(
         FailingAgent(),
-        [],
-        run_id="run-1",
-        stream=stream,
-        abort_event=asyncio.Event(),
+        HumanMessage(content="hello"),
+        record=RunRecord(run_id="run-1", thread_id="thread-1", stream=stream),
       )
 
     events = [event async for event in stream.subscribe()]

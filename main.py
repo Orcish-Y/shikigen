@@ -1,25 +1,21 @@
 import asyncio
 import logging
 import sys
-import uuid
 from pathlib import Path
 
 from dotenv import load_dotenv
 from langchain.messages import HumanMessage
-from langchain_core.messages import BaseMessage
 
 from harness import StreamManager, create_lead_agent, run_agent_loop
+from harness.checkpoint.sqlite_provider import make_sqlite_checkpointer
 from harness.run_manager import RunManager, RunRecord, RunStatus
 from harness.stream import MessageData, ToolCallData
 from text_safety import replace_surrogates
 
 load_dotenv()
-agent = create_lead_agent(
-  model="deepseek:deepseek-v4-flash",
-)
 
-messages: list[BaseMessage] = []
 output_path = Path("output.json")
+checkpoint_db_path = Path(".shikigen/data/shikigen.db")
 
 
 def consume_messages(message: MessageData) -> None:
@@ -58,15 +54,9 @@ async def consume_agent_events(
   manager.set_status(record.run_id, terminal_status)
 
 
-async def main():
-  logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-  )
-  # Avoid creating surrogate characters if a terminal sends malformed UTF-8.
-  sys.stdin.reconfigure(encoding="utf-8", errors="replace")
+async def run_interactive_loop(agent) -> None:
   print("你好主人，有什么可以帮助你的？\n")
-  thread_id = str(uuid.uuid4())
+  thread_id = "default"
 
   while True:
     try:
@@ -81,16 +71,13 @@ async def main():
       break
 
     # Keep the API boundary safe even when text originates outside stdin.
-    messages.append(HumanMessage(content=replace_surrogates(user_input)))
     record = run_manager.create(thread_id=thread_id)
 
     agent_task = asyncio.create_task(
       run_agent_loop(
         agent,
-        messages,
-        stream=record.stream,
-        run_id=record.run_id,
-        abort_event=record.abort_event,
+        new_message=HumanMessage(content=replace_surrogates(user_input)),
+        record=record,
       )
     )
 
@@ -106,6 +93,22 @@ async def main():
 
     finally:
       run_manager.remove(record.run_id)
+
+
+async def main():
+  logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+  )
+  # Avoid creating surrogate characters if a terminal sends malformed UTF-8.
+  sys.stdin.reconfigure(encoding="utf-8", errors="replace")
+
+  async with make_sqlite_checkpointer(checkpoint_db_path) as checkpointer:
+    agent = create_lead_agent(
+      model="deepseek:deepseek-v4-flash",
+      checkpointer=checkpointer,
+    )
+    await run_interactive_loop(agent)
 
 
 if __name__ == "__main__":
