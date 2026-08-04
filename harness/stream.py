@@ -36,14 +36,35 @@ class StatusData(TypedDict):
   status: Literal["completed", "cancelled"]
 
 
+class UsageModelData(TypedDict):
+  """单个模型的 token 用量。"""
+
+  input: int
+  output: int
+  calls: int
+
+
+class UsageData(TypedDict):
+  """一次 run 的 token 用量。"""
+
+  total_input: int
+  total_output: int
+  total_tokens: int
+  calls: int
+  by_model: dict[str, UsageModelData]
+
+
 type EventName = Literal[
   "metadata",
   "message",
   "tool_call",
   "error",
+  "usage",
   "status",
 ]
-type EventData = MetadataData | MessageData | ToolCallData | ErrorData | StatusData
+type EventData = (
+  MetadataData | MessageData | ToolCallData | ErrorData | UsageData | StatusData
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +79,7 @@ type StreamEventVariant = (
   | StreamEvent[Literal["message"], MessageData]
   | StreamEvent[Literal["tool_call"], ToolCallData]
   | StreamEvent[Literal["error"], ErrorData]
+  | StreamEvent[Literal["usage"], UsageData]
   | StreamEvent[Literal["status"], StatusData]
 )
 
@@ -82,6 +104,9 @@ class Stream:
 
   @overload
   def publish(self, event: Literal["error"], data: ErrorData) -> None: ...
+
+  @overload
+  def publish(self, event: Literal["usage"], data: UsageData) -> None: ...
 
   @overload
   def publish(self, event: Literal["status"], data: StatusData) -> None: ...

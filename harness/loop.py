@@ -1,8 +1,14 @@
+from __future__ import annotations
+
 import asyncio
+from typing import TYPE_CHECKING
 
 from langchain_core.messages import HumanMessage
 
 from harness.run_manager import RunRecord
+
+if TYPE_CHECKING:
+  from harness.callback_handler import TokenTracker
 
 
 async def run_agent_loop(
@@ -10,6 +16,7 @@ async def run_agent_loop(
   new_message: HumanMessage,
   *,
   record: RunRecord,
+  token_tracker: TokenTracker | None = None,
 ) -> None:
   """使用新消息执行 agent，由 checkpointer 恢复此前的完整状态。
 
@@ -45,7 +52,12 @@ async def run_agent_loop(
 
   consume_task: asyncio.Task[None] | None = None
   abort_task: asyncio.Task[bool] | None = None
-  config = {"configurable": {"thread_id": record.thread_id}}
+  config: dict = {"configurable": {"thread_id": record.thread_id}}
+
+  # 将 token_tracker 挂到 LangChain callback 链上
+  if token_tracker is not None:
+    config.setdefault("callbacks", []).append(token_tracker)
+
   try:
     async with await agent.astream_events(
       {"messages": [new_message]},
@@ -67,6 +79,9 @@ async def run_agent_loop(
 
       if consume_task in done:
         await consume_task
+        # 发布 token 统计（在 status 之前，确保 UI 先看到 usage 再看到 completed）
+        if token_tracker is not None:
+          record.stream.publish("usage", token_tracker.summary())
         record.stream.publish("status", {"status": "completed"})
       else:
         await asyncio.gather(consume_task, return_exceptions=True)

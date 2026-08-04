@@ -7,9 +7,10 @@ from dotenv import load_dotenv
 from langchain.messages import HumanMessage
 
 from harness import StreamManager, create_lead_agent, run_agent_loop
+from harness.callback_handler import TokenTracker
 from harness.checkpoint.sqlite_provider import make_sqlite_checkpointer
 from harness.run_manager import RunManager, RunRecord, RunStatus
-from harness.stream import MessageData, ToolCallData
+from harness.stream import MessageData, ToolCallData, UsageData
 from text_safety import replace_surrogates
 
 load_dotenv()
@@ -31,6 +32,16 @@ stream_manager = StreamManager()
 run_manager = RunManager(stream_manager)
 
 
+def consume_usage(data: UsageData) -> None:
+  """打印 token 用量统计。"""
+  print(
+    f"\n[Usage] {data['total_input']} in + {data['total_output']} out "
+    f"= {data['total_tokens']} tokens ({data['calls']} LLM call(s))"
+  )
+  for model, stats in data.get("by_model", {}).items():
+    print(f"  {model}: {stats['input']} in / {stats['output']} out")
+
+
 async def consume_agent_events(
   record: RunRecord,
   agent_task: asyncio.Task[None],
@@ -43,6 +54,8 @@ async def consume_agent_events(
       consume_messages(event.data)
     elif event.event == "tool_call":
       consume_tool_calls(event.data)
+    elif event.event == "usage":
+      consume_usage(event.data)
     elif event.event == "status":
       terminal_status = RunStatus(event.data["status"])
 
@@ -72,12 +85,14 @@ async def run_interactive_loop(agent) -> None:
 
     # Keep the API boundary safe even when text originates outside stdin.
     record = run_manager.create(thread_id=thread_id)
+    tracker = TokenTracker()
 
     agent_task = asyncio.create_task(
       run_agent_loop(
         agent,
         new_message=HumanMessage(content=replace_surrogates(user_input)),
         record=record,
+        token_tracker=tracker,
       )
     )
 

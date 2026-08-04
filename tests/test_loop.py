@@ -3,6 +3,7 @@ import unittest
 
 from langchain_core.messages import HumanMessage
 
+from harness.callback_handler import TokenTracker
 from harness.loop import run_agent_loop
 from harness.run_manager import RunRecord
 from harness.stream import Stream
@@ -66,7 +67,11 @@ class BlockingEventStream(EventStream):
 
 
 class Agent:
+  def __init__(self):
+    self.config = None
+
   async def astream_events(self, *_args, **_kwargs):
+    self.config = _kwargs.get("config")
     return EventStream()
 
 
@@ -81,6 +86,32 @@ class FailingAgent:
 
 
 class RunAgentLoopTests(unittest.IsolatedAsyncioTestCase):
+  async def test_attaches_tracker_and_publishes_zero_usage(self):
+    stream = Stream()
+    agent = Agent()
+    tracker = TokenTracker()
+
+    await run_agent_loop(
+      agent,
+      HumanMessage(content="hello"),
+      record=RunRecord(run_id="run-1", thread_id="thread-1", stream=stream),
+      token_tracker=tracker,
+    )
+
+    self.assertEqual(agent.config["callbacks"], [tracker])
+    events = [event async for event in stream.subscribe()]
+    usage_events = [event for event in events if event.event == "usage"]
+    self.assertEqual(
+      usage_events[0].data,
+      {
+        "total_input": 0,
+        "total_output": 0,
+        "total_tokens": 0,
+        "calls": 0,
+        "by_model": {},
+      },
+    )
+
   async def test_publishes_one_complete_event_for_each_tool_call(self):
     stream = Stream()
 
