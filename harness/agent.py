@@ -6,6 +6,7 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.state import CompiledStateGraph
 
 from harness.checkpoint.json_checkpointer import JsonCheckpointer
+from middleware.goal_middleware import GoalEvaluator, GoalMiddleware
 from middleware.logging_middleware import LoggingMiddleware
 from middleware.tool_error_handling_middleware import ToolErrorHandlingMiddleware
 from tools import ToolRegistry, build_task_tool, create_default_registry
@@ -31,6 +32,7 @@ def create_lead_agent(
     model=model,
     tools=tools,
     middleware=[
+      GoalMiddleware(evaluator=GoalEvaluator(model)),
       ToolErrorHandlingMiddleware(),
       LoggingMiddleware(),
       *(middlewares or []),
