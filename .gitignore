@@ -20,4 +20,7 @@ doc/
 .env
 .shikigen
 
-AGENT.md
+AGENTS.md
+todo
+
+config.json

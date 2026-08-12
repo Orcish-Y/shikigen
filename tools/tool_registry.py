@@ -41,8 +41,8 @@ class ToolRegistry:
     return sorted(self.tools.keys())
 
 
-def create_default_registry() -> ToolRegistry:
-  """创建并返回一个预填了所有本地工具的注册表。"""
+def create_builtin_registry() -> ToolRegistry:
+  """创建并返回一个预填了所有内置工具的注册表。"""
   registry = ToolRegistry()
   registry.register_many(
     [

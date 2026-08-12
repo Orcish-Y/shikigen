@@ -9,7 +9,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import Field
 
 from harness import create_lead_agent
-from tools import BASH_ONLY_TOOLS, build_task_tool, create_default_registry
+from tools import BASH_ONLY_TOOLS, build_task_tool, create_builtin_registry
 
 
 class ToolAwareFakeChatModel(FakeMessagesListChatModel):
@@ -29,7 +29,7 @@ class ToolAwareFakeChatModel(FakeMessagesListChatModel):
 class TaskToolTests(unittest.IsolatedAsyncioTestCase):
   async def test_rejects_an_unknown_agent_type(self) -> None:
     model = ToolAwareFakeChatModel(responses=[AIMessage(content="done")])
-    task = build_task_tool(model, create_default_registry())
+    task = build_task_tool(model, create_builtin_registry())
 
     with self.assertRaises(ValueError):
       await task.ainvoke({"description": "inspect the workspace", "agent_type": "typo"})
@@ -38,7 +38,7 @@ class TaskToolTests(unittest.IsolatedAsyncioTestCase):
     model = ToolAwareFakeChatModel(
       responses=[AIMessage(content=[{"type": "text", "text": "done"}])]
     )
-    task = build_task_tool(model, create_default_registry())
+    task = build_task_tool(model, create_builtin_registry())
 
     result = await task.ainvoke({"description": "inspect the workspace"})
 
@@ -46,7 +46,7 @@ class TaskToolTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_bash_agent_only_receives_workspace_tools(self) -> None:
     model = ToolAwareFakeChatModel(responses=[AIMessage(content="done")])
-    task = build_task_tool(model, create_default_registry())
+    task = build_task_tool(model, create_builtin_registry())
 
     await task.ainvoke({"description": "inspect the workspace", "agent_type": "bash"})
 

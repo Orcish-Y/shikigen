@@ -9,7 +9,7 @@ from harness.checkpoint.json_checkpointer import JsonCheckpointer
 from middleware.goal_middleware import GoalEvaluator, GoalMiddleware
 from middleware.logging_middleware import LoggingMiddleware
 from middleware.tool_error_handling_middleware import ToolErrorHandlingMiddleware
-from tools import ToolRegistry, build_task_tool, create_default_registry
+from tools import ToolRegistry, build_task_tool, create_builtin_registry
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ def create_lead_agent(
   checkpointer: BaseCheckpointSaver | None = None,
 ) -> CompiledStateGraph:
 
-  _tool_registry = tool_registry or create_default_registry()
+  _tool_registry = tool_registry or create_builtin_registry()
 
   tools = _tool_registry.list()
   task_tool = build_task_tool(model, _tool_registry)

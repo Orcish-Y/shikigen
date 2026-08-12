@@ -7,11 +7,15 @@ from dotenv import load_dotenv
 from langchain.messages import HumanMessage
 
 from harness import StreamManager, create_lead_agent, run_agent_loop
+from harness.app_config import load_app_config
 from harness.callback_handler import TokenTracker
 from harness.checkpoint.sqlite_provider import make_sqlite_checkpointer
+from harness.model import create_chat_model
 from harness.run_manager import RunManager, RunRecord, RunStatus
 from harness.stream import MessageData, ToolCallData, UsageData
 from text_safety import replace_surrogates
+from tools import create_builtin_registry
+from tools.mcp_loader import load_mcp_tools
 
 load_dotenv()
 
@@ -118,9 +122,15 @@ async def main():
   # Avoid creating surrogate characters if a terminal sends malformed UTF-8.
   sys.stdin.reconfigure(encoding="utf-8", errors="replace")
 
+  app_config = load_app_config()
+  tool_registry = create_builtin_registry()
+  tool_registry.register_many(await load_mcp_tools(app_config.mcp))
+  model = create_chat_model(app_config.model)
+
   async with make_sqlite_checkpointer(checkpoint_db_path) as checkpointer:
     agent = create_lead_agent(
-      model="deepseek:deepseek-v4-flash",
+      model=model,
+      tool_registry=tool_registry,
       checkpointer=checkpointer,
     )
     await run_interactive_loop(agent)
