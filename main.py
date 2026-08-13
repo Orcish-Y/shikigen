@@ -49,10 +49,7 @@ def consume_usage(data: UsageData) -> None:
 async def consume_agent_events(
   record: RunRecord,
   agent_task: asyncio.Task[None],
-  manager: RunManager,
 ) -> None:
-  terminal_status: RunStatus | None = None
-
   async for event in record.stream.subscribe():
     if event.event == "message":
       consume_messages(event.data)
@@ -60,15 +57,15 @@ async def consume_agent_events(
       consume_tool_calls(event.data)
     elif event.event == "usage":
       consume_usage(event.data)
-    elif event.event == "status":
-      terminal_status = RunStatus(event.data["status"])
 
   await agent_task
 
-  if terminal_status is None:
-    raise RuntimeError("Agent completed without a terminal status")
-
-  manager.set_status(record.run_id, terminal_status)
+  if record.status not in (
+    RunStatus.COMPLETED,
+    RunStatus.CANCELLED,
+    RunStatus.ERROR,
+  ):
+    raise RuntimeError("Agent completed without committing a terminal status")
 
 
 async def run_interactive_loop(agent) -> None:
@@ -101,17 +98,15 @@ async def run_interactive_loop(agent) -> None:
     )
 
     record.task = agent_task
-    record.status = RunStatus.RUNNING
 
     try:
-      await consume_agent_events(record, agent_task, run_manager)
+      await consume_agent_events(record, agent_task)
 
     except Exception as error:
-      run_manager.set_status(record.run_id, RunStatus.ERROR)
       print(f"\nError: {error}")
 
     finally:
-      run_manager.remove(record.run_id)
+      await run_manager.release(record.run_id)
 
 
 async def main():

@@ -28,10 +28,10 @@ class ConsumeToolCallsTests(unittest.TestCase):
 
 
 class ConsumeAgentEventsTests(unittest.IsolatedAsyncioTestCase):
-  async def test_commits_terminal_status_only_after_agent_task_succeeds(self) -> None:
+  async def test_does_not_trust_status_event_before_agent_task_succeeds(self) -> None:
     manager = RunManager(StreamManager())
     record = manager.create(thread_id="thread-1")
-    record.status = RunStatus.RUNNING
+    record.start()
 
     async def fail_after_closing_stream() -> None:
       record.stream.publish("status", {"status": "completed"})
@@ -42,6 +42,6 @@ class ConsumeAgentEventsTests(unittest.IsolatedAsyncioTestCase):
     agent_task = asyncio.create_task(fail_after_closing_stream())
 
     with self.assertRaisesRegex(RuntimeError, "late failure"):
-      await consume_agent_events(record, agent_task, manager)
+      await consume_agent_events(record, agent_task)
 
     self.assertEqual(record.status, RunStatus.RUNNING)

@@ -24,3 +24,8 @@ AGENTS.md
 todo
 
 config.json
+
+# agent
+skills-lock.json
+.agents/skills/
+design/

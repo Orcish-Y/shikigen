@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 from langchain_core.messages import HumanMessage
 
-from harness.run_manager import RunRecord
+from harness.run_manager import RunRecord, RunStatus
 
 if TYPE_CHECKING:
   from harness.callback_handler import TokenTracker
@@ -53,48 +53,57 @@ async def run_agent_loop(
   consume_task: asyncio.Task[None] | None = None
   abort_task: asyncio.Task[bool] | None = None
   config: dict = {"configurable": {"thread_id": record.thread_id}}
+  outcome: RunStatus | None = None
 
   # 将 token_tracker 挂到 LangChain callback 链上
   if token_tracker is not None:
     config.setdefault("callbacks", []).append(token_tracker)
 
+  record.start()
   try:
-    async with await agent.astream_events(
-      {"messages": [new_message]},
-      config=config,
-      version="v3",
-    ) as event_stream:
-      record.stream.publish("metadata", {"run_id": record.run_id})
-      consume_task = asyncio.create_task(consume_event_stream(event_stream))
+    try:
+      async with await agent.astream_events(
+        {"messages": [new_message]},
+        config=config,
+        version="v3",
+      ) as event_stream:
+        record.stream.publish("metadata", {"run_id": record.run_id})
+        consume_task = asyncio.create_task(consume_event_stream(event_stream))
 
-      abort_task = asyncio.create_task(record.abort_event.wait())
+        abort_task = asyncio.create_task(record.abort_event.wait())
 
-      done, pending = await asyncio.wait(
-        {consume_task, abort_task},
-        return_when=asyncio.FIRST_COMPLETED,
-      )
+        done, pending = await asyncio.wait(
+          {consume_task, abort_task},
+          return_when=asyncio.FIRST_COMPLETED,
+        )
 
-      for task in pending:
-        task.cancel()
+        for task in pending:
+          task.cancel()
 
-      if consume_task in done:
-        await consume_task
-        # 发布 token 统计（在 status 之前，确保 UI 先看到 usage 再看到 completed）
-        if token_tracker is not None:
-          record.stream.publish("usage", token_tracker.summary())
-        record.stream.publish("status", {"status": "completed"})
-      else:
-        await asyncio.gather(consume_task, return_exceptions=True)
-        record.stream.publish("status", {"status": "cancelled"})
-  except Exception as error:
-    record.stream.publish("error", {"message": str(error)})
+        if consume_task in done:
+          await consume_task
+          outcome = RunStatus.COMPLETED
+        else:
+          await asyncio.gather(consume_task, return_exceptions=True)
+          outcome = RunStatus.CANCELLED
+    finally:
+      tasks = [task for task in (consume_task, abort_task) if task is not None]
+      for task in tasks:
+        if not task.done():
+          task.cancel()
+
+      if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+    if outcome is RunStatus.COMPLETED and token_tracker is not None:
+      # usage 必须在 terminal event 之前发布。
+      record.stream.publish("usage", token_tracker.summary())
+  except asyncio.CancelledError:
+    record.finish(RunStatus.CANCELLED)
     raise
-  finally:
-    record.stream.close()
-    tasks = [task for task in (consume_task, abort_task) if task is not None]
-    for task in tasks:
-      if not task.done():
-        task.cancel()
-
-    if tasks:
-      await asyncio.gather(*tasks, return_exceptions=True)
+  except Exception as error:
+    record.finish(RunStatus.ERROR, error=error)
+    raise
+  else:
+    assert outcome is not None
+    record.finish(outcome)
