@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from langchain_core.messages import HumanMessage
 
 from harness.run_manager import RunRecord, RunStatus
+from harness.runtime_context import AgentRunContext
 
 if TYPE_CHECKING:
   from harness.callback_handler import TokenTracker
@@ -50,10 +51,28 @@ async def run_agent_loop(
       group.create_task(handle_messages(event_stream))
       group.create_task(handle_tool_calls(event_stream))
 
-  consume_task: asyncio.Task[None] | None = None
-  abort_task: asyncio.Task[bool] | None = None
+  async def wait_for_stream_outcome(event_stream: object) -> RunStatus:
+    """等待流消费完成或取消信号，并在返回前回收两个等待任务。"""
+    consume_task = asyncio.create_task(consume_event_stream(event_stream))
+    abort_task = asyncio.create_task(record.abort_event.wait())
+
+    try:
+      done, _ = await asyncio.wait(
+        {consume_task, abort_task},
+        return_when=asyncio.FIRST_COMPLETED,
+      )
+
+      if consume_task in done:
+        await consume_task
+        return RunStatus.COMPLETED
+      return RunStatus.CANCELLED
+    finally:
+      for task in (consume_task, abort_task):
+        if not task.done():
+          task.cancel()
+      await asyncio.gather(consume_task, abort_task, return_exceptions=True)
+
   config: dict = {"configurable": {"thread_id": record.thread_id}}
-  outcome: RunStatus | None = None
 
   # 将 token_tracker 挂到 LangChain callback 链上
   if token_tracker is not None:
@@ -61,39 +80,17 @@ async def run_agent_loop(
 
   record.start()
   try:
-    try:
-      async with await agent.astream_events(
-        {"messages": [new_message]},
-        config=config,
-        version="v3",
-      ) as event_stream:
-        record.stream.publish("metadata", {"run_id": record.run_id})
-        consume_task = asyncio.create_task(consume_event_stream(event_stream))
-
-        abort_task = asyncio.create_task(record.abort_event.wait())
-
-        done, pending = await asyncio.wait(
-          {consume_task, abort_task},
-          return_when=asyncio.FIRST_COMPLETED,
-        )
-
-        for task in pending:
-          task.cancel()
-
-        if consume_task in done:
-          await consume_task
-          outcome = RunStatus.COMPLETED
-        else:
-          await asyncio.gather(consume_task, return_exceptions=True)
-          outcome = RunStatus.CANCELLED
-    finally:
-      tasks = [task for task in (consume_task, abort_task) if task is not None]
-      for task in tasks:
-        if not task.done():
-          task.cancel()
-
-      if tasks:
-        await asyncio.gather(*tasks, return_exceptions=True)
+    async with await agent.astream_events(
+      {"messages": [new_message]},
+      config=config,
+      context=AgentRunContext(
+        thread_id=record.thread_id,
+        run_id=record.run_id,
+      ),
+      version="v3",
+    ) as event_stream:
+      record.stream.publish("metadata", {"run_id": record.run_id})
+      outcome = await wait_for_stream_outcome(event_stream)
 
     if outcome is RunStatus.COMPLETED and token_tracker is not None:
       # usage 必须在 terminal event 之前发布。
@@ -105,5 +102,4 @@ async def run_agent_loop(
     record.finish(RunStatus.ERROR, error=error)
     raise
   else:
-    assert outcome is not None
     record.finish(outcome)

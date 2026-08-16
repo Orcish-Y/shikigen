@@ -6,6 +6,7 @@ from langchain_core.messages import HumanMessage
 from harness.callback_handler import TokenTracker
 from harness.loop import run_agent_loop
 from harness.run_manager import RunRecord, RunStatus
+from harness.runtime_context import AgentRunContext
 from harness.stream import Stream
 
 
@@ -74,9 +75,11 @@ class LateFailingEventStream(EventStream):
 class Agent:
   def __init__(self):
     self.config = None
+    self.context = None
 
   async def astream_events(self, *_args, **_kwargs):
     self.config = _kwargs.get("config")
+    self.context = _kwargs.get("context")
     return EventStream()
 
 
@@ -109,6 +112,10 @@ class RunAgentLoopTests(unittest.IsolatedAsyncioTestCase):
     )
 
     self.assertEqual(agent.config["callbacks"], [tracker])
+    self.assertEqual(
+      agent.context,
+      AgentRunContext(thread_id="thread-1", run_id="run-1"),
+    )
     events = [event async for event in stream.subscribe()]
     usage_events = [event for event in events if event.event == "usage"]
     self.assertEqual(

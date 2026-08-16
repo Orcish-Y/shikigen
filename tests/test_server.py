@@ -1,9 +1,55 @@
 import asyncio
+import tempfile
 import unittest
+from pathlib import Path
+from types import SimpleNamespace
 
+from fastapi import FastAPI, HTTPException, Request
+
+from harness.persistence import ChatStore
 from harness.run_manager import RunManager, RunStatus
-from harness.server import stream_run_events
+from harness.server import get_run_messages, stream_run_events
 from harness.stream import StreamManager
+
+
+class RunMessagesEndpointTests(unittest.IsolatedAsyncioTestCase):
+  async def asyncSetUp(self) -> None:
+    self.temp_dir = tempfile.TemporaryDirectory()
+    self.store = await ChatStore.open(Path(self.temp_dir.name) / "shikigen.db")
+    self.app = FastAPI()
+    self.app.state.runtime = SimpleNamespace(chat_store=self.store)
+    self.request = Request({"type": "http", "app": self.app})
+
+  async def asyncTearDown(self) -> None:
+    await self.store.close()
+    self.temp_dir.cleanup()
+
+  async def test_returns_only_messages_from_the_requested_run(self) -> None:
+    await self.store.create_thread("thread-1")
+    await self.store.create_run("run-1", "thread-1")
+    await self.store.append_event(
+      thread_id="thread-1",
+      run_id="run-1",
+      event_type="human_message",
+      category="message",
+      content={"type": "human", "content": "hello"},
+    )
+
+    response = await get_run_messages("thread-1", "run-1", self.request)
+
+    data = response["data"]
+    assert isinstance(data, list)
+    self.assertEqual(data[0]["content"]["content"], "hello")
+
+  async def test_returns_not_found_for_a_run_from_another_thread(self) -> None:
+    await self.store.create_thread("thread-1")
+    await self.store.create_thread("thread-2")
+    await self.store.create_run("run-1", "thread-1")
+
+    with self.assertRaises(HTTPException) as caught:
+      await get_run_messages("thread-2", "run-1", self.request)
+
+    self.assertEqual(caught.exception.status_code, 404)
 
 
 class StreamChatTests(unittest.IsolatedAsyncioTestCase):

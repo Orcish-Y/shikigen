@@ -5,7 +5,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import StreamingResponse
 from langchain.messages import HumanMessage
@@ -18,8 +18,11 @@ from harness.callback_handler.token_tracker import TokenTracker
 from harness.checkpoint.sqlite_provider import make_sqlite_checkpointer
 from harness.loop import run_agent_loop
 from harness.model import create_chat_model
-from harness.run_manager import RunManager, RunRecord
+from harness.persistence import ChatStore
+from harness.persistence.chat_store import open_chat_store
+from harness.run_manager import RunManager, RunRecord, RunStatus
 from harness.stream import StreamManager
+from middleware.chat_persistence_middleware import ChatPersistenceMiddleware
 from text_safety import replace_surrogates
 from tools.mcp_loader import load_mcp_tools
 from tools.tool_registry import create_builtin_registry
@@ -34,6 +37,7 @@ class ServerRuntime:
   agent: CompiledStateGraph
   stream_manager: StreamManager
   run_manager: RunManager
+  chat_store: ChatStore
 
   async def shutdown(self) -> None:
     """停止并回收服务器仍持有的所有 run。"""
@@ -41,7 +45,10 @@ class ServerRuntime:
 
 
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-  async with make_sqlite_checkpointer(checkpoint_db_path) as checkpointer:
+  async with (
+    open_chat_store(checkpoint_db_path) as chat_store,
+    make_sqlite_checkpointer(checkpoint_db_path) as checkpointer,
+  ):
     app_config = load_app_config()
     tool_registry = create_builtin_registry()
     tool_registry.register_many(await load_mcp_tools(app_config.mcp))
@@ -52,6 +59,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     agent = create_lead_agent(
       model=model,
       tool_registry=tool_registry,
+      middlewares=[ChatPersistenceMiddleware(chat_store)],
       checkpointer=checkpointer,
     )
 
@@ -59,6 +67,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
       agent=agent,
       stream_manager=stream_manager,
       run_manager=run_manager,
+      chat_store=chat_store,
     )
     app.state.runtime = runtime
     try:
@@ -81,8 +90,9 @@ app = FastAPI(
   response_description="会话列表",
   tags=["Threads"],
 )
-async def get_thread() -> list[dict[str, object]]:
-  return []
+async def get_thread(request: Request) -> list[dict[str, object]]:
+  runtime: ServerRuntime = request.app.state.runtime
+  return await runtime.chat_store.list_threads()
 
 
 @app.post(
@@ -92,8 +102,12 @@ async def get_thread() -> list[dict[str, object]]:
   response_description="新会话的 ID",
   tags=["Threads"],
 )
-async def create_thread() -> dict[str, str]:
+async def create_thread(request: Request) -> dict[str, str]:
+  runtime: ServerRuntime = request.app.state.runtime
   thread_id = uuid.uuid4().hex
+  # 这里可能需要修改，创建的时候不要直接建表，这样子可能有很多空表???
+  # 不过有空表也不错，可以在一开始就重命名
+  await runtime.chat_store.create_thread(thread_id)
   return {"thread_id": thread_id}
 
 
@@ -104,8 +118,37 @@ async def create_thread() -> dict[str, str]:
   response_description="会话消息记录",
   tags=["Messages"],
 )
-async def get_thread_messages(thread_id: str) -> dict[str, object]:
-  return {}
+async def get_thread_messages(
+  thread_id: str,
+  request: Request,
+) -> dict[str, object]:
+  runtime: ServerRuntime = request.app.state.runtime
+  if not await runtime.chat_store.thread_exists(thread_id):
+    raise HTTPException(
+      status_code=status.HTTP_404_NOT_FOUND,
+      detail="Thread not found",
+    )
+  messages = await runtime.chat_store.list_thread_messages(thread_id)
+  return {"data": messages}
+
+
+@app.get(
+  "/api/threads/{thread_id}/runs/{run_id}/messages",
+  summary="获取一次运行的消息",
+  description="根据会话 ID 和运行 ID 获取该轮 Agent 产生的有序消息。",
+  response_description="该次运行的消息记录",
+  tags=["Messages"],
+)
+async def get_run_messages(
+  thread_id: str,
+  run_id: str,
+  request: Request,
+) -> dict[str, object]:
+  runtime: ServerRuntime = request.app.state.runtime
+  messages = await runtime.chat_store.list_messages_by_run(thread_id, run_id)
+  if messages is None:
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+  return {"data": messages}
 
 
 class ChatRequest(BaseModel):
@@ -130,6 +173,50 @@ async def stream_run_events(
     await run_manager.release(record.run_id)
 
 
+async def run_and_persist_status(
+  runtime: ServerRuntime,
+  record: RunRecord,
+  message: HumanMessage,
+  tracker: TokenTracker,
+) -> None:
+  try:
+    await run_agent_loop(
+      runtime.agent,
+      new_message=message,
+      record=record,
+      token_tracker=tracker,
+    )
+  except asyncio.CancelledError:
+    await runtime.chat_store.finish_run(
+      record.run_id,
+      record.thread_id,
+      RunStatus.CANCELLED,
+    )
+    raise
+  except Exception as error:
+    await runtime.chat_store.append_event(
+      thread_id=record.thread_id,
+      run_id=record.run_id,
+      event_type="run_error",
+      category="error",
+      content={"message": str(error)},
+      event_key=f"run_error:{record.run_id}",
+    )
+    await runtime.chat_store.finish_run(
+      record.run_id,
+      record.thread_id,
+      RunStatus.ERROR,
+      error=str(error),
+    )
+    raise
+  else:
+    await runtime.chat_store.finish_run(
+      record.run_id,
+      record.thread_id,
+      record.status,
+    )
+
+
 @app.post(
   "/api/threads/{thread_id}/stream",
   summary="流式发送消息",
@@ -145,14 +232,29 @@ async def stream_chat(
   request: Request,
 ) -> StreamingResponse:
   runtime: ServerRuntime = request.app.state.runtime
+  if not await runtime.chat_store.thread_exists(thread_id):
+    raise HTTPException(
+      status_code=status.HTTP_404_NOT_FOUND,
+      detail="Thread not found",
+    )
+
   record = runtime.run_manager.create(thread_id=thread_id)
+  try:
+    await runtime.chat_store.create_run(record.run_id, thread_id)
+    await runtime.chat_store.start_run(record.run_id, thread_id)
+  except BaseException:
+    runtime.run_manager.remove(record.run_id)
+    raise
   tracker = TokenTracker()
   agent_task = asyncio.create_task(
-    run_agent_loop(
-      runtime.agent,
-      new_message=HumanMessage(content=replace_surrogates(body.message)),
-      record=record,
-      token_tracker=tracker,
+    run_and_persist_status(
+      runtime,
+      record,
+      HumanMessage(
+        id=uuid.uuid4().hex,
+        content=replace_surrogates(body.message),
+      ),
+      tracker,
     )
   )
 
