@@ -47,6 +47,10 @@ class ToolCall:
     return deltas()
 
 
+class Message:
+  text = AsyncItems("你", "好")
+
+
 class EventStream:
   def __init__(self):
     self.values = AsyncItems({"messages": [HumanMessage(content="hello")]})
@@ -65,6 +69,13 @@ class BlockingEventStream(EventStream):
     self.values = BlockingItems()
     self.messages = BlockingItems()
     self.tool_calls = BlockingItems()
+
+
+class MessageEventStream(EventStream):
+  def __init__(self):
+    self.values = AsyncItems()
+    self.messages = AsyncItems(Message())
+    self.tool_calls = AsyncItems()
 
 
 class LateFailingEventStream(EventStream):
@@ -88,6 +99,11 @@ class BlockingAgent:
     return BlockingEventStream()
 
 
+class MessageAgent:
+  async def astream_events(self, *_args, **_kwargs):
+    return MessageEventStream()
+
+
 class FailingAgent:
   async def astream_events(self, *_args, **_kwargs):
     raise ValueError("stream setup failed")
@@ -99,6 +115,27 @@ class LateFailingAgent:
 
 
 class RunAgentLoopTests(unittest.IsolatedAsyncioTestCase):
+  async def test_publishes_message_chunks_and_completion(self):
+    stream = Stream()
+    record = RunRecord(run_id="run-1", thread_id="thread-1", stream=stream)
+
+    await run_agent_loop(
+      MessageAgent(),
+      HumanMessage(content="hello"),
+      record=record,
+    )
+
+    events = [event async for event in stream.subscribe()]
+    message_events = [event for event in events if event.event == "message"]
+    self.assertEqual(
+      [event.data for event in message_events],
+      [
+        {"text": "你", "done": False},
+        {"text": "好", "done": False},
+        {"text": "", "done": True},
+      ],
+    )
+
   async def test_attaches_tracker_and_publishes_zero_usage(self):
     stream = Stream()
     agent = Agent()

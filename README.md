@@ -50,7 +50,7 @@ AppConfigError: Config field "..." requires missing environment variable "GITHUB
 curl -X POST http://127.0.0.1:8000/api/threads
 ```
 
-复制响应中的 `thread_id`，然后发送一条消息并消费 SSE 事件流：
+复制响应中的 `thread_id`，然后发送一条消息并消费 JSONL 事件流：
 
 ```bash
 curl -N \
@@ -59,7 +59,20 @@ curl -N \
   -d '{"message":"你好，请介绍一下自己"}'
 ```
 
-`curl -N` 会关闭输出缓冲，使 SSE 事件到达后立即显示。
+`curl -N` 会关闭输出缓冲，使每一行 JSON 事件到达后立即显示。模型回答以
+`message.delta` 事件逐段返回；同一个输出项的事件共享 `output_index`，客户端可据此
+将事件归并成最终数组。
+
+```jsonl
+{"id":"0","event":"metadata","data":{"run_id":"abc"}}
+{"id":"1","event":"message.delta","data":{"delta":"你"},"output_index":0}
+{"id":"2","event":"message.delta","data":{"delta":"好"},"output_index":0}
+{"id":"3","event":"message.completed","data":{},"output_index":0}
+{"id":"4","event":"run.completed","data":{"status":"completed"}}
+```
+
+Agent 和 Stream 内部只发布与传输格式无关的通用事件；JSONL 事件名称转换、
+`output_index` 分配和逐行编码集中在 Server 的传输 adapter 中完成。
 
 ### 允许容器或局域网访问
 

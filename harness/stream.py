@@ -10,10 +10,21 @@ class MetadataData(TypedDict):
   run_id: str
 
 
-class MessageData(TypedDict):
-  """消息事件载荷。"""
+class MessageChunkData(TypedDict):
+  """一条逻辑消息的文本块。"""
 
   text: str
+  done: Literal[False]
+
+
+class MessageDoneData(TypedDict):
+  """一条逻辑消息已经结束。"""
+
+  text: Literal[""]
+  done: Literal[True]
+
+
+type MessageData = MessageChunkData | MessageDoneData
 
 
 class ToolCallData(TypedDict):

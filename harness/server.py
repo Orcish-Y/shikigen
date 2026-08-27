@@ -21,7 +21,7 @@ from harness.model import create_chat_model
 from harness.persistence import ChatStore
 from harness.persistence.chat_store import open_chat_store
 from harness.run_manager import RunManager, RunRecord, RunStatus
-from harness.stream import StreamManager
+from harness.stream import StreamEventVariant, StreamManager
 from middleware.chat_persistence_middleware import ChatPersistenceMiddleware
 from text_safety import replace_surrogates
 from tools.mcp_loader import load_mcp_tools
@@ -165,12 +165,92 @@ async def stream_run_events(
   record: RunRecord,
   run_manager: RunManager,
 ) -> AsyncIterator[str]:
+  encoder = RunJsonlEncoder()
   try:
     async for event in record.stream.subscribe():
-      data = json.dumps(jsonable_encoder(event.data), ensure_ascii=False)
-      yield f"event: {event.event}\ndata: {data}\n\n"
+      yield encoder.encode(event)
   finally:
     await run_manager.release(record.run_id)
+
+
+class RunJsonlEncoder:
+  """把通用 Agent 事件投影为一次 HTTP 响应内的 JSONL 输出数组事件。"""
+
+  def __init__(self) -> None:
+    self._next_output_index = 0
+    self._active_message_output_index: int | None = None
+
+  def encode(self, event: StreamEventVariant) -> str:
+    event_name = event.event
+    data: object = event.data
+    output_index: int | None = None
+
+    if event.event == "message":
+      if event.data["done"]:
+        event_name = "message.completed"
+        data = {}
+        output_index = (
+          self._active_message_output_index
+          if self._active_message_output_index is not None
+          else self._reserve_output_index()
+        )
+        self._active_message_output_index = None
+      else:
+        event_name = "message.delta"
+        data = {"delta": event.data["text"]}
+        output_index = self._message_output_index()
+    elif event.event == "tool_call":
+      event_name = "tool_call.completed"
+      output_index = self._reserve_output_index()
+    elif event.event == "error":
+      event_name = "run.error"
+    elif event.event == "status":
+      event_name = "run.completed"
+
+    return _format_jsonl(
+      event.id,
+      event_name,
+      data,
+      output_index=output_index,
+    )
+
+  def _message_output_index(self) -> int:
+    if self._active_message_output_index is None:
+      self._active_message_output_index = self._reserve_output_index()
+    return self._active_message_output_index
+
+  def _reserve_output_index(self) -> int:
+    output_index = self._next_output_index
+    self._next_output_index += 1
+    return output_index
+
+
+def _format_jsonl(
+  event_id: str | int,
+  event: str,
+  data: object,
+  *,
+  output_index: int | None = None,
+) -> str:
+  payload: dict[str, object] = {
+    "id": str(event_id),
+    "event": event,
+    "data": data,
+  }
+  if output_index is not None:
+    payload["output_index"] = output_index
+  return f"{json.dumps(jsonable_encoder(payload), ensure_ascii=False)}\n"
+
+
+def _jsonl_response(content: AsyncIterator[str]) -> StreamingResponse:
+  return StreamingResponse(
+    content,
+    media_type="application/x-ndjson",
+    headers={
+      "Cache-Control": "no-cache",
+      "X-Accel-Buffering": "no",
+    },
+  )
 
 
 async def run_and_persist_status(
@@ -221,9 +301,9 @@ async def run_and_persist_status(
   "/api/threads/{thread_id}/stream",
   summary="流式发送消息",
   description=(
-    "向指定会话发送一条消息，并通过 Server-Sent Events 持续返回 Agent 运行事件。"
+    "向指定会话发送一条消息，并通过 JSON Lines 持续返回 Agent 运行事件。"
   ),
-  response_description="text/event-stream 格式的 Agent 运行事件流",
+  response_description="application/x-ndjson 格式的 Agent 运行事件流",
   tags=["Messages"],
 )
 async def stream_chat(
@@ -260,7 +340,4 @@ async def stream_chat(
 
   record.task = agent_task
 
-  return StreamingResponse(
-    stream_run_events(record, runtime.run_manager),
-    media_type="text/event-stream",
-  )
+  return _jsonl_response(stream_run_events(record, runtime.run_manager))

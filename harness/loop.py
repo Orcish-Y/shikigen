@@ -27,9 +27,12 @@ async def run_agent_loop(
 
   async def handle_messages(event_stream: object) -> None:
     async for message in event_stream.messages:
+      emitted_text = False
       async for text_delta in message.text:
-        record.stream.publish("message", {"text": text_delta})
-    record.stream.publish("message", {"text": "\n"})
+        emitted_text = True
+        record.stream.publish("message", {"text": text_delta, "done": False})
+      if emitted_text:
+        record.stream.publish("message", {"text": "", "done": True})
 
   async def handle_tool_calls(event_stream: object) -> None:
     async for call in event_stream.tool_calls:

@@ -24,7 +24,8 @@ checkpoint_db_path = Path(".shikigen/data/shikigen.db")
 
 
 def consume_messages(message: MessageData) -> None:
-  print(message["text"], end="", flush=True)
+  if not message["done"]:
+    print(message["text"], end="", flush=True)
 
 
 def consume_tool_calls(call: ToolCallData) -> None:

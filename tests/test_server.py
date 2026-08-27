@@ -1,4 +1,5 @@
 import asyncio
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -53,6 +54,51 @@ class RunMessagesEndpointTests(unittest.IsolatedAsyncioTestCase):
 
 
 class StreamChatTests(unittest.IsolatedAsyncioTestCase):
+  async def test_serializes_complete_events_as_json_lines(self) -> None:
+    manager = RunManager(StreamManager())
+    record = manager.create("thread-1")
+    record.stream.publish("metadata", {"run_id": record.run_id})
+    record.stream.publish("message", {"text": "你", "done": False})
+    record.stream.publish("message", {"text": "", "done": True})
+    record.stream.publish(
+      "tool_call",
+      {"name": "search", "input": {}, "output": {}},
+    )
+    record.stream.close()
+
+    lines = [line async for line in stream_run_events(record, manager)]
+    events = [json.loads(line) for line in lines]
+
+    self.assertEqual(
+      events,
+      [
+        {
+          "id": "0",
+          "event": "metadata",
+          "data": {"run_id": record.run_id},
+        },
+        {
+          "id": "1",
+          "event": "message.delta",
+          "data": {"delta": "你"},
+          "output_index": 0,
+        },
+        {
+          "id": "2",
+          "event": "message.completed",
+          "data": {},
+          "output_index": 0,
+        },
+        {
+          "id": "3",
+          "event": "tool_call.completed",
+          "data": {"name": "search", "input": {}, "output": {}},
+          "output_index": 1,
+        },
+      ],
+    )
+    self.assertTrue(all(line.endswith("\n") for line in lines))
+
   async def test_closing_response_cancels_task_and_removes_run(self) -> None:
     manager = RunManager(StreamManager())
     record = manager.create("thread-1")
