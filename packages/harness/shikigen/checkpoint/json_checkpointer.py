@@ -215,7 +215,7 @@ class JsonCheckpointer(BaseCheckpointSaver):
       ]
 
       parent_id = content.get("parent_id")
-      parent_config = None
+      parent_config: RunnableConfig | None = None
       if parent_id:
         parent_config = {
           "configurable": {

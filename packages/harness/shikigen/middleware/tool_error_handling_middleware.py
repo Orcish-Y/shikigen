@@ -1,12 +1,13 @@
-from collections.abc import Callable
-from typing import override
+from collections.abc import Awaitable, Callable
+from typing import Any, override
 
-from langchain.agents.middleware import AgentMiddleware, ModelRequest, ModelResponse
+from langchain.agents.middleware import AgentMiddleware, AgentState, ToolCallRequest
 from langchain.messages import ToolMessage
 from langgraph.errors import GraphBubbleUp
+from langgraph.types import Command
 
 
-class ToolErrorHandlingMiddleware(AgentMiddleware):
+class ToolErrorHandlingMiddleware(AgentMiddleware[AgentState, Any]):
   """Return a structured tool error so the agent can respond to a failed tool."""
 
   def __init__(self):
@@ -15,9 +16,9 @@ class ToolErrorHandlingMiddleware(AgentMiddleware):
   @override
   def wrap_tool_call(
     self,
-    request: ModelRequest,
-    handler: Callable[[ModelRequest], ModelResponse],
-  ) -> ModelResponse:
+    request: ToolCallRequest,
+    handler: Callable[[ToolCallRequest], ToolMessage | Command[Any]],
+  ) -> ToolMessage | Command[Any]:
     try:
       response = handler(request)
       return response
@@ -34,9 +35,9 @@ class ToolErrorHandlingMiddleware(AgentMiddleware):
   @override
   async def awrap_tool_call(
     self,
-    request: ModelRequest,
-    handler: Callable[[ModelRequest], ModelResponse],
-  ) -> ModelResponse:
+    request: ToolCallRequest,
+    handler: Callable[[ToolCallRequest], Awaitable[ToolMessage | Command[Any]]],
+  ) -> ToolMessage | Command[Any]:
     try:
       response = await handler(request)
       return response

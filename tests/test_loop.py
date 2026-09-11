@@ -147,6 +147,7 @@ class RunAgentLoopTests(unittest.IsolatedAsyncioTestCase):
       token_tracker=tracker,
     )
 
+    assert agent.config is not None
     self.assertEqual(agent.config["callbacks"], [tracker])
     self.assertEqual(
       agent.context,

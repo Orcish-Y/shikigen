@@ -3,6 +3,7 @@ from typing import Any
 
 from langchain.agents.middleware import ToolCallRequest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langgraph.prebuilt import ToolRuntime
 from langgraph.runtime import Runtime
 from langgraph.types import Command
 from shikigen.middleware.chat_persistence_middleware import ChatPersistenceMiddleware
@@ -27,6 +28,14 @@ class ChatPersistenceMiddlewareTests(unittest.IsolatedAsyncioTestCase):
     self.middleware = ChatPersistenceMiddleware(self.journal)
     self.context = AgentRunContext(thread_id="thread-1", run_id="run-1")
     self.runtime = Runtime(context=self.context)
+    self.tool_runtime: ToolRuntime[Any] = ToolRuntime(
+      state={"messages": []},
+      context=self.context,
+      config={},
+      stream_writer=lambda _: None,
+      tool_call_id="call-1",
+      store=None,
+    )
 
   async def test_persists_the_current_human_message_before_agent(self) -> None:
     message = HumanMessage(id="human-1", content="hello")
@@ -63,7 +72,7 @@ class ChatPersistenceMiddlewareTests(unittest.IsolatedAsyncioTestCase):
       tool_call={"id": "call-1", "name": "add", "args": {"a": 1}},
       tool=None,
       state={"messages": []},
-      runtime=self.runtime,
+      runtime=self.tool_runtime,
     )
 
     async def execute(_request: ToolCallRequest) -> ToolMessage:
@@ -86,7 +95,7 @@ class ChatPersistenceMiddlewareTests(unittest.IsolatedAsyncioTestCase):
       tool_call={"id": "call-1", "name": "add", "args": {"a": 1}},
       tool=None,
       state={"messages": []},
-      runtime=self.runtime,
+      runtime=self.tool_runtime,
     )
     tool_message = ToolMessage(content="2", tool_call_id="call-1")
 
@@ -103,18 +112,21 @@ class ChatPersistenceMiddlewareTests(unittest.IsolatedAsyncioTestCase):
       tool_call={"id": "call-1", "name": "add", "args": {"a": 1}},
       tool=None,
       state={"messages": []},
-      runtime=self.runtime,
+      runtime=self.tool_runtime,
     )
     error_middleware = ToolErrorHandlingMiddleware()
 
     async def fail(_request: ToolCallRequest) -> ToolMessage:
       raise ValueError("broken tool")
 
-    async def handle_error(tool_request: ToolCallRequest) -> ToolMessage:
+    async def handle_error(
+      tool_request: ToolCallRequest,
+    ) -> ToolMessage | Command[Any]:
       return await error_middleware.awrap_tool_call(tool_request, fail)
 
     result = await self.middleware.awrap_tool_call(request, handle_error)
 
     self.assertIsInstance(result, ToolMessage)
+    assert isinstance(result, ToolMessage)
     self.assertEqual(result.status, "error")
     self.assertEqual(self.journal.events[0]["content"]["status"], "error")

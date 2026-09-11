@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from html import escape
-from typing import Any, Literal, NotRequired
+from typing import Any, Literal, NotRequired, Protocol
 
 from langchain.agents.middleware import AgentMiddleware, AgentState, hook_config
 from langchain.chat_models import init_chat_model
@@ -15,6 +15,10 @@ from langgraph.runtime import Runtime
 class GoalResult:
   satisfied: bool
   reason: str
+
+
+class GoalEvaluation(Protocol):
+  async def evaluate(self, goal: str, messages_text: str) -> GoalResult: ...
 
 
 class GoalEvaluator:
@@ -77,12 +81,12 @@ def _goal_from_message(message: HumanMessage | None) -> str | None:
   return objective or None
 
 
-class GoalMiddleware(AgentMiddleware[GoalAgentState]):
+class GoalMiddleware(AgentMiddleware[GoalAgentState, Any]):
   state_schema = GoalAgentState
 
   def __init__(
     self,
-    evaluator: GoalEvaluator,
+    evaluator: GoalEvaluation,
     max_continuations: int = 5,
   ):
     if max_continuations < 0:
@@ -93,7 +97,7 @@ class GoalMiddleware(AgentMiddleware[GoalAgentState]):
   def before_agent(
     self,
     state: GoalAgentState,
-    runtime: Runtime[None],
+    runtime: Runtime[Any],
   ) -> dict[str, Any]:
     del runtime
     messages = state.get("messages") or []
@@ -109,7 +113,9 @@ class GoalMiddleware(AgentMiddleware[GoalAgentState]):
     last_user_message = (
       messages[last_user_index] if last_user_index is not None else None
     )
-    objective = _goal_from_message(last_user_message)
+    objective = _goal_from_message(
+      last_user_message if isinstance(last_user_message, HumanMessage) else None
+    )
     if objective is None:
       return {
         "goal_status": "inactive",
@@ -129,7 +135,7 @@ class GoalMiddleware(AgentMiddleware[GoalAgentState]):
   async def aafter_agent(
     self,
     state: GoalAgentState,
-    runtime: Runtime[None],
+    runtime: Runtime[Any],
   ) -> dict[str, Any] | None:
     del runtime
     if state.get("goal_status") != "running":

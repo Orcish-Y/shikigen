@@ -83,5 +83,5 @@ class TokenTracker(BaseCallbackHandler):
       "total_output": self.total_output,
       "total_tokens": self.total_tokens,
       "calls": self.calls,
-      "by_model": {model: dict(data) for model, data in self.by_model.items()},
+      "by_model": {model: data.copy() for model, data in self.by_model.items()},
     }

@@ -3,10 +3,12 @@ import unittest
 from langchain.agents import create_agent
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.runtime import Runtime
 from shikigen.loop import run_agent_loop
 from shikigen.middleware.goal_middleware import (
+  GoalAgentState,
   GoalEvaluator,
   GoalMiddleware,
   GoalResult,
@@ -94,10 +96,10 @@ class GoalMiddlewareTests(unittest.IsolatedAsyncioTestCase):
     agent = create_agent(
       model=agent_model,
       tools=[],
-      middleware=[GoalMiddleware(evaluator)],  # type: ignore[list-item]
+      middleware=[GoalMiddleware(evaluator)],
       checkpointer=InMemorySaver(),
     )
-    config = {"configurable": {"thread_id": "goal-thread"}}
+    config: RunnableConfig = {"configurable": {"thread_id": "goal-thread"}}
 
     await agent.ainvoke(
       {"messages": [HumanMessage(content="/goal finish task")]},
@@ -114,16 +116,15 @@ class GoalMiddlewareTests(unittest.IsolatedAsyncioTestCase):
     )
     self.assertTrue(
       any(
-        isinstance(message, HumanMessage)
-        and "<system-reminder>" in message.text
+        isinstance(message, HumanMessage) and "<system-reminder>" in message.text
         for message in state.values["messages"]
       )
     )
 
   def test_before_agent_activates_goal_and_records_message_boundary(self) -> None:
     evaluator = StubGoalEvaluator()
-    middleware = GoalMiddleware(evaluator)  # type: ignore[arg-type]
-    state = {
+    middleware = GoalMiddleware(evaluator)
+    state: GoalAgentState = {
       "messages": [
         HumanMessage(content="old task"),
         AIMessage(content="old answer"),
@@ -132,7 +133,7 @@ class GoalMiddlewareTests(unittest.IsolatedAsyncioTestCase):
     }
 
     update = middleware.before_agent(
-      state,  # type: ignore[arg-type]
+      state,
       Runtime(context=None),
     )
 
@@ -141,10 +142,10 @@ class GoalMiddlewareTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(update["goal_start_index"], 2)
 
   def test_before_agent_is_inactive_without_a_goal_message(self) -> None:
-    middleware = GoalMiddleware(StubGoalEvaluator())  # type: ignore[arg-type]
+    middleware = GoalMiddleware(StubGoalEvaluator())
 
     update = middleware.before_agent(
-      {"messages": []},  # type: ignore[arg-type]
+      {"messages": []},
       Runtime(context=None),
     )
 
@@ -152,8 +153,8 @@ class GoalMiddlewareTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_satisfied_goal_stops_without_jumping_to_model(self) -> None:
     evaluator = StubGoalEvaluator(GoalResult(True, "Execution output observed."))
-    middleware = GoalMiddleware(evaluator)  # type: ignore[arg-type]
-    state = {
+    middleware = GoalMiddleware(evaluator)
+    state: GoalAgentState = {
       "messages": [
         HumanMessage(content="old task"),
         HumanMessage(content="/goal run hello.py"),
@@ -172,7 +173,7 @@ class GoalMiddlewareTests(unittest.IsolatedAsyncioTestCase):
     }
 
     update = await middleware.aafter_agent(
-      state,  # type: ignore[arg-type]
+      state,
       Runtime(context=None),
     )
 
@@ -192,10 +193,10 @@ class GoalMiddlewareTests(unittest.IsolatedAsyncioTestCase):
   async def test_unsatisfied_goal_injects_continuation_and_jumps(self) -> None:
     evaluator = StubGoalEvaluator(GoalResult(False, "The file was not run."))
     middleware = GoalMiddleware(
-      evaluator,  # type: ignore[arg-type]
+      evaluator,
       max_continuations=2,
     )
-    state = {
+    state: GoalAgentState = {
       "messages": [
         HumanMessage(content="/goal create and run hello.py"),
         AIMessage(content="I created hello.py."),
@@ -206,7 +207,7 @@ class GoalMiddlewareTests(unittest.IsolatedAsyncioTestCase):
     }
 
     update = await middleware.aafter_agent(
-      state,  # type: ignore[arg-type]
+      state,
       Runtime(context=None),
     )
 
@@ -221,10 +222,10 @@ class GoalMiddlewareTests(unittest.IsolatedAsyncioTestCase):
   async def test_final_continuation_is_evaluated_before_exhaustion(self) -> None:
     evaluator = StubGoalEvaluator(GoalResult(False, "Still incomplete."))
     middleware = GoalMiddleware(
-      evaluator,  # type: ignore[arg-type]
+      evaluator,
       max_continuations=2,
     )
-    state = {
+    state: GoalAgentState = {
       "messages": [
         HumanMessage(content="/goal finish task"),
         AIMessage(content="I could not finish."),
@@ -235,7 +236,7 @@ class GoalMiddlewareTests(unittest.IsolatedAsyncioTestCase):
     }
 
     update = await middleware.aafter_agent(
-      state,  # type: ignore[arg-type]
+      state,
       Runtime(context=None),
     )
 

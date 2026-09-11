@@ -1,7 +1,7 @@
 import asyncio
 import json
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.encoders import jsonable_encoder
@@ -51,7 +51,7 @@ class ChatRequest(BaseModel):
 async def stream_run_events(
   record: RunRecord,
   run_manager: RunManager,
-) -> AsyncIterator[str]:
+) -> AsyncGenerator[str, None]:
   encoder = RunJsonlEncoder()
   subscription = record.stream.subscribe()
   try:

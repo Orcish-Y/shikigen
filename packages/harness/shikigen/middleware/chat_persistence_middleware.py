@@ -25,10 +25,9 @@ class MessageJournal(Protocol):
   ) -> int: ...
 
 
-def _context(runtime: Runtime[AgentRunContext]) -> AgentRunContext:
+def _context(context: object) -> AgentRunContext:
   # run 身份来自本次调用的 Runtime，而不是保存在共享 middleware 实例上。
-  context = runtime.context
-  if context is None:
+  if not isinstance(context, AgentRunContext):
     raise RuntimeError("Chat persistence requires AgentRunContext")
   return context
 
@@ -57,7 +56,7 @@ def _tool_messages(result: ToolMessage | Command[Any]) -> list[ToolMessage]:
   return [message for message in messages if isinstance(message, ToolMessage)]
 
 
-class ChatPersistenceMiddleware(AgentMiddleware):
+class ChatPersistenceMiddleware(AgentMiddleware[AgentState, AgentRunContext]):
   """将 Agent 的完整消息投影到面向产品查询的 run journal。"""
 
   def __init__(self, journal: MessageJournal):
@@ -75,7 +74,7 @@ class ChatPersistenceMiddleware(AgentMiddleware):
       return
 
     message = messages[-1]
-    context = _context(runtime)
+    context = _context(runtime.context)
     await self._journal.append_event(
       thread_id=context.thread_id,
       run_id=context.run_id,
@@ -101,7 +100,7 @@ class ChatPersistenceMiddleware(AgentMiddleware):
       return
 
     message = messages[-1]
-    context = _context(runtime)
+    context = _context(runtime.context)
     await self._journal.append_event(
       thread_id=context.thread_id,
       run_id=context.run_id,
@@ -124,7 +123,7 @@ class ChatPersistenceMiddleware(AgentMiddleware):
   ) -> ToolMessage | Command[Any]:
     # 等内层工具与错误处理中间件完成后，再持久化最终 ToolMessage。
     result = await handler(request)
-    context = _context(request.runtime)
+    context = _context(request.runtime.context)
     for message in _tool_messages(result):
       await self._journal.append_event(
         thread_id=context.thread_id,

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from collections.abc import AsyncIterable
+from typing import TYPE_CHECKING, Protocol
 
+from langchain_core.language_models.chat_model_stream import AsyncChatModelStream
 from langchain_core.messages import HumanMessage
 
 from shikigen.run_manager import RunRecord, RunStatus
@@ -10,6 +12,22 @@ from shikigen.runtime_context import AgentRunContext
 
 if TYPE_CHECKING:
   from shikigen.callback_handler import TokenTracker
+
+
+class ToolCallStream(Protocol):
+  tool_name: str
+  input: object
+  output: object
+
+  @property
+  def output_deltas(self) -> AsyncIterable[object]: ...
+
+
+class AgentEventStream(Protocol):
+  """Loop 消费的 v3 投影；上游通过 setattr 动态挂载，未提供静态属性声明。"""
+
+  messages: AsyncIterable[AsyncChatModelStream]
+  tool_calls: AsyncIterable[ToolCallStream]
 
 
 async def run_agent_loop(
@@ -25,7 +43,7 @@ async def run_agent_loop(
   并发消费 messages（token 流）和 tool_calls（工具调用）。
   """
 
-  async def handle_messages(event_stream: object) -> None:
+  async def handle_messages(event_stream: AgentEventStream) -> None:
     async for message in event_stream.messages:
       emitted_text = False
       async for text_delta in message.text:
@@ -34,7 +52,7 @@ async def run_agent_loop(
       if emitted_text:
         record.stream.publish("message", {"text": "", "done": True})
 
-  async def handle_tool_calls(event_stream: object) -> None:
+  async def handle_tool_calls(event_stream: AgentEventStream) -> None:
     async for call in event_stream.tool_calls:
       # 消费完增量后，call.output 才是完整的工具输出。
       async for _ in call.output_deltas:
@@ -49,12 +67,12 @@ async def run_agent_loop(
         },
       )
 
-  async def consume_event_stream(event_stream: object) -> None:
+  async def consume_event_stream(event_stream: AgentEventStream) -> None:
     async with asyncio.TaskGroup() as group:
       group.create_task(handle_messages(event_stream))
       group.create_task(handle_tool_calls(event_stream))
 
-  async def wait_for_stream_outcome(event_stream: object) -> RunStatus:
+  async def wait_for_stream_outcome(event_stream: AgentEventStream) -> RunStatus:
     """等待流消费完成或取消信号，并在返回前回收两个等待任务。"""
     consume_task = asyncio.create_task(consume_event_stream(event_stream))
     abort_task = asyncio.create_task(record.abort_event.wait())

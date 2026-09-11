@@ -1,7 +1,9 @@
 from dataclasses import dataclass
+from typing import Any
 
 from langgraph.graph.state import CompiledStateGraph
 from shikigen.run_manager import RunManager
+from shikigen.runtime_context import AgentRunContext
 from shikigen.stream import StreamManager
 
 from app.persistence import ChatStore
@@ -11,7 +13,7 @@ from app.persistence import ChatStore
 class ServerRuntime:
   """应用生命周期内由所有 HTTP 请求共享的 Agent 运行时。"""
 
-  agent: CompiledStateGraph
+  agent: CompiledStateGraph[Any, AgentRunContext, Any, Any]
   stream_manager: StreamManager
   run_manager: RunManager
   chat_store: ChatStore

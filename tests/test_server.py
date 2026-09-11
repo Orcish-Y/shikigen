@@ -2,9 +2,10 @@ import asyncio
 import json
 import tempfile
 import unittest
+from collections.abc import AsyncGenerator
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
@@ -19,6 +20,33 @@ from app.routes.run import (
   stream_run_events,
 )
 from app.server import app as server_app
+
+
+class LifespanTests(unittest.IsolatedAsyncioTestCase):
+  async def test_startup_initializes_runtime_and_shutdown_releases_resources(self):
+    store_context = MagicMock()
+    checkpoint_context = MagicMock()
+    runtime = SimpleNamespace(shutdown=AsyncMock())
+    app = FastAPI()
+
+    with (
+      patch("app.server.open_chat_store", return_value=store_context),
+      patch("app.server.make_sqlite_checkpointer", return_value=checkpoint_context),
+      patch("app.server.load_app_config"),
+      patch("app.server.load_mcp_tools", new=AsyncMock(return_value=[])),
+      patch("app.server.create_chat_model"),
+      patch("app.server.create_lead_agent"),
+      patch("app.server.ServerRuntime", return_value=runtime),
+    ):
+      async with server_app.router.lifespan_context(app):
+        self.assertIs(app.state.runtime, runtime)
+        store_context.__aenter__.assert_awaited_once()
+        checkpoint_context.__aenter__.assert_awaited_once()
+        runtime.shutdown.assert_not_awaited()
+
+    runtime.shutdown.assert_awaited_once()
+    store_context.__aexit__.assert_awaited_once()
+    checkpoint_context.__aexit__.assert_awaited_once()
 
 
 class RegisteredRoutesTests(unittest.IsolatedAsyncioTestCase):
@@ -173,10 +201,13 @@ class StreamChatTests(unittest.IsolatedAsyncioTestCase):
         request,
       )
       try:
-        await anext(response.body_iterator)
-        await response.body_iterator.aclose()
+        iterator = response.body_iterator
+        assert isinstance(iterator, AsyncGenerator)
+        await anext(iterator)
+        await iterator.aclose()
         record = manager.get_active_by_thread("thread-1")
         self.assertIsNotNone(record)
+        assert record is not None
         self.assertFalse(record.abort_event.is_set())
       finally:
         await manager.shutdown()

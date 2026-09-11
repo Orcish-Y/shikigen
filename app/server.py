@@ -1,4 +1,5 @@
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -19,6 +20,7 @@ from app.runtime import ServerRuntime
 checkpoint_db_path = Path(".shikigen/data/shikigen.db")
 
 
+@asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
   async with (
     open_chat_store(checkpoint_db_path) as chat_store,

@@ -4,7 +4,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from shikigen.app_config import AppConfigError, load_app_config
+from shikigen.app_config import (
+  AppConfigError,
+  HttpMcpServerConfig,
+  StdioMcpServerConfig,
+  load_app_config,
+)
 
 
 class AppConfigTests(unittest.TestCase):
@@ -117,6 +122,7 @@ class AppConfigTests(unittest.TestCase):
       config = load_app_config(path)
 
     server = config.mcp.servers["local"]
+    assert isinstance(server, StdioMcpServerConfig)
     self.assertEqual(server.transport, "stdio")
     self.assertEqual(server.command, "uvx")
     self.assertEqual(server.args, ["example-mcp-server"])
@@ -280,8 +286,12 @@ class AppConfigTests(unittest.TestCase):
       ):
         config = load_app_config(path)
 
-    self.assertEqual(config.mcp.servers["remote"].headers, {"Authorization": "secret"})
-    self.assertEqual(config.mcp.servers["local"].args, ["example-server"])
+    remote = config.mcp.servers["remote"]
+    local = config.mcp.servers["local"]
+    assert isinstance(remote, HttpMcpServerConfig)
+    assert isinstance(local, StdioMcpServerConfig)
+    self.assertEqual(remote.headers, {"Authorization": "secret"})
+    self.assertEqual(local.args, ["example-server"])
 
   def test_reports_missing_environment_variable_with_config_path(self) -> None:
     with tempfile.TemporaryDirectory() as directory:
@@ -331,7 +341,9 @@ class AppConfigTests(unittest.TestCase):
       with patch.dict("os.environ", {"TEST_MCP_TOKEN": "secret"}):
         config = load_app_config(path)
 
+    server = config.mcp.servers["example"]
+    assert isinstance(server, HttpMcpServerConfig)
     self.assertEqual(
-      config.mcp.servers["example"].headers,
+      server.headers,
       {"Authorization": "Bearer $TEST_MCP_TOKEN"},
     )

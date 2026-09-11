@@ -1,6 +1,8 @@
 import logging
+from typing import Any
 
 from langchain.agents import create_agent
+from langchain.agents.middleware import AgentMiddleware
 from langchain.chat_models import BaseChatModel
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.state import CompiledStateGraph
@@ -20,10 +22,11 @@ logger = logging.getLogger(__name__)
 def create_lead_agent(
   model: str | BaseChatModel,  # 模型实例
   tool_registry: ToolRegistry | None = None,  # 可选：工具注册表
-  middlewares: list | None = None,  # 可选：额外 middleware
+  # 可选：额外 middleware
+  middlewares: list[AgentMiddleware[Any, AgentRunContext]] | None = None,
   system_prompt: str | None = None,  # 可选：系统提示词
   checkpointer: BaseCheckpointSaver | None = None,
-) -> CompiledStateGraph:
+) -> CompiledStateGraph[Any, AgentRunContext, Any, Any]:
 
   _tool_registry = tool_registry or create_builtin_registry()
 
@@ -31,15 +34,16 @@ def create_lead_agent(
   task_tool = build_task_tool(model, _tool_registry)
   tools.append(task_tool)  # 将 task 工具添加到工具列表中
 
+  agent_middlewares: list[AgentMiddleware[Any, AgentRunContext]] = [
+    GoalMiddleware(evaluator=GoalEvaluator(model)),
+    *(middlewares or []),
+    ToolErrorHandlingMiddleware(),
+    LoggingMiddleware(),
+  ]
   agent = create_agent(
     model=model,
     tools=tools,
-    middleware=[
-      GoalMiddleware(evaluator=GoalEvaluator(model)),
-      *(middlewares or []),
-      ToolErrorHandlingMiddleware(),
-      LoggingMiddleware(),
-    ],
+    middleware=agent_middlewares,
     context_schema=AgentRunContext,
     checkpointer=checkpointer or JsonCheckpointer(),
     system_prompt=system_prompt or "You are a helpful assistant.",
