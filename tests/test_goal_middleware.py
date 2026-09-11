@@ -5,15 +5,14 @@ from langchain_core.language_models.fake_chat_models import FakeMessagesListChat
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.runtime import Runtime
-
-from harness.loop import run_agent_loop
-from harness.run_manager import RunRecord
-from harness.stream import Stream
-from middleware.goal_middleware import (
+from shikigen.loop import run_agent_loop
+from shikigen.middleware.goal_middleware import (
   GoalEvaluator,
   GoalMiddleware,
   GoalResult,
 )
+from shikigen.run_manager import RunRecord
+from shikigen.stream import Stream
 
 
 class StubGoalEvaluator:

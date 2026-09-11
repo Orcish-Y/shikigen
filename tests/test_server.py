@@ -4,13 +4,57 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
+import httpx
 from fastapi import FastAPI, HTTPException, Request
+from shikigen.run_manager import RunManager, RunStatus
+from shikigen.stream import StreamManager
 
-from harness.persistence import ChatStore
-from harness.run_manager import RunManager, RunStatus
-from harness.server import get_run_messages, stream_run_events
-from harness.stream import StreamManager
+from app.persistence import ChatStore
+from app.routes.run import (
+  ChatRequest,
+  get_run_messages,
+  stream_chat,
+  stream_run_events,
+)
+from app.server import app as server_app
+
+
+class RegisteredRoutesTests(unittest.IsolatedAsyncioTestCase):
+  async def test_server_registers_thread_and_run_routes(self) -> None:
+    store = SimpleNamespace(
+      list_threads=AsyncMock(return_value=[]),
+      create_thread=AsyncMock(),
+      thread_exists=AsyncMock(return_value=False),
+      list_messages_by_run=AsyncMock(return_value=None),
+    )
+    runtime = SimpleNamespace(chat_store=store)
+    transport = httpx.ASGITransport(app=server_app)
+    with patch.object(server_app.state, "runtime", runtime, create=True):
+      async with httpx.AsyncClient(
+        transport=transport, base_url="http://test"
+      ) as client:
+        response = await client.get("/api/threads")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), [])
+        response = await client.post("/api/threads")
+        self.assertEqual(response.status_code, 200)
+        store.create_thread.assert_awaited_once_with(response.json()["thread_id"])
+
+        for path, detail in (
+          ("/api/threads/missing/messages", "Thread not found"),
+          ("/api/threads/missing/runs/missing/messages", "Run not found"),
+        ):
+          response = await client.get(path)
+          self.assertEqual(response.status_code, 404)
+          self.assertEqual(response.json(), {"detail": detail})
+
+        response = await client.post(
+          "/api/threads/missing/stream", json={"message": "hello"}
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json(), {"detail": "Thread not found"})
 
 
 class RunMessagesEndpointTests(unittest.IsolatedAsyncioTestCase):
@@ -54,6 +98,123 @@ class RunMessagesEndpointTests(unittest.IsolatedAsyncioTestCase):
 
 
 class StreamChatTests(unittest.IsolatedAsyncioTestCase):
+  async def test_run_survives_disconnect_and_cleans_up_after_persistence(
+    self,
+  ) -> None:
+    for cancel_consumer in (False, True):
+      with self.subTest(cancel_consumer=cancel_consumer):
+        manager = RunManager(StreamManager())
+        record = manager.create("thread-1")
+        finish = asyncio.Event()
+        persist = asyncio.Event()
+        finished = asyncio.Event()
+        received = asyncio.Event()
+
+        async def produce(record, finish, finished, persist) -> None:
+          record.start()
+          record.stream.publish("metadata", {"run_id": record.run_id})
+          await finish.wait()
+          record.finish(RunStatus.COMPLETED)
+          finished.set()
+          await persist.wait()
+
+        iterator = stream_run_events(record, manager)
+
+        async def consume(iterator, received) -> None:
+          async for _ in iterator:
+            received.set()
+
+        record.task = asyncio.create_task(produce(record, finish, finished, persist))
+        try:
+          if cancel_consumer:
+            consumer = asyncio.create_task(consume(iterator, received))
+            await asyncio.wait_for(received.wait(), timeout=1)
+            consumer.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+              await consumer
+          else:
+            await anext(iterator)
+            await iterator.aclose()
+
+          self.assertFalse(record.abort_event.is_set())
+          self.assertFalse(record.task.done())
+          self.assertIs(manager.get_active_by_thread("thread-1"), record)
+          self.assertEqual(len(record.stream._subscribers), 0)
+          finish.set()
+          await asyncio.wait_for(finished.wait(), timeout=1)
+          self.assertIs(manager.get(record.run_id), record)
+          persist.set()
+          await record.task
+          self.assertIsNone(manager.get(record.run_id))
+          self.assertEqual(record.status, RunStatus.COMPLETED)
+        finally:
+          await manager.shutdown()
+
+  async def test_closing_chat_response_keeps_run_active(self) -> None:
+    manager = RunManager(StreamManager())
+    store = SimpleNamespace(
+      thread_exists=AsyncMock(return_value=True),
+      create_run=AsyncMock(),
+      start_run=AsyncMock(),
+    )
+    app = FastAPI()
+    app.state.runtime = SimpleNamespace(chat_store=store, run_manager=manager)
+    request = Request({"type": "http", "app": app})
+
+    async def produce(_runtime, record, _message, _tracker) -> None:
+      record.start()
+      record.stream.publish("metadata", {"run_id": record.run_id})
+      await asyncio.Event().wait()
+
+    with patch("app.routes.run.run_and_persist_status", side_effect=produce):
+      response = await stream_chat(
+        "thread-1",
+        ChatRequest(message="hello"),
+        request,
+      )
+      try:
+        await anext(response.body_iterator)
+        await response.body_iterator.aclose()
+        record = manager.get_active_by_thread("thread-1")
+        self.assertIsNotNone(record)
+        self.assertFalse(record.abort_event.is_set())
+      finally:
+        await manager.shutdown()
+
+  async def test_busy_thread_returns_conflict(self) -> None:
+    manager = RunManager(StreamManager())
+    record = manager.create("thread-1")
+    store = SimpleNamespace(
+      thread_exists=AsyncMock(return_value=True), create_run=AsyncMock()
+    )
+    app = FastAPI()
+    app.state.runtime = SimpleNamespace(chat_store=store, run_manager=manager)
+    app.post("/api/threads/{thread_id}/stream")(stream_chat)
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+      for running in (False, True):
+        if running:
+          record.start()
+        response = await client.post(
+          "/api/threads/thread-1/stream", json={"message": "hello"}
+        )
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json(), {"detail": "Thread is busy with another run"})
+    store.create_run.assert_not_awaited()
+    self.assertIs(manager.get(record.run_id), record)
+    self.assertFalse(record.abort_event.is_set())
+
+  async def test_terminal_events_have_matching_names(self) -> None:
+    for terminal_status in (RunStatus.COMPLETED, RunStatus.CANCELLED):
+      with self.subTest(status=terminal_status):
+        manager = RunManager(StreamManager())
+        record = manager.create("thread-1")
+        record.start()
+        record.finish(terminal_status)
+        events = [json.loads(line) async for line in stream_run_events(record, manager)]
+        self.assertEqual(events[-1]["event"], f"run.{terminal_status.value}")
+        self.assertEqual(events[-1]["data"], {"status": terminal_status.value})
+
   async def test_serializes_complete_events_as_json_lines(self) -> None:
     manager = RunManager(StreamManager())
     record = manager.create("thread-1")
@@ -98,60 +259,3 @@ class StreamChatTests(unittest.IsolatedAsyncioTestCase):
       ],
     )
     self.assertTrue(all(line.endswith("\n") for line in lines))
-
-  async def test_closing_response_cancels_task_and_removes_run(self) -> None:
-    manager = RunManager(StreamManager())
-    record = manager.create("thread-1")
-
-    async def wait_for_abort(_agent, _message, *, record, token_tracker) -> None:
-      record.start()
-      record.stream.publish("metadata", {"run_id": record.run_id})
-      await record.abort_event.wait()
-      record.finish(RunStatus.CANCELLED)
-
-    task = asyncio.create_task(
-      wait_for_abort(object(), object(), record=record, token_tracker=None)
-    )
-    record.task = task
-    iterator = stream_run_events(record, manager)
-    await anext(iterator)
-
-    try:
-      await iterator.aclose()
-
-      self.assertTrue(record.abort_event.is_set())
-      self.assertTrue(record.task.done())
-      self.assertIsNone(manager.get(record.run_id))
-    finally:
-      if record.task is not None and not record.task.done():
-        record.task.cancel()
-        await asyncio.gather(record.task, return_exceptions=True)
-      manager.remove(record.run_id)
-
-  async def test_cancelled_consumer_cancels_task_and_removes_run(self) -> None:
-    manager = RunManager(StreamManager())
-    record = manager.create("thread-1")
-    first_event_received = asyncio.Event()
-
-    async def wait_for_abort() -> None:
-      record.start()
-      record.stream.publish("metadata", {"run_id": record.run_id})
-      await record.abort_event.wait()
-      record.finish(RunStatus.CANCELLED)
-
-    async def consume() -> None:
-      async for _ in stream_run_events(record, manager):
-        first_event_received.set()
-
-    task = asyncio.create_task(wait_for_abort())
-    record.task = task
-    consumer_task = asyncio.create_task(consume())
-    await first_event_received.wait()
-    consumer_task.cancel()
-
-    with self.assertRaises(asyncio.CancelledError):
-      await consumer_task
-
-    self.assertTrue(record.abort_event.is_set())
-    self.assertTrue(task.done())
-    self.assertIsNone(manager.get(record.run_id))

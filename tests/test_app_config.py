@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from harness.app_config import AppConfigError, load_app_config
+from shikigen.app_config import AppConfigError, load_app_config
 
 
 class AppConfigTests(unittest.TestCase):
@@ -125,7 +125,7 @@ class AppConfigTests(unittest.TestCase):
     with tempfile.TemporaryDirectory() as directory:
       path = self.write_config(directory, {"model": {}, "mcp": {}})
 
-      with patch("harness.app_config.DEFAULT_CONFIG_PATH", path):
+      with patch("shikigen.app_config.DEFAULT_CONFIG_PATH", path):
         config = load_app_config()
 
     self.assertEqual(config.model.default, "deepseek-v4-flash")

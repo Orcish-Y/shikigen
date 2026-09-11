@@ -5,10 +5,11 @@ from langchain.agents.middleware import ToolCallRequest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.runtime import Runtime
 from langgraph.types import Command
-
-from harness.runtime_context import AgentRunContext
-from middleware.chat_persistence_middleware import ChatPersistenceMiddleware
-from middleware.tool_error_handling_middleware import ToolErrorHandlingMiddleware
+from shikigen.middleware.chat_persistence_middleware import ChatPersistenceMiddleware
+from shikigen.middleware.tool_error_handling_middleware import (
+  ToolErrorHandlingMiddleware,
+)
+from shikigen.runtime_context import AgentRunContext
 
 
 class RecordingJournal:

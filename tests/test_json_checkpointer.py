@@ -1,7 +1,7 @@
 import tempfile
 import unittest
 
-from harness.checkpoint.json_checkpointer import JsonCheckpointer
+from shikigen.checkpoint.json_checkpointer import JsonCheckpointer
 
 
 class JsonCheckpointerTests(unittest.IsolatedAsyncioTestCase):

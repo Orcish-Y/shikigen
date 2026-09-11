@@ -2,12 +2,11 @@ import asyncio
 import unittest
 
 from langchain_core.messages import HumanMessage
-
-from harness.callback_handler import TokenTracker
-from harness.loop import run_agent_loop
-from harness.run_manager import RunRecord, RunStatus
-from harness.runtime_context import AgentRunContext
-from harness.stream import Stream
+from shikigen.callback_handler import TokenTracker
+from shikigen.loop import run_agent_loop
+from shikigen.run_manager import RunRecord, RunStatus
+from shikigen.runtime_context import AgentRunContext
+from shikigen.stream import Stream
 
 
 class AsyncItems:

@@ -1,5 +1,24 @@
 # Shikigen Agent
 
+## 项目结构
+
+- `packages/harness/shikigen/`：框架包，包含 Agent、执行 Loop、运行时、工具和 middleware，使用 `shikigen.*` 导入。
+- `app/`：应用层，包含 FastAPI 服务器，依赖 `shikigen`。
+- `app/routes/thread.py`：会话列表、创建会话、会话历史消息。
+- `app/routes/run.py`：发起流式运行、查询运行消息和 JSONL 事件编码。
+- `app/persistence/`：会话与运行数据库、SQLite checkpoint 连接管理。
+- `app/runtime.py`：HTTP 请求共享的应用运行时。
+- `tests/`：测试。
+
+根项目通过 uv workspace 依赖 `shikigen-harness`；`uv sync` 会以 editable 模式安装框架包。
+以下命令均在项目根目录执行；默认配置 `config.json` 和运行数据路径相对于当前工作目录。
+
+## 运行测试
+
+```bash
+uv run python -m unittest discover -s tests
+```
+
 ## 启动 Web 服务器
 
 先在项目根目录安装依赖：
@@ -19,7 +38,7 @@ GITHUB_TOKEN="Bearer github_pat_xxx"
 以开发模式启动 FastAPI，监听本机的 `8000` 端口：
 
 ```bash
-uv run uvicorn harness.server:app \
+uv run uvicorn app.server:app \
   --env-file .env \
   --host 127.0.0.1 \
   --port 8000 \
@@ -63,6 +82,15 @@ curl -N \
 `message.delta` 事件逐段返回；同一个输出项的事件共享 `output_index`，客户端可据此
 将事件归并成最终数组。
 
+同一 thread 已有 pending 或 running 的 run 时，请求返回 HTTP 409。
+正常结束发送 `run.completed`，取消发送 `run.cancelled`，失败发送 `run.error`。
+
+客户端断线后只关闭该连接的流式订阅，Agent 和 run 继续执行并保存结果，
+后台任务结束后自动回收内存中的 run 和事件流。目前不提供实时断线重连；
+可通过 `GET /api/threads/{thread_id}/messages` 查询已保存的消息，
+或使用 metadata 中的 run_id 调用 `GET /api/threads/{thread_id}/runs/{run_id}/messages`。
+服务器关闭时仍会取消未结束的任务。
+
 ```jsonl
 {"id":"0","event":"metadata","data":{"run_id":"abc"}}
 {"id":"1","event":"message.delta","data":{"delta":"你"},"output_index":0}
@@ -79,7 +107,7 @@ Agent 和 Stream 内部只发布与传输格式无关的通用事件；JSONL 事
 如果 Next.js 不在同一网络命名空间中，例如运行在另一个容器、WSL 外部或局域网设备上，使用：
 
 ```bash
-uv run uvicorn harness.server:app \
+uv run uvicorn app.server:app \
   --env-file .env \
   --host 0.0.0.0 \
   --port 8000 \

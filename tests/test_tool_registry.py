@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import Mock
 
-from tools import ToolRegistry, create_builtin_registry
+from shikigen.tools import ToolRegistry, create_builtin_registry
 
 
 def tool_named(name: str) -> Mock:
@@ -16,7 +16,7 @@ class ToolRegistryTests(unittest.TestCase):
     first = tool_named("same_name")
     duplicate = tool_named("same_name")
 
-    with self.assertLogs("tools", level="WARNING") as logs:
+    with self.assertLogs("shikigen.tools", level="WARNING") as logs:
       result = registry.register(first).register(duplicate)
 
     self.assertIs(result, registry)
@@ -28,7 +28,7 @@ class ToolRegistryTests(unittest.TestCase):
     first = tool_named("same_name")
     duplicate = tool_named("same_name")
 
-    with self.assertLogs("tools", level="WARNING"):
+    with self.assertLogs("shikigen.tools", level="WARNING"):
       registry.register_many([first, duplicate])
 
     self.assertEqual(registry.list(), [first])

@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from harness.persistence import ChatStore
+from app.persistence import ChatStore
 
 
 class ChatStoreTests(unittest.IsolatedAsyncioTestCase):

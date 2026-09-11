@@ -1,7 +1,7 @@
 import unittest
 from types import SimpleNamespace
 
-from harness.callback_handler import TokenTracker
+from shikigen.callback_handler import TokenTracker
 
 
 class TokenTrackerTests(unittest.IsolatedAsyncioTestCase):

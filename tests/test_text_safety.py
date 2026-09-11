@@ -1,8 +1,7 @@
 import unittest
 
 from openai._utils._json import openapi_dumps
-
-from text_safety import replace_surrogates
+from shikigen.utils.text_safety import replace_surrogates
 
 
 class ReplaceSurrogatesTests(unittest.TestCase):

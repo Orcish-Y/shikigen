@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from harness.checkpoint.sqlite_provider import make_sqlite_checkpointer
+from app.persistence.sqlite_provider import make_sqlite_checkpointer
 
 
 class SqliteCheckpointerTests(unittest.IsolatedAsyncioTestCase):

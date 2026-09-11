@@ -1,8 +1,8 @@
 import asyncio
 import unittest
 
-from harness.run_manager import RunManager, RunStatus
-from harness.stream import StreamManager
+from shikigen.run_manager import RunManager, RunStatus
+from shikigen.stream import StreamManager
 
 
 class RunManagerTests(unittest.IsolatedAsyncioTestCase):

@@ -1,13 +1,13 @@
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
-from harness.app_config import McpConfig
-from tools.mcp_loader import load_mcp_tools
+from shikigen.app_config import McpConfig
+from shikigen.tools.mcp_loader import load_mcp_tools
 
 
 class McpLoaderTests(unittest.IsolatedAsyncioTestCase):
   async def test_empty_config_returns_no_tools_without_creating_client(self) -> None:
-    with patch("tools.mcp_loader.MultiServerMCPClient") as client_class:
+    with patch("shikigen.tools.mcp_loader.MultiServerMCPClient") as client_class:
       tools = await load_mcp_tools(McpConfig())
 
     self.assertEqual(tools, [])
@@ -39,7 +39,7 @@ class McpLoaderTests(unittest.IsolatedAsyncioTestCase):
     }
 
     with patch(
-      "tools.mcp_loader.MultiServerMCPClient",
+      "shikigen.tools.mcp_loader.MultiServerMCPClient",
       return_value=client,
     ) as client_class:
       tools = await load_mcp_tools(config)
@@ -76,8 +76,8 @@ class McpLoaderTests(unittest.IsolatedAsyncioTestCase):
     )
 
     with (
-      patch("tools.mcp_loader.MultiServerMCPClient", return_value=client),
-      self.assertLogs("tools.mcp_loader", level="WARNING") as logs,
+      patch("shikigen.tools.mcp_loader.MultiServerMCPClient", return_value=client),
+      self.assertLogs("shikigen.tools.mcp_loader", level="WARNING") as logs,
     ):
       tools = await load_mcp_tools(config)
 
@@ -115,8 +115,8 @@ class McpLoaderTests(unittest.IsolatedAsyncioTestCase):
     )
 
     with (
-      patch("tools.mcp_loader.MultiServerMCPClient", return_value=client),
-      self.assertLogs("tools.mcp_loader", level="WARNING"),
+      patch("shikigen.tools.mcp_loader.MultiServerMCPClient", return_value=client),
+      self.assertLogs("shikigen.tools.mcp_loader", level="WARNING"),
     ):
       tools = await load_mcp_tools(config)
 
@@ -139,8 +139,8 @@ class McpLoaderTests(unittest.IsolatedAsyncioTestCase):
     )
 
     with (
-      patch("tools.mcp_loader.MultiServerMCPClient", return_value=client),
-      self.assertLogs("tools.mcp_loader", level="WARNING") as logs,
+      patch("shikigen.tools.mcp_loader.MultiServerMCPClient", return_value=client),
+      self.assertLogs("shikigen.tools.mcp_loader", level="WARNING") as logs,
     ):
       tools = await load_mcp_tools(config)
 

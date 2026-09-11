@@ -1,8 +1,8 @@
 import unittest
 from unittest.mock import Mock, patch
 
-from harness.app_config import ModelConfig
-from harness.model import create_chat_model
+from shikigen.app_config import ModelConfig
+from shikigen.model import create_chat_model
 
 
 class CreateChatModelTests(unittest.TestCase):
@@ -15,7 +15,7 @@ class CreateChatModelTests(unittest.TestCase):
     configured_model = Mock()
 
     with patch(
-      "harness.model.init_chat_model",
+      "shikigen.model.init_chat_model",
       return_value=configured_model,
     ) as init_model:
       model = create_chat_model(config)
@@ -30,7 +30,7 @@ class CreateChatModelTests(unittest.TestCase):
   def test_omits_missing_base_url(self) -> None:
     config = ModelConfig(default="configured-model", provider="configured-provider")
 
-    with patch("harness.model.init_chat_model") as init_model:
+    with patch("shikigen.model.init_chat_model") as init_model:
       create_chat_model(config)
 
     init_model.assert_called_once_with(

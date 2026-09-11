@@ -7,9 +7,8 @@ from langchain.messages import AIMessage, HumanMessage
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import Field
-
-from harness import create_lead_agent
-from tools import BASH_ONLY_TOOLS, build_task_tool, create_builtin_registry
+from shikigen import create_lead_agent
+from shikigen.tools import BASH_ONLY_TOOLS, build_task_tool, create_builtin_registry
 
 
 class ToolAwareFakeChatModel(FakeMessagesListChatModel):

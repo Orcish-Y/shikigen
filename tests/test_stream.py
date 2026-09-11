@@ -1,7 +1,7 @@
 import asyncio
 import unittest
 
-from harness.stream import Stream
+from shikigen.stream import Stream
 
 
 class StreamTests(unittest.IsolatedAsyncioTestCase):
