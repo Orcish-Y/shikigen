@@ -11,6 +11,25 @@ def tool_named(name: str) -> Mock:
 
 
 class ToolRegistryTests(unittest.TestCase):
+  def test_excluding_preserves_source_order_and_tool_identity(self) -> None:
+    first, second, third = [tool_named(name) for name in ("a", "b", "c")]
+    registry = ToolRegistry().register_many([first, second, third])
+
+    filtered = registry.excluding(name for name in ("b", "missing"))
+
+    self.assertEqual(registry.list(), [first, second, third])
+    self.assertEqual(filtered.list(), [first, third])
+    self.assertIs(filtered.list()[0], first)
+    filtered.register(tool_named("d"))
+    self.assertEqual(registry.names, ["a", "b", "c"])
+
+  def test_excluding_all_or_no_tools_returns_independent_registry(self) -> None:
+    registry = ToolRegistry().register(tool_named("a"))
+    self.assertEqual(registry.excluding(["a"]).list(), [])
+    copied = registry.excluding([])
+    self.assertIsNot(copied, registry)
+    self.assertEqual(copied.list(), registry.list())
+
   def test_register_skips_duplicate_and_logs_a_warning(self) -> None:
     registry = ToolRegistry()
     first = tool_named("same_name")
@@ -39,6 +58,7 @@ class ToolRegistryTests(unittest.TestCase):
 
     self.assertEqual(first_registry.names, ["first"])
     self.assertEqual(second_registry.names, [])
+
 
 class BuiltinToolRegistryTests(unittest.TestCase):
   def test_builtin_registry_includes_filesystem_tools(self) -> None:

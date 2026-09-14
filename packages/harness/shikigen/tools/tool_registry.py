@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import builtins
 import logging
+from collections.abc import Iterable
 
 from langchain_core.tools import BaseTool
 
@@ -35,6 +36,13 @@ class ToolRegistry:
   def list(self) -> builtins.list[BaseTool]:
     """返回所有已注册工具的列表。"""
     return list(self.tools.values())
+
+  def excluding(self, names: Iterable[str]) -> ToolRegistry:
+    """返回排除指定名称的新集合；共享工具实例，不修改原集合。"""
+    excluded = set(names)
+    return ToolRegistry().register_many(
+      [tool for name, tool in self.tools.items() if name not in excluded]
+    )
 
   @property
   def names(self) -> builtins.list[str]:

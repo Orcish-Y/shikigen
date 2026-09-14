@@ -60,11 +60,53 @@ class McpConfig(BaseModel):
   servers: dict[str, McpServerConfig] = Field(default_factory=dict)
 
 
+class SubagentConfig(BaseModel):
+  """工具名按 registry 中的实际名称匹配；None 继承，空列表禁用工具。"""
+
+  model_config = ConfigDict(extra="forbid")
+
+  tools: list[Annotated[str, Field(min_length=1)]] | None = None
+  disallowed_tools: list[Annotated[str, Field(min_length=1)]] = Field(
+    default_factory=list
+  )
+
+
+class SubagentsConfig(BaseModel):
+  model_config = ConfigDict(extra="forbid")
+
+  general: SubagentConfig = Field(default_factory=SubagentConfig)
+  bash: SubagentConfig = Field(
+    default_factory=lambda: SubagentConfig(
+      tools=["bash", "read_file", "write_file", "list_dir", "grep"]
+    )
+  )
+
+
+class CheckpointerConfig(BaseModel):
+  """Checkpoint 后端；path 仅用于 sqlite，相对路径以工作目录为准。"""
+
+  model_config = ConfigDict(extra="forbid")
+
+  type: Literal["sqlite", "memory"] = "sqlite"
+  path: str = Field(default=".shikigen/data/shikigen.db", min_length=1)
+
+
+class DatabaseConfig(BaseModel):
+  """应用聊天存储配置，相对路径以工作目录为准。"""
+
+  model_config = ConfigDict(extra="forbid")
+
+  path: str = Field(default=".shikigen/data/shikigen.db", min_length=1)
+
+
 class AppConfig(BaseModel):
   model_config = ConfigDict(extra="forbid")
 
   model: ModelConfig
   mcp: McpConfig
+  subagents: SubagentsConfig = Field(default_factory=SubagentsConfig)
+  checkpointer: CheckpointerConfig = Field(default_factory=CheckpointerConfig)
+  database: DatabaseConfig = Field(default_factory=DatabaseConfig)
 
 
 def _resolve_env_vars(value: object, path: tuple[str | int, ...] = ()) -> object:

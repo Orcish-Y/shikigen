@@ -4,6 +4,22 @@
     "provider": "deepseek",
     "base_url": "https://api.deepseek.com/v1"
   },
+  "database": {
+    "path": ".shikigen/data/shikigen.db"
+  },
+  "checkpointer": {
+    "type": "sqlite",
+    "path": ".shikigen/data/shikigen.db"
+  },
+  "subagents": {
+    "general": {
+      "tools": null,
+      "disallowed_tools": ["write_file", "bash"]
+    },
+    "bash": {
+      "tools": ["read_file", "list_dir", "grep"]
+    }
+  },
   "mcp": {
     "initial_max_attempts": 3,
     "servers": {

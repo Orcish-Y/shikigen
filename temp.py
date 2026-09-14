@@ -1,8 +1,7 @@
 import asyncio
 
 from shikigen.agent import create_lead_agent
-from shikigen.app_config import load_app_config
-from shikigen.model import create_chat_model
+from shikigen.checkpoint.json_checkpointer import JsonCheckpointer
 
 
 async def print_messages(stream):
@@ -22,7 +21,9 @@ async def print_tool_calls(stream):
 
 
 async def main():
-  agent = create_lead_agent(create_chat_model(load_app_config().model))
+  agent = await create_lead_agent(
+    checkpointer=JsonCheckpointer(),
+  )
   async with await agent.astream_events(
     {"messages": [{"role": "user", "content": "使用 add 工具，计算150 + 1"}]},
     config={"configurable": {"thread_id": "stream-example"}},

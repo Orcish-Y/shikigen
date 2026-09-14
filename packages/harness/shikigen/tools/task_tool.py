@@ -1,12 +1,34 @@
+import logging
 from typing import Literal
 
 from langchain.agents import create_agent
 from langchain.messages import HumanMessage
 from langchain.tools import tool
+from langchain_core.tools import BaseTool
 
+from shikigen.app_config import SubagentConfig, SubagentsConfig
 from shikigen.tools.tool_registry import ToolRegistry
 
-BASH_ONLY_TOOLS = {"bash", "read_file", "write_file", "list_dir", "grep"}
+logger = logging.getLogger(__name__)
+
+
+def _select_tools(
+  registry: ToolRegistry, config: SubagentConfig, agent_type: str
+) -> list[BaseTool]:
+  configured = set(config.tools or []) | set(config.disallowed_tools)
+  missing = configured - set(registry.names)
+  if missing:
+    logger.warning("Subagent %s: unavailable tools: %s", agent_type, sorted(missing))
+  allowed = None if config.tools is None else set(config.tools)
+  denied = set(config.disallowed_tools) | {"task"}
+  selected = [
+    t
+    for t in registry.list()
+    if (allowed is None or t.name in allowed) and t.name not in denied
+  ]
+  logger.info("Subagent %s tools: %s", agent_type, [t.name for t in selected])
+  return selected
+
 
 BASH_AGENT_PROMPT = """\
 你是一个专注于工作区文件和命令行任务的子 Agent。主 Agent 会给你一项明确的委派任务，
@@ -43,16 +65,24 @@ GENERAL_AGENT_PROMPT = """\
 """
 
 
-def build_task_tool(model, tool_registry: ToolRegistry):
-  all_tools = tool_registry.list()  # ← 全部工具
+def build_task_tool(
+  model, tool_registry: ToolRegistry, *, subagents: SubagentsConfig | None = None
+):
+  config = subagents if subagents is not None else SubagentsConfig()
+  tools_by_type = {
+    "general": _select_tools(tool_registry, config.general, "general"),
+    "bash": _select_tools(tool_registry, config.bash, "bash"),
+  }
 
   def _create_subagent(agent_type: Literal["general", "bash"]):
-    if agent_type == "bash":
-      tools = [t for t in all_tools if t.name in BASH_ONLY_TOOLS]
-      prompt = BASH_AGENT_PROMPT
-    else:
-      tools = all_tools
-      prompt = GENERAL_AGENT_PROMPT
+    tools = tools_by_type[agent_type]
+    prompt = BASH_AGENT_PROMPT if agent_type == "bash" else GENERAL_AGENT_PROMPT
+    available = ", ".join(tool.name for tool in tools) or "无"
+    prompt += (
+      f"\n本次实际可用工具：{available}。\n"
+      "类型名称不代表额外权限；仅使用本次提供的工具。"
+      "没有工具时只能分析已有信息并回答；无法执行的操作应明确报告。\n"
+    )
     return create_agent(model=model, tools=tools, system_prompt=prompt)
 
   @tool
@@ -60,12 +90,12 @@ def build_task_tool(model, tool_registry: ToolRegistry):
     description: str,
     agent_type: Literal["general", "bash"] = "general",
   ) -> str:
-    """将任务委派给子 Agent 在后台异步执行。
+    """将任务委派给子 Agent，等待执行完成后返回结果。
 
     Args:
         description: 要执行的子任务描述。越具体越好。
-        agent_type: 子 Agent 类型。目前支持 "general"（全工具）和
-          "bash"（仅 shell 工具）。
+        agent_type: 子 Agent 类型。目前支持 "general"（应用配置的子工具集合）和
+          "bash"（工作区任务）；两种类型的实际能力分别由应用配置决定。
     """
     sub_agent = _create_subagent(agent_type)
     result = await sub_agent.ainvoke({"messages": [HumanMessage(content=description)]})

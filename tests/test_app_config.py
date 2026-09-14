@@ -13,6 +13,32 @@ from shikigen.app_config import (
 
 
 class AppConfigTests(unittest.TestCase):
+  def test_subagent_policies_preserve_null_empty_and_reject_typos(self):
+    from pydantic import ValidationError
+    from shikigen.app_config import AppConfig
+
+    config = AppConfig.model_validate(
+      {
+        "model": {},
+        "mcp": {},
+        "subagents": {
+          "general": {"tools": []},
+          "bash": {"tools": None, "disallowed_tools": ["write_file"]},
+        },
+      }
+    )
+    self.assertEqual(config.subagents.general.tools, [])
+    self.assertIsNone(config.subagents.bash.tools)
+    self.assertEqual(config.subagents.bash.disallowed_tools, ["write_file"])
+    for invalid in (
+      {"typo": {}},
+      {"bash": {"tool": []}},
+      {"general": {"tools": [""]}},
+      {"general": {"disallowed_tools": None}},
+    ):
+      with self.subTest(invalid=invalid), self.assertRaises(ValidationError):
+        AppConfig.model_validate({"model": {}, "mcp": {}, "subagents": invalid})
+
   def write_config(self, directory: str, content: object) -> Path:
     path = Path(directory) / "config.json"
     path.write_text(json.dumps(content), encoding="utf-8")
@@ -68,6 +94,7 @@ class AppConfigTests(unittest.TestCase):
 
     self.assertEqual(config.model.default, "deepseek-v4-flash")
     self.assertEqual(config.model.provider, "deepseek")
+    self.assertEqual(config.database.path, ".shikigen/data/shikigen.db")
 
   def test_mcp_config_uses_default_initial_max_attempts(self) -> None:
     with tempfile.TemporaryDirectory() as directory:

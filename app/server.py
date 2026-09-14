@@ -5,37 +5,27 @@ from pathlib import Path
 from fastapi import FastAPI
 from shikigen.agent import create_lead_agent
 from shikigen.app_config import load_app_config
+from shikigen.checkpoint import make_checkpointer
 from shikigen.middleware.chat_persistence_middleware import ChatPersistenceMiddleware
-from shikigen.model import create_chat_model
 from shikigen.run_manager import RunManager
 from shikigen.stream import StreamManager
-from shikigen.tools.mcp_loader import load_mcp_tools
-from shikigen.tools.tool_registry import create_builtin_registry
 
 from app.persistence.chat_store import open_chat_store
-from app.persistence.sqlite_provider import make_sqlite_checkpointer
 from app.routes import run, thread
 from app.runtime import ServerRuntime
-
-checkpoint_db_path = Path(".shikigen/data/shikigen.db")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+  app_config = load_app_config()
   async with (
-    open_chat_store(checkpoint_db_path) as chat_store,
-    make_sqlite_checkpointer(checkpoint_db_path) as checkpointer,
+    open_chat_store(Path(app_config.database.path).expanduser()) as chat_store,
+    make_checkpointer(app_config) as checkpointer,
   ):
-    app_config = load_app_config()
-    tool_registry = create_builtin_registry()
-    tool_registry.register_many(await load_mcp_tools(app_config.mcp))
     stream_manager = StreamManager()
     run_manager = RunManager(stream_manager)
-    model = create_chat_model(app_config.model)
-
-    agent = create_lead_agent(
-      model=model,
-      tool_registry=tool_registry,
+    agent = await create_lead_agent(
+      config=app_config,
       middlewares=[ChatPersistenceMiddleware(chat_store)],
       checkpointer=checkpointer,
     )

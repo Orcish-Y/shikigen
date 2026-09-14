@@ -29,20 +29,39 @@ class LifespanTests(unittest.IsolatedAsyncioTestCase):
     runtime = SimpleNamespace(shutdown=AsyncMock())
     app = FastAPI()
 
+    async def close_checkpoint(*_args):
+      runtime.shutdown.assert_awaited_once()
+
+    async def close_store(*_args):
+      checkpoint_context.__aexit__.assert_awaited_once()
+
+    checkpoint_context.__aexit__.side_effect = close_checkpoint
+    store_context.__aexit__.side_effect = close_store
+
     with (
-      patch("app.server.open_chat_store", return_value=store_context),
-      patch("app.server.make_sqlite_checkpointer", return_value=checkpoint_context),
-      patch("app.server.load_app_config"),
-      patch("app.server.load_mcp_tools", new=AsyncMock(return_value=[])),
-      patch("app.server.create_chat_model"),
-      patch("app.server.create_lead_agent"),
+      patch("app.server.open_chat_store", return_value=store_context) as open_store,
+      patch("app.server.load_app_config") as load_config,
+      patch("app.server.make_checkpointer", return_value=checkpoint_context) as make_cp,
+      patch("app.server.create_lead_agent") as create_lead_agent,
       patch("app.server.ServerRuntime", return_value=runtime),
     ):
+      load_config.return_value.database.path = "custom/chat.db"
       async with server_app.router.lifespan_context(app):
+        open_store.assert_called_once_with(Path("custom/chat.db"))
         self.assertIs(app.state.runtime, runtime)
         store_context.__aenter__.assert_awaited_once()
         checkpoint_context.__aenter__.assert_awaited_once()
         runtime.shutdown.assert_not_awaited()
+        create_lead_agent.assert_awaited_once()
+        kwargs = create_lead_agent.call_args.kwargs
+        self.assertEqual(set(kwargs), {"config", "middlewares", "checkpointer"})
+        load_config.assert_called_once_with()
+        make_cp.assert_called_once_with(load_config.return_value)
+        self.assertIs(kwargs["config"], load_config.return_value)
+        self.assertIs(
+          kwargs["checkpointer"], checkpoint_context.__aenter__.return_value
+        )
+        self.assertNotIn("tool_registry", kwargs)
 
     runtime.shutdown.assert_awaited_once()
     store_context.__aexit__.assert_awaited_once()
