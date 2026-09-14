@@ -1,5 +1,5 @@
 import asyncio
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass
 from typing import Any, Literal, TypedDict, cast, overload
 
@@ -95,6 +95,31 @@ type StreamEventVariant = (
 )
 
 
+class _Subscription:
+  """单个观察者的订阅；即使从未迭代，也能显式释放注册。"""
+
+  def __init__(
+    self,
+    iterator: AsyncGenerator[StreamEventVariant, None],
+    detach: Callable[[], None],
+  ) -> None:
+    self._iterator = iterator
+    self._detach: Callable[[], None] | None = detach
+
+  def __aiter__(self) -> "_Subscription":
+    return self
+
+  async def __anext__(self) -> StreamEventVariant:
+    return await anext(self._iterator)
+
+  async def aclose(self) -> None:
+    """由消费方在 finally 中关闭；不与进行中的 __anext__ 并发调用。"""
+    if self._detach is not None:
+      self._detach()
+      self._detach = None
+    await self._iterator.aclose()
+
+
 class Stream:
   """单个 run 的事件流。生产者 publish，消费者 subscribe 迭代。"""
 
@@ -133,8 +158,8 @@ class Stream:
       subscriber.put_nowait(variant)
     self._next_id += 1
 
-  def subscribe(self) -> AsyncGenerator[StreamEventVariant, None]:
-    """订阅完整事件流；每个消费者独立接收全部事件。"""
+  def subscribe(self) -> _Subscription:
+    """同步注册并重放完整事件流；提前退出时由消费方调用 aclose。"""
 
     queue: asyncio.Queue[StreamEventVariant | None] = asyncio.Queue()
     for event in self._events:
@@ -156,7 +181,7 @@ class Stream:
       finally:
         self._subscribers.discard(queue)
 
-    return generator()
+    return _Subscription(generator(), lambda: self._subscribers.discard(queue))
 
   def close(self) -> None:
     """标记结束，唤醒所有等待的消费者。"""
