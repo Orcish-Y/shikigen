@@ -1,0 +1,76 @@
+"""HTTP 与普通 Python 入口共享的资源装配。"""
+
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Any
+
+from langgraph.checkpoint.base import BaseCheckpointSaver
+from shikigen.agent import create_lead_agent
+from shikigen.app_config import AppConfig, load_app_config
+from shikigen.checkpoint import make_checkpointer
+from shikigen.execution import ExecutionRegistry
+from shikigen.middleware.chat_persistence_middleware import ChatPersistenceMiddleware
+
+from app.lifecycle import ApplicationLifecycle
+from app.persistence.chat_store import ChatStore, open_chat_store
+from app.runtime import Runtime
+from app.services.run import RunService
+from app.services.thread import ThreadService
+
+
+def assemble_runtime(
+  *,
+  config: AppConfig,
+  agent: Any,
+  chat_store: ChatStore,
+  checkpointer: BaseCheckpointSaver | None = None,
+) -> Runtime:
+  """将调用者提供的依赖组装为 Runtime；调用者负责关闭生命周期与存储。"""
+  executions = ExecutionRegistry()
+  lifecycle = ApplicationLifecycle(executions)
+  return Runtime(
+    config=config,
+    agent=agent,
+    checkpointer=checkpointer,
+    chat_store=chat_store,
+    executions=executions,
+    lifecycle=lifecycle,
+    threads=ThreadService(store=chat_store, lifecycle=lifecycle),
+    runs=RunService(
+      agent=agent,
+      store=chat_store,
+      executions=executions,
+      lifecycle=lifecycle,
+    ),
+  )
+
+
+@asynccontextmanager
+async def open_runtime(
+  config: AppConfig | None = None,
+  *,
+  agent_factory: Callable[..., Awaitable[Any]] | None = None,
+) -> AsyncIterator[Runtime]:
+  """注入的工厂接收 config、middlewares 和 checkpointer，与默认工厂一致。"""
+  app_config = config if config is not None else load_app_config()
+  factory = agent_factory if agent_factory is not None else create_lead_agent
+  async with (
+    open_chat_store(Path(app_config.database.path).expanduser()) as store,
+    make_checkpointer(app_config) as checkpointer,
+  ):
+    agent = await factory(
+      config=app_config,
+      middlewares=[ChatPersistenceMiddleware(store, persist_entry=False)],
+      checkpointer=checkpointer,
+    )
+    runtime = assemble_runtime(
+      config=app_config,
+      agent=agent,
+      chat_store=store,
+      checkpointer=checkpointer,
+    )
+    try:
+      yield runtime
+    finally:
+      await runtime.lifecycle.shutdown()

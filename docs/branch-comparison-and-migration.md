@@ -2,6 +2,20 @@
 
 记录日期：2026-09-11。本文只记录分析和迁移建议，不代表已经迁移，也不新增工作区协作约定。
 
+2026-09-14 补充迁移目标：不启动 FastAPI，也能通过同一套 Run 运行模块执行 Agent，并完成持久化、查询与资源回收。该目标纳入本次迁移的完成条件，详见第 3.15 节和 [实施清单](migration-checklist.md)；下文原始比较与测试记录仍对应首次调查时点。
+
+2026-09-15 实现更新：实施清单第 3 步已完成。共享应用服务与 `open_runtime()`
+已接通 HTTP 和普通 Python 入口；真实创建／结算事务先提交再发布，`wait_run()`
+覆盖执行与持久化收尾，支持暂停状态与 checkpoint 事实保存。已通过阻断 HTTP 导入的
+独立进程真实存储验证。第 4 步的 schema 约束、旧数据迁移和严格事件契约尚未完成；
+审批决策、同 Run resume 与启动恢复仍属于后续阶段。下文比较表保留原调查时点，
+当前完成范围以 [第 3 步验收记录](migration-checklist.md#六第-3-步拆分产品-run-与本地执行资源) 为准。
+
+同日职责调整：`app/runtime.py` 只保留 `Runtime` 配置／依赖容器；
+Thread 操作位于 `app/services/thread.py`，Run 操作位于 `app/services/run.py`，
+后台操作的接收与关闭位于 `app/lifecycle.py`。HTTP 和普通 Python 入口通过
+`runtime.threads`、`runtime.runs` 访问服务，装配与存储释放仍由 `composition.py` 负责。
+
 ## 1. 比较范围与结论
 
 | 简称 | 工作目录 | 当前分支 | HEAD |
@@ -89,7 +103,7 @@
 
 **接口：**copy 的 `ActiveRunHandle`、`ActiveRunRegistry`、`start_product_run()`、`resume_product_run()`，以及持久化的 `RunPersistence`。Invocation 是调用动作，不需要再生成一个公开领域 ID。
 
-建议落点：产品生命周期和编排放在当前 `app/`，通用执行和事件广播仍放在 `shikigen`。不要把 FastAPI、产品数据库对象或 HTTP 状态码放进通用 Loop。
+建议落点：产品生命周期和编排可以放在当前 `app/` 的独立运行模块，供 HTTP 和无 HTTP 入口共同调用；通用执行和事件广播仍放在 `shikigen`。运行模块不依赖 FastAPI、Request、app.state 或 HTTP 响应生成器，通用 Loop 不依赖具体产品数据库。`app/` 是包位置，不代表模块必须经 HTTP 才能使用。
 
 **验收：**暂停后仍可查询同一个 Run；resume 沿用 run_id；断开观察连接不会改变 Run 状态；本地任务回收后，已结束 Run 仍可读取。
 
@@ -298,6 +312,36 @@ copy 的默认值不随启动目录变化，但安装成包后会指向源码安
 
 来源：[当前配置](../packages/harness/shikigen/app_config.py:9)、[copy 配置](../../shikigen-agent-copy/harness/app_config.py:9)、[当前文件工具](../packages/harness/shikigen/tools/filesystem.py:7)、[copy 文件工具](../../shikigen-agent-copy/tools/filesystem.py:7)。
 
+### 3.15 不启动 FastAPI 也能运行完整的 Run 流程
+
+**做什么：**提供协议无关的 Run 运行模块与资源装配入口；HTTP gateway 和普通 Python 入口调用同一实现。独立入口应能创建 Thread、启动 Run、观察事件、等待执行及持久化收尾、读取历史，并在后续阶段获得取消、审批恢复和启动恢复能力。
+
+**为什么：**仅能直接调用 Agent graph，不能证明产品 Run 的创建、存储、收尾与恢复已独立。CLI、定时任务等调用方不应复制 route 中的事务顺序、后台 Task 创建或终态发布逻辑。
+
+**接口：**用 `open_runtime(config=...)` 异步上下文管理器统一创建存储、checkpointer、Agent 和执行注册表，返回 `Runtime` 配置／依赖容器；通过 `runtime.threads.create_thread()`、`runtime.runs.start_run()`、`runtime.runs.wait_run()`、`runtime.runs.read_run()` 等服务接口操作业务，事件观察沿用执行句柄的订阅接口，后续在 RunService 加入 `cancel_run()`、`resume_run()`。等待接口须覆盖执行与持久化收尾，不能只等模型输出结束；暂停时结束本次执行的等待并返回 interrupted，不能等待尚未提交的人工响应。存储失败显式报告，不从流 EOF 推断完成。
+
+职责分工：
+
+- HTTP 层负责请求校验、鉴权、应用错误映射与 JSONL 编码，调用运行模块；`lifespan` 进入和退出共享装配上下文。
+- 独立运行模块负责 Run 创建、执行协调、持久化结算、事件交付与资源回收，不导入 FastAPI、路由或 `app.server`。
+- Agent 核心继续负责模型、工具、middleware 与 checkpoint 的执行语义；存储实现通过接口注入，不把产品生命周期全部塞进 Agent 工厂。
+- 普通 Python 入口保持异步上下文存活，直到所需执行及收尾完成；离开上下文时先停止并回收执行，再关闭存储。无 HTTP 不代表进程退出后协程仍能继续。
+
+**迁移落点：**实施清单第 3 步确定共享运行接口，第 4 步接入真实事务存储、共享装配与最小 Python 入口，同时切换 HTTP；第 6—8 步将重建、审批／取消和启动恢复接入同一运行模块。这是本次迁移范围，不列为未来独立优化项。
+
+2026-09-15：上述基础独立运行链路已实现。`app/run_execution.py` 中的
+`start_run_execution()` 由 `RunService.start_run()` 在创建事务提交后调用；
+`open_runtime()` 统一装配，HTTP 与 `python -m app.run` 复用同一实现。
+`wait_run(execution)` 返回已提交状态，暂停时返回 interrupted；仅持有 ID 时使用
+`read_run(thread_id, run_id)`。这次推进同时完成第 4 步的最小存储接入，
+不代表 schema 迁移、统一事件契约、重建、审批恢复或启动恢复已完成。
+
+**验收：**在独立 Python 进程中阻断 `fastapi`、`app.server` 和 HTTP routes 导入，不启动 ASGI server、不使用 TestClient，使用确定性 Graph 与真实临时存储完成 Thread → Run → 工具调用 → 已提交终态 → 历史查询；关闭并重新打开 runtime 后仍可读取结果。HTTP 必须调用同一运行模块。后续各阶段还需直接验证订阅退出、取消、同 Run 审批恢复和启动恢复；只测试 harness import 或直接 `agent.ainvoke()` 不算完成。
+
+该目标是同进程内的模块解耦；第一版仍采用单进程执行归属，不要求另建常驻 worker 或实现崩溃自动续跑。
+
+依据：[持久化职责调查](agent-persistence-ownership-research.md)、[Run 与持久化边界对照](agent-runtime-boundary-comparison.md)。
+
 ## 4. 需要修的地方：迁移前不能忽略的缺口
 
 ### 4.1 copy 跨 Run 的旧历史可能被重复归入新 Run
@@ -372,6 +416,7 @@ copy `RunPersistence.open()` 严格比较 schema，遇到旧格式直接拒绝�
 | P0 | 完整终态先落库再发布 | 避免已展示完成、数据库仍 running | 模拟存储失败，不推送成功 |
 | P1 | 显式 Checkpointer 与子 Agent 工具集合 | 小接口改动，练习依赖注入与能力组合 | 无存储可运行，子集合不修改父集合 |
 | P1 | Run 状态与进程内 handle 分离 | 为暂停、多次恢复提供稳定任务身份 | 清理 handle 不删除持久任务 |
+| P1 | 共享 Run 运行模块与无 HTTP 入口 | 在第 3、4 步完成核心独立运行，后续能力沿用同一入口 | 阻断 FastAPI 导入，仍能运行、提交终态并重开存储查询；HTTP 复用同一模块 |
 | P1 | 原子业务操作、数据库排他、冲突检测 | 将一致性责任集中到存储接口 | 重复消息幂等，冲突可见，busy 返回 409 |
 | P1 | 统一消息身份和转换 | 为实时与历史共用模型打基础 | 连续两个 Run 不复制旧历史 |
 | P2 | 预留 seq、完整重建与 live 拼接 | 解决真实重连需求 | 刷新不重启 Graph，不重不漏 |
@@ -391,7 +436,7 @@ copy 最有价值的测试不是数量，而是围绕可观察场景定义正确
 3. **观察连接独立。**断线后 Graph 继续执行；重新读取接上实时输出；一位观察者退出不影响其他人。
 4. **崩溃窗口。**事务未提交、审批已接受但尚未恢复、恢复已经开始三个阶段退出进程，分别验证持久状态。
 5. **生产者与消费者共用 fixture。**同一事件样本经 Python 契约验证和客户端投影，不只检查字段类型。
-6. **模块独立性。**阻断 server import 后 harness 仍可导入；当前项目还应保留已安装包在仓库外可导入的测试。
+6. **模块独立性与完整运行。**保留已安装 harness 在仓库外可导入的测试；另在阻断 FastAPI、server 和 routes 导入的独立进程中，直接通过共享 runtime 完成真实临时存储上的 Run 生命周期。后续取消、审批恢复和启动恢复同样直接调用 runtime 验证；HTTP 测试验证请求与编码适配，不成为执行测试的必经入口。
 
 迁移时应另外补上：同 Thread 跨 Run 历史归属、已有 Run busy 的 HTTP 错误映射、取消后其他订阅者如何获知终态、usage 与完成通知的时序。这些不能从测试文件数量推断已覆盖。
 

@@ -2,6 +2,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from langchain_core.messages import HumanMessage
+from shikigen.execution import ExecutionOutcome, ExecutionReason
+
 from app.persistence import ChatStore
 
 
@@ -15,17 +18,23 @@ class ChatStoreTests(unittest.IsolatedAsyncioTestCase):
     await self.store.close()
     self.temp_dir.cleanup()
 
+  async def create_run(self, run_id: str, content: str = "hello") -> None:
+    await self.store.create_run(
+      run_id=run_id,
+      thread_id="thread-1",
+      entry_message=HumanMessage(id=f"entry-{run_id}", content=content),
+    )
+
   async def test_lists_messages_for_exact_thread_and_run_in_thread_order(self) -> None:
     await self.store.create_thread("thread-1")
-    await self.store.create_run("run-1", "thread-1")
-    await self.store.create_run("run-2", "thread-1")
+    await self.create_run("run-1")
 
     first_seq = await self.store.append_event(
       thread_id="thread-1",
       run_id="run-1",
-      event_type="human_message",
+      event_type="ai_message",
       category="message",
-      content={"type": "human", "content": "hello"},
+      content={"type": "ai", "content": "thinking"},
     )
     second_seq = await self.store.append_event(
       thread_id="thread-1",
@@ -34,35 +43,42 @@ class ChatStoreTests(unittest.IsolatedAsyncioTestCase):
       category="trace",
       content={"node": "model"},
     )
-    third_seq = await self.store.append_event(
-      thread_id="thread-1",
-      run_id="run-2",
-      event_type="human_message",
-      category="message",
-      content={"type": "human", "content": "another run"},
-    )
-    fourth_seq = await self.store.append_event(
+    answer_seq = await self.store.append_event(
       thread_id="thread-1",
       run_id="run-1",
       event_type="ai_message",
       category="message",
       content={"type": "ai", "content": "hi"},
     )
+    await self.store.settle_execution(
+      thread_id="thread-1",
+      run_id="run-1",
+      outcome=ExecutionOutcome(ExecutionReason.COMPLETED),
+    )
+    await self.create_run("run-2", "another run")
+    other_seq = await self.store.append_event(
+      thread_id="thread-1",
+      run_id="run-2",
+      event_type="ai_message",
+      category="message",
+      content={"type": "ai", "content": "other answer"},
+    )
 
     messages = await self.store.list_messages_by_run("thread-1", "run-1")
 
-    self.assertEqual((first_seq, second_seq, third_seq, fourth_seq), (1, 2, 3, 4))
+    # running、入口消息、trace、终态都占用 Thread 序号；消息过滤后允许空洞。
+    self.assertEqual((first_seq, second_seq, answer_seq, other_seq), (3, 4, 5, 9))
     assert messages is not None
-    self.assertEqual([message["seq"] for message in messages], [1, 4])
+    self.assertEqual([message["seq"] for message in messages], [2, 3, 5])
     self.assertEqual(
       [message["content"]["content"] for message in messages],
-      ["hello", "hi"],
+      ["hello", "thinking", "hi"],
     )
 
   async def test_returns_none_when_run_does_not_belong_to_thread(self) -> None:
     await self.store.create_thread("thread-1")
     await self.store.create_thread("thread-2")
-    await self.store.create_run("run-1", "thread-1")
+    await self.create_run("run-1")
 
     messages = await self.store.list_messages_by_run("thread-2", "run-1")
 
@@ -70,23 +86,23 @@ class ChatStoreTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_event_key_makes_message_writes_idempotent(self) -> None:
     await self.store.create_thread("thread-1")
-    await self.store.create_run("run-1", "thread-1")
+    await self.create_run("run-1")
 
     first_seq = await self.store.append_event(
       thread_id="thread-1",
       run_id="run-1",
       event_type="human_message",
       category="message",
-      event_key="human:message-1",
-      content={"type": "human", "content": "hello"},
+      event_key="human:entry-run-1",
+      content={"type": "human", "content": "hello", "message_id": "entry-run-1"},
     )
     repeated_seq = await self.store.append_event(
       thread_id="thread-1",
       run_id="run-1",
       event_type="human_message",
       category="message",
-      event_key="human:message-1",
-      content={"type": "human", "content": "hello"},
+      event_key="human:entry-run-1",
+      content={"type": "human", "content": "hello", "message_id": "entry-run-1"},
     )
 
     messages = await self.store.list_messages_by_run("thread-1", "run-1")
@@ -97,10 +113,12 @@ class ChatStoreTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_finishing_run_updates_status_and_thread_order(self) -> None:
     await self.store.create_thread("thread-1")
-    await self.store.create_run("run-1", "thread-1")
-
-    await self.store.start_run("run-1", "thread-1")
-    await self.store.finish_run("run-1", "thread-1", "completed")
+    await self.create_run("run-1")
+    await self.store.settle_execution(
+      thread_id="thread-1",
+      run_id="run-1",
+      outcome=ExecutionOutcome(ExecutionReason.COMPLETED),
+    )
 
     row = await self.store.get_run("run-1", "thread-1")
     assert row is not None

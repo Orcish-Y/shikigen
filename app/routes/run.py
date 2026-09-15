@@ -1,20 +1,15 @@
-import asyncio
 import json
-import uuid
 from collections.abc import AsyncGenerator, AsyncIterator
 
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import StreamingResponse
-from langchain.messages import HumanMessage
 from pydantic import BaseModel, Field
-from shikigen.callback_handler.token_tracker import TokenTracker
-from shikigen.loop import run_agent_loop
-from shikigen.run_manager import RunManager, RunRecord, RunStatus
+from shikigen.execution import RunExecution
 from shikigen.stream import StreamEventVariant
-from shikigen.utils.text_safety import replace_surrogates
 
-from app.runtime import ServerRuntime
+from app.run_state import RunNotFound, ThreadBusy, ThreadNotFound
+from app.runtime import Runtime
 
 router = APIRouter(prefix="/api/threads/{thread_id}")
 
@@ -31,10 +26,11 @@ async def get_run_messages(
   run_id: str,
   request: Request,
 ) -> dict[str, object]:
-  runtime: ServerRuntime = request.app.state.runtime
-  messages = await runtime.chat_store.list_messages_by_run(thread_id, run_id)
-  if messages is None:
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+  runtime: Runtime = request.app.state.runtime
+  try:
+    messages = await runtime.runs.list_run_messages(thread_id, run_id)
+  except RunNotFound as error:
+    raise HTTPException(status_code=404, detail=str(error)) from error
   return {"data": messages}
 
 
@@ -49,17 +45,15 @@ class ChatRequest(BaseModel):
 
 
 async def stream_run_events(
-  record: RunRecord,
-  run_manager: RunManager,
+  execution: RunExecution,
 ) -> AsyncGenerator[str, None]:
   encoder = RunJsonlEncoder()
-  subscription = record.stream.subscribe()
+  subscription = execution.stream.subscribe()
   try:
     async for event in subscription:
       yield encoder.encode(event)
   finally:
     await subscription.aclose()
-    run_manager.detach(record.run_id)
 
 
 class RunJsonlEncoder:
@@ -94,9 +88,7 @@ class RunJsonlEncoder:
     elif event.event == "error":
       event_name = "run.error"
     elif event.event == "status":
-      event_name = (
-        "run.completed" if event.data["status"] == "completed" else "run.cancelled"
-      )
+      event_name = f"run.{event.data['status']}"
 
     return _format_jsonl(
       event.id,
@@ -144,50 +136,6 @@ def _jsonl_response(content: AsyncIterator[str]) -> StreamingResponse:
   )
 
 
-async def run_and_persist_status(
-  runtime: ServerRuntime,
-  record: RunRecord,
-  message: HumanMessage,
-  tracker: TokenTracker,
-) -> None:
-  try:
-    await run_agent_loop(
-      runtime.agent,
-      new_message=message,
-      record=record,
-      token_tracker=tracker,
-    )
-  except asyncio.CancelledError:
-    await runtime.chat_store.finish_run(
-      record.run_id,
-      record.thread_id,
-      RunStatus.CANCELLED,
-    )
-    raise
-  except Exception as error:
-    await runtime.chat_store.append_event(
-      thread_id=record.thread_id,
-      run_id=record.run_id,
-      event_type="run_error",
-      category="error",
-      content={"message": str(error)},
-      event_key=f"run_error:{record.run_id}",
-    )
-    await runtime.chat_store.finish_run(
-      record.run_id,
-      record.thread_id,
-      RunStatus.ERROR,
-      error=str(error),
-    )
-    raise
-  else:
-    await runtime.chat_store.finish_run(
-      record.run_id,
-      record.thread_id,
-      record.status,
-    )
-
-
 @router.post(
   "/stream",
   summary="流式发送消息",
@@ -200,39 +148,14 @@ async def stream_chat(
   body: ChatRequest,
   request: Request,
 ) -> StreamingResponse:
-  runtime: ServerRuntime = request.app.state.runtime
-  if not await runtime.chat_store.thread_exists(thread_id):
-    raise HTTPException(
-      status_code=status.HTTP_404_NOT_FOUND,
-      detail="Thread not found",
-    )
-
+  runtime: Runtime = request.app.state.runtime
   try:
-    record = runtime.run_manager.create(thread_id=thread_id)
-  except RuntimeError as error:
+    execution = await runtime.runs.start_run(thread_id, body.message)
+  except ThreadNotFound as error:
+    raise HTTPException(status_code=404, detail=str(error)) from error
+  except ThreadBusy as error:
     raise HTTPException(
       status_code=status.HTTP_409_CONFLICT,
       detail="Thread is busy with another run",
     ) from error
-  try:
-    await runtime.chat_store.create_run(record.run_id, thread_id)
-    await runtime.chat_store.start_run(record.run_id, thread_id)
-  except BaseException:
-    runtime.run_manager.remove(record.run_id)
-    raise
-  tracker = TokenTracker()
-  agent_task = asyncio.create_task(
-    run_and_persist_status(
-      runtime,
-      record,
-      HumanMessage(
-        id=uuid.uuid4().hex,
-        content=replace_surrogates(body.message),
-      ),
-      tracker,
-    )
-  )
-
-  record.task = agent_task
-
-  return _jsonl_response(stream_run_events(record, runtime.run_manager))
+  return _jsonl_response(stream_run_events(execution))

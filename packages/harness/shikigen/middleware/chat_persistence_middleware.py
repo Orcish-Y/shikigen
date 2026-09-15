@@ -59,8 +59,9 @@ def _tool_messages(result: ToolMessage | Command[Any]) -> list[ToolMessage]:
 class ChatPersistenceMiddleware(AgentMiddleware[AgentState, AgentRunContext]):
   """将 Agent 的完整消息投影到面向产品查询的 run journal。"""
 
-  def __init__(self, journal: MessageJournal):
+  def __init__(self, journal: MessageJournal, *, persist_entry: bool = True):
     self._journal = journal
+    self._persist_entry = persist_entry
 
   @override
   async def abefore_agent(
@@ -68,6 +69,8 @@ class ChatPersistenceMiddleware(AgentMiddleware[AgentState, AgentRunContext]):
     state: AgentState,
     runtime: Runtime[AgentRunContext],
   ) -> None:
+    if not self._persist_entry:
+      return
     messages = state.get("messages") or []
     # state 可能包含 checkpoint 恢复出的完整历史，这里只写本轮入口消息。
     if not messages or not isinstance(messages[-1], HumanMessage):

@@ -2,16 +2,20 @@
 
 日期：2026-09-11。
 
+2026-09-14 补充：将“不启动 FastAPI 也能运行完整 Run 流程”纳入本次迁移，在第 3、4 步完成基础入口，第 6—8 步同步覆盖后续能力。新增任务保持待完成，不代表现有编排骨架已经实现该目标。
+
 本文把 [两个工作目录的差异分析](branch-comparison-and-migration.md) 展开为可以逐项实现、验收的工作清单。这里列的是建议方案和待完成任务，不代表代码已经修改，也不新增工作区协作约定。
 
-目标：保留当前可安装的 `shikigen-harness` 包，逐步吸收 copy 项目在持久 Run、事件一致性、重连、审批和恢复方面的设计。代码由你实现，这份清单用于确定任务、解释接口和后续 review。
+目标：保留当前可安装的 `shikigen-harness` 包，逐步吸收 copy 项目在持久 Run、事件一致性、重连、审批和恢复方面的设计；同一套运行模块必须支持 HTTP 和无 HTTP 的 Python 入口，包含执行、持久化及资源生命周期。代码由你实现，这份清单用于确定任务、解释接口和后续 review。
+
+任务完成后要修改本文案，记录结果以及勾选相关选项
 
 ## 一、先理解迁移后的职责分工
 
 用户的一次任务可以跨越多次 Graph 调用。网络连接可能断开，Graph 调用可能因为审批而结束，但用户任务仍然存在。因此，需要分别回答三个问题：
 
 1. **任务现在是什么状态？**由持久化产品 Run 回答。
-2. **当前进程正在执行什么？**由本地执行 handle 回答。
+2. **当前进程正在执行什么？**由本地执行对象 `RunExecution` 回答。
 3. **观察者看到了什么？**由历史读取与实时订阅回答。
 
 它们通过 Run 身份关联，不应共享同一个“是否结束”变量。
@@ -19,12 +23,19 @@
 | 位置 | 应承担的职责 | 调用方需要知道的接口 |
 | --- | --- | --- |
 | `packages/harness/shikigen/` | 创建 Agent、执行一次 Graph 调用、广播事件、提供工具与 middleware | Agent 工厂、执行入口、订阅与取消接口 |
-| `app/` 的产品编排模块 | 将用户请求变成 Run 操作，保留本地执行资源，连接执行与持久化 | 创建、执行、取消、恢复一个 Run |
+| `app/` 的独立 Run 运行模块 | 接受不同入口的 Run 操作，保留本地执行资源，连接执行与持久化 | 创建、执行、等待、查询、观察、取消、恢复一个 Run |
+| `app/runtime.py` | 保存运行配置与已装配依赖的引用，不实现业务方法 | `Runtime` 数据容器，包含 config、存储、执行资源与服务引用 |
+| `app/services/` | Thread 创建与查询、产品 Run 的业务编排 | `runtime.threads` 与 `runtime.runs` 中的业务接口 |
+| `app/lifecycle.py` | 保留已接收的后台操作，协调停止接收与资源回收 | `ApplicationLifecycle.accept()`、`shutdown()` |
+| 协议无关的装配模块 | 打开存储与 checkpointer、创建 Agent 和运行对象，统一启动与关闭 | `open_runtime(config=...)` 异步上下文管理器（建议名称） |
 | `app/persistence/` | 产品状态转换、完整消息和事件写入、历史查询 | 语义明确的原子操作 |
 | 应用层事件适配模块 | 将框架消息、checkpoint 转成产品需要的数据 | 转换完整消息、增量与暂停状态 |
-| HTTP 路由和编码模块 | 校验请求、映射错误、编码 JSONL | 请求模型、读取结果、流响应 |
+| HTTP 路由和编码模块 | 校验请求、鉴权、映射错误、编码 JSONL，调用共享运行模块 | 请求模型、读取结果、流响应 |
+| 无 HTTP 的 Python 入口 | 进入共享装配上下文，发起 Run 并等待所需执行与收尾 | 与 HTTP 相同的运行接口，不复制事务或 Task 编排 |
 
 应用负责存储和产品生命周期；通用 harness 不导入 `app`、FastAPI 或具体产品数据库。新的模块文件名可以自行决定，下面出现的新增接口名是设计建议，不要求与 copy 一字不差。
+
+独立运行、装配、存储和内部事件模块也不导入 FastAPI、`app.server` 或 routes，不接收 Request、app.state 或 StreamingResponse。HTTP lifespan 只进入和退出共享装配上下文；普通 Python 调用方直接管理同一上下文。模块可以先留在 `app/`，无需为了脱离 HTTP 全部移入 `agent.py`。本目标保持单进程执行归属，进程退出后的自动续跑仍是后续议题。
 
 ## 二、总顺序与里程碑
 
@@ -33,14 +44,14 @@
 | 准备 | 固定基线与明确兼容范围 | 无 | 知道哪些行为必须保留，哪些测试尚未可靠运行 |
 | 1 | 订阅正确释放 | 准备 | 消费者退出后不残留队列 |
 | 2 | 工厂依赖与子 Agent 工具集合 | 准备 | 可复用的存储和能力配置 |
-| 3 | 产品 Run 与本地执行资源拆分 | 1 | 暂停与执行资源可以有不同生命周期 |
-| 4 | 原子持久化与提交后发布 | 3；与 3 同批完成应用切换 | 持久状态与可恢复事件一致 |
+| 3 | 产品 Run 与本地执行资源拆分、共享运行接口 | 1 | 不依赖 HTTP 的生命周期编排骨架 |
+| 4 | 原子持久化、提交后发布与独立运行入口 | 2、3；与 3 同批完成应用切换 | HTTP 与无 HTTP 入口共享可持久运行的实现 |
 | 5 | 消息身份、归属与严格契约 | 4 | 实时和历史能准确指向同一条消息 |
 | 6 | 完整重建与实时跟随 | 1、4、5 | 刷新和重连不会重复执行任务 |
 | 7 | 审批、取消、使用量与同 Run 恢复 | 3—6 | 一个用户任务跨多次执行继续推进 |
 | 8 | 启动恢复与崩溃场景验证 | 4、6、7 | 重启后留下的状态有明确处理结果 |
 
-**推荐完成节奏：**准备 → 1 → 2A → 2B → 3 → 4A → 4B → 4C → 5A → 5B → 6A → 6B → 7A → 7B → 7C → 7D → 8。
+**推荐完成节奏：**准备 → 1 → 2A → 2B → 3 → 4A → 4B → 4C → 4D → 5A → 5B → 6A → 6B → 7A → 7B → 7C → 7D → 8。
 
 第 3 步可以先设计和实现新接口，但应用入口的最终切换应与第 4 步一起完成。过渡期每个 Run 只能走一条执行与持久化路径，不能同时让旧 RunRecord 和新存储各自决定产品状态。
 
@@ -54,6 +65,7 @@
 
 - [ ] 列出必须保留的行为：普通问答、工具调用、Goal 续跑、子 Agent 调用、断连后继续执行、历史消息查询。
 - [ ] 记录当前 HTTP 路由和 JSONL 事件字段；将需要改变的字段列为明确的协议变化。
+- [ ] 将不启动 FastAPI 的完整 Run 流程列为迁移新增验收目标；准备确定性 Graph、真实临时存储与独立 Python 进程验证方式。
 - [ ] 以现有测试确认 Loop、Stream、RunManager、包导入行为。
 - [ ] 查明上一轮 `tests.test_run_persistence` 首个用例超时的原因，再将它作为迁移参考。超时不是通过，也不能直接断言是业务代码错误。
 - [ ] 数据迁移先面向临时数据库或实际数据库副本验证；此阶段不直接改写正在使用的数据库。
@@ -65,22 +77,34 @@
 
 ## 四、第 1 步：让订阅有可靠的释放接口
 
+### 2026-09-15 验收记录：已完成
+
+已对照当前工作区实现与测试验收。`_Subscription.aclose()` 直接解绑队列，
+无需先启动异步生成器；同步注册、事件顺序和缓存重放保持不变。
+[Stream 生命周期测试](../tests/test_stream.py) 的 9 项测试全部通过，
+覆盖下表全部场景，以及等待事件／处理事件期间取消、Stream 关闭唤醒。
+[HTTP 消费方](../app/routes/run.py) 已在 `finally` 中关闭自己的订阅。
+
+使用边界：提前 break 或处理事件期间取消时，消费方仍需在 `finally` 中
+`await subscription.aclose()`；该接口不支持与同一订阅进行中的 `anext()` 并发关闭。
+本次完成的是订阅释放，不代表后续产品 Run 生命周期迁移已经完成。
+
 ### 模块位置与目标
 
 放在 `shikigen.stream`。Stream 管缓存与广播，订阅对象管理一个观察者自己的资源。
 
-当前 `subscribe()` 同步注册队列，清理却放在异步生成器的 finally 中。若从未迭代就关闭生成器，该 finally 不会执行。本步骤解决这个具体生命周期缺口。
+改动前 `subscribe()` 同步注册队列，清理却放在异步生成器的 finally 中。若从未迭代就关闭生成器，该 finally 不会执行。本步骤解决这个具体生命周期缺口。
 
 ### 接口与实现任务
 
 借鉴 copy 的 `_Subscription`，让返回对象支持异步迭代和 `aclose()`。
 
-- [ ] 保留同步注册订阅的语义：调用 subscribe 后，接下来发布的事件必须能被该订阅收到。
-- [ ] 将“解绑队列”变成无需启动迭代也能执行的操作。
-- [ ] 让 `aclose()` 可重复调用。
-- [ ] 正常迭代结束、消费任务取消、手动关闭都释放同一个订阅。
-- [ ] Stream 关闭时唤醒已有观察者；关闭一个观察者不关闭整个 Stream。
-- [ ] 适配现有消费方，保持消息顺序和历史缓存重放行为。
+- [x] 保留同步注册订阅的语义：调用 subscribe 后，接下来发布的事件必须能被该订阅收到。
+- [x] 将“解绑队列”变成无需启动迭代也能执行的操作。
+- [x] 让 `aclose()` 可重复调用。
+- [x] 正常迭代结束、消费任务取消、手动关闭都释放同一个订阅。
+- [x] Stream 关闭时唤醒已有观察者；关闭一个观察者不关闭整个 Stream。
+- [x] 适配现有消费方，保持消息顺序和历史缓存重放行为。
 
 暂时可以保持现有 StreamEvent 类型，不必同时把整个 Stream 改成泛型事件系统。
 
@@ -100,6 +124,41 @@
 
 ## 五、第 2 步：明确工厂的依赖和子 Agent 能力
 
+### 2026-09-15 验收记录：2A、2B 已完成
+
+- **2A：**工厂直接传递调用者的 saver，缺省和显式 `None` 均不创建默认存储。
+  已检查工厂调用方；当前生产入口为 [HTTP lifespan](../app/server.py)，
+  显式传入 `make_checkpointer(config)` 产出的 saver，当前配置使用 SQLite。
+  测试中需要 JSON 的调用显式构造 `JsonCheckpointer`，验证对象身份及重开后恢复；
+  不启用 checkpoint 时无需 thread_id 即可完成普通调用。
+  SQLite 测试验证正常退出、调用者异常和 setup 失败时关闭连接，
+  服务测试验证先 shutdown 执行资源、再退出存储上下文；包的目录外导入测试通过。
+- **2B：**`task_tool_registry` 缺省／None 沿用主集合，显式空集合保持为空；
+  `excluding()` 返回独立容器并保留工具顺序、实例身份，不修改父集合。
+  实际委派测试覆盖两种 agent_type 和缺省、None、过滤、空集合四种参数模式。
+  应用通过 `config.subagents` 的白名单／排除项决定策略，通用 task 仅另行禁止递归 task。
+  当前 `config.json` 的 bash 类型仅有读工具；提示词会列出实际工具并说明受限能力，
+  不把类型名视为执行权限。
+
+**能力边界：**过滤后的容器仍共享工具实例和文件系统，不提供资源隔离，
+子 Agent 也不会自动继承主 Agent 的审批 middleware。
+当前 general 的 `tools: null` 配合 `disallowed_tools: [write_file, bash]`
+只排除这两个名称；新增 MCP 工具若未被排除仍可进入 general，
+不能据此认定其已接受审批或副作用限制。应用可用显式白名单进一步限定能力。
+
+**本次验证：**以下命令共通过 81 项测试（包括第 1 步的 9 项），
+另有执行资源／编排兼容测试 8 项通过；未调用真实模型或外部 MCP 服务。
+
+```bash
+.venv/bin/python -m unittest tests.test_stream tests.test_agent_factory tests.test_task_tool tests.test_tool_registry tests.test_package_imports tests.test_server tests.test_sqlite_checkpointer tests.test_json_checkpointer tests.test_app_config tests.test_loop tests.test_run_manager
+.venv/bin/python -m unittest discover -s tests -p test_execution.py
+```
+
+首次将 `tests.test_execution` 加入模块式命令时，因该测试使用 `from test_loop import ...`
+而发生导入错误；改用上述 discover 入口后 8 项通过。这是测试入口差异，未修改测试实现。
+上述结果只作为本次第 1、2 步及相关兼容行为的验收依据，不替代准备阶段、
+第 3 步完整验收或后续真实数据库迁移验证。
+
 ### 2A：Checkpointer 由调用者决定
 
 **做什么：**让 `create_lead_agent(checkpointer=None)` 表示不启用持久化。
@@ -108,11 +167,11 @@
 
 **接口：**`create_lead_agent(checkpointer=...)`；现有 `BaseCheckpointSaver` 参数继续沿用。
 
-- [ ] 找出工厂全部调用方，确认哪些依赖隐式 JSON 持久化。
-- [ ] 工厂直接使用传入的 saver，不隐式创建文件存储。
-- [ ] 需要 JSON 的调用者显式创建并传入；HTTP 服务继续显式传入 SQLite。
-- [ ] 保留现有 JSON saver 的可用性，避免把修改默认值扩大成删除实现。
-- [ ] 验证未启用 checkpoint 时普通 Agent 调用仍正常工作。
+- [x] 找出工厂全部调用方，确认哪些依赖隐式 JSON 持久化。
+- [x] 工厂直接使用传入的 saver，不隐式创建文件存储。
+- [x] 需要 JSON 的调用者显式创建并传入；HTTP 服务继续显式传入 SQLite。
+- [x] 保留现有 JSON saver 的可用性，避免把修改默认值扩大成删除实现。
+- [x] 验证未启用 checkpoint 时普通 Agent 调用仍正常工作。
 
 **验收：**None 不触发默认存储创建；传入 saver 的对象身份保持不变；服务器生命周期正确关闭它拥有的连接；包在项目目录之外仍能导入。
 
@@ -124,12 +183,12 @@
 
 **接口：**`task_tool_registry`、`ToolRegistry.excluding(names)`、现有 `build_task_tool()`。
 
-- [ ] 子集合未指定时保持现有默认行为；显式空集合不能被误认为“未指定”。
-- [ ] `excluding()` 返回新的 registry 容器，不改动原容器。
-- [ ] task 工具构建子 Agent 时使用显式提供的集合。
-- [ ] 应用入口负责决定排除哪些工具，不在通用 task 实现中硬编码服务器策略。
-- [ ] 检查各 agent_type 的工具白名单和提示词，避免名字叫 bash 却没有执行工具。
-- [ ] 清楚区分“工具集合过滤”和“工具实例／文件系统隔离”。
+- [x] 子集合未指定时保持现有默认行为；显式空集合不能被误认为“未指定”。
+- [x] `excluding()` 返回新的 registry 容器，不改动原容器。
+- [x] task 工具构建子 Agent 时使用显式提供的集合。
+- [x] 应用入口负责决定排除哪些工具，不在通用 task 实现中硬编码服务器策略。
+- [x] 检查各 agent_type 的工具白名单和提示词，避免名字叫 bash 却没有执行工具。
+- [x] 清楚区分“工具集合过滤”和“工具实例／文件系统隔离”。
 
 **验收：**父集合不变；子 Agent 实际注册的工具等于预期集合；空集合和缺省参数行为不同；新增 MCP 工具不会被误认为自动接受了与内置工具相同的策略。
 
@@ -139,28 +198,107 @@
 
 ## 六、第 3 步：拆分产品 Run 与本地执行资源
 
+### 2026-09-15 验收记录：第 3 步已完成，基础应用链路已切换
+
+当前实现统一使用 `RunExecution`、`ExecutionRegistry`；参考项目中的对应名称为
+`ActiveRunHandle`、`ActiveRunRegistry`。下文以当前实现命名为准，保留 `Stream.subscribe()`。
+新链路只维护执行资源索引，通过 `execution.stream` 获取 Stream，
+不再建立第二份 `StreamManager` 索引。执行注册与观察者订阅仍是两种独立职责。
+
+- 已新增 [执行资源与结果](../packages/harness/shikigen/execution.py)：
+  不包含产品 status；注册表校验归属、拒绝重复执行、按对象身份移除，shutdown 等待 Task 清理。
+- 已新增 [execute_agent_loop](../packages/harness/shikigen/loop.py)：
+  返回 completed/aborted/failed/interrupted 执行结果，不发布产品终态、不关闭 Stream；
+  使用 checkpointer 时在 Graph 退出后读取状态，保留暂停的 checkpoint 坐标与中断信息。
+  外部 Task 取消继续传播，不自动解释为用户取消。
+- 已接通 [RunExecution 应用编排](../app/run_execution.py)：
+  `start_run_execution()` 接收已持久创建的 Run 身份，创建并返回 `RunExecution`，
+  通过 `ExecutionRegistry` 注册和回收；其 Task 包含执行及提交收尾；
+  通过 `RunSettlement.settle_execution()` 获取已提交状态后发布终态。
+  持久化失败发布 `stream_failed`，不冒充产品 error/completed。
+  消费者仅释放订阅，执行结束自动回收，不依赖 HTTP 的 detach。
+- 已新增 [资源与编排测试](../tests/test_execution.py)：
+  用可控提交替身验证订阅隔离、提交前无终态、失败不发布成功、持久取消优先、
+  shutdown 清理和旧执行不能误删新执行。这组测试使用存储替身。
+- 已实现共享应用服务：[ThreadService](../app/services/thread.py) 提供 `create_thread()`
+  和会话查询；[RunService](../app/services/run.py) 提供 `start_run()`、
+  `wait_run(execution)`、`read_run(thread_id, run_id)` 及 Run 消息／事件查询。
+  [Runtime](../app/runtime.py) 仅保存运行配置和依赖引用，不再包含业务或关闭方法；
+  调用方使用 `runtime.threads.create_thread()`、`runtime.runs.start_run()` 等入口。
+  `start_run()` 返回本次执行句柄；`wait_run()` 等 Task 与提交收尾后读取持久状态，
+  存储异常直接传播，等待者取消通过 shield 与执行隔离。句柄在资源索引移除后仍可等待。
+  只持有 ID 或重开进程的调用者使用 `read_run()`。订阅沿用 `execution.stream.subscribe()`。
+  已接收的创建操作由 [ApplicationLifecycle](../app/lifecycle.py) 保留，
+  调用者取消不会在“创建已提交、Task 未启动”之间留下孤儿。
+- 已实现 [open_runtime](../app/composition.py)，统一打开产品存储、checkpointer 与 Agent；
+  由 `assemble_runtime()` 组装配置、依赖与应用服务；退出时先调用
+  `runtime.lifecycle.shutdown()` 回收创建与执行 Task，再关闭存储，
+  初始化失败也释放已打开的依赖。
+  [HTTP lifespan](../app/server.py) 和 [普通 Python 入口](../app/run.py) 使用同一上下文，
+  路由调用共享运行接口，已删除路由内的 Task 创建及 `run_and_persist_status()`。
+- 为完成切换，提前完成第 4 步所需的最小真实存储操作：
+  `ChatStore.create_run()` 一次事务保存 running Run、生命周期事实及入口消息；
+  `settle_execution()` 用条件更新提交状态与生命周期事实。已有终态不覆盖、不重复追加，
+  interrupted 不填写 completed_at。单连接读取等待写事务结束，避免读到未提交状态。
+  完整输出消息暂由原 middleware 保存，装配时设置 `persist_entry=False`，入口消息只有创建事务写入。
+
+产品转换：新建 → running；running → completed/error/cancelled/interrupted。
+completed/error/cancelled 为终态，interrupted 为非终态并继续阻止同 Thread 的新 Run。
+完成与协作取消结算竞争时，以第一次有效提交为准。pending 只保留给旧数据；
+interrupted → running、审批决策校验及同 Run resume 在第 7 步实现。
+
+**验证：**[Runtime 与事务测试](../tests/test_runtime.py)、[HTTP 测试](../tests/test_server.py)
+覆盖真实 SQLite 的创建／结算回滚、双连接排他、提交前读取隔离、等待取消、存储失败、
+暂停持久化、关闭顺序及重开查询。[独立进程场景](../tests/runtime_no_http.py)
+在导入前阻断 FastAPI、app.server 和 routes，使用确定性真实 Agent 与工具，
+验证入口／AI／工具消息、已提交终态和重开后读取。没有调用真实模型或外部 MCP。
+
+本次全量命令 `.venv/bin/python -m unittest discover -s tests -p 'test_*.py'`
+共 **140 项通过**；本次涉及的代码通过 Ruff 检查与格式检查，`git diff --check` 通过，
+独立入口 `--help` 可直接运行。数据库测试在沙箱外运行：当前沙箱内最小
+`aiosqlite.connect(':memory:')` 也会卡住，同一复现在沙箱外正常连接并关闭；
+因此未将沙箱内超时计为测试通过，也未据此判定业务逻辑错误。
+
+**范围边界：**本次没有修改 schema，也没有迁移实际数据库。
+排他目前由 `BEGIN IMMEDIATE` 事务内检查保证；数据库唯一索引、旧数据兼容审计、
+严格消息冲突校验与统一事件写入器仍在第 4、5 步，不能把第 4 步整体标为完成。
+存储接口已统一为原子 `create_run()` 与条件结算 `settle_execution()`，
+已移除旧的分步创建、`start_run()`、`finish_run()` 及无条件状态更新入口，测试也使用新接口。
+旧 harness 的 `run_agent_loop()`、`RunManager` 仍保留给兼容测试，生产入口已无引用。
+shutdown 的强制停止不伪造 cancelled，
+留下的 running 状态由第 8 步启动恢复处理；当前不提供崩溃自动续跑。
+
+最小独立入口：`.venv/bin/python -m app.run --config config.json '你好'`。
+配置文件决定产品数据库与 checkpoint 路径，相对路径以启动目录为准；
+可传 `--thread-id` 沿用 Thread。入口打印身份、等待收尾后打印持久结果与消息。
+该命令使用配置中的真实模型与工具；离线验收使用上述确定性测试工厂。
+
 ### 先确定语义
 
-**做什么：**产品 Run 保持用户任务身份；本地 handle 管理当前进程的一次执行资源。
+**做什么：**产品 Run 保持用户任务身份；`RunExecution` 管理当前进程的一次执行资源。
 
 **为什么：**同一个 Run 可以经历“执行 → 暂停 → 恢复执行”，但不能用一个 asyncio.Task 跨越进程退出或所有暂停阶段。
 
-本地 handle 可以保存 run_id、thread_id、Task、取消信号、Stream；持久 Run 保存状态、时间、错误码，以及以后加入的恢复坐标和累计用量。本地资源是否存在不直接等同于产品状态。
+`RunExecution` 保存 run_id、thread_id、Task、取消信号和 Stream；持久 Run 保存状态、时间、错误码，以及以后加入的恢复坐标和累计用量。本地资源是否存在不直接等同于产品状态。
 
 建议第一版接受新请求时直接把 Run 原子创建为 running，避免在没有调度队列时增加一个公开 pending 阶段；历史 pending 数据的处理放到迁移与恢复中。若保留 pending，需要说明由谁负责将它推进为 running。
 
 ### 接口与实现任务
 
-建议接口：`ActiveRunHandle`、`ActiveRunRegistry`、一次执行结果 `ExecutionOutcome`。最后这个名称是本计划建议的内部结果类型，不是当前已有接口。
+接口进度：资源与结果采用 `RunExecution`、`ExecutionRegistry`、`ExecutionOutcome`，分别表示一次本地执行、执行资源注册表及执行结果。`Runtime` 仅为配置与依赖容器；业务接口位于 `ThreadService`、`RunService`，资源关闭位于 `ApplicationLifecycle`。入口与等待接口见上方验收记录。
 
-- [ ] 定义产品状态转换，明确 completed/error/cancelled 是终态，interrupted 是非终态。
-- [ ] 让执行资源清理与产品终态提交成为不同操作。
-- [ ] 让通用 Loop 报告完成、取消、异常或暂停结果，由应用决定产品状态如何持久化。
-- [ ] 取消与正常完成同时发生时，明确以哪次有效持久状态转换为准。
-- [ ] 执行 Task 由应用保留，不由 HTTP 响应生成器拥有。
-- [ ] 本地注册表负责定位资源、等待结束与移除，不独立维护另一份权威产品状态。
-- [ ] 建立应用编排入口，让路由只调用编排，不直接拼接 Task、Stream、数据库收尾逻辑。
-- [ ] 保留原有 TaskGroup、取消竞争和 finally 的清理能力。
+- [x] 定义产品状态转换，明确 completed/error/cancelled 是终态，interrupted 是非终态。
+- [x] 让执行资源清理与产品终态提交成为不同操作。
+- [x] 让通用 Loop 报告完成、取消、异常或暂停结果，由应用决定产品状态如何持久化。
+- [x] 取消与正常完成同时发生时，明确以哪次有效持久状态转换为准。
+- [x] 执行 Task 由应用保留，不由 HTTP 响应生成器拥有。
+- [x] 本地注册表负责定位资源、等待结束与移除，不独立维护另一份权威产品状态。
+- [x] 建立应用编排入口，让路由只调用编排，不直接拼接 Task、Stream、数据库收尾逻辑。
+- [x] 共享运行入口覆盖创建 Thread、创建 Run、启动执行和查询；调用方不必预先手动拼接数据库操作，也不只暴露 `start_run_execution()` 骨架。
+- [x] 定义 `wait_run()` 覆盖本次执行和持久化收尾；后续暂停时返回已提交 interrupted，存储失败显式报告，流 EOF 不作为 completed 的依据。
+- [x] 事件订阅与执行所有权分开：未订阅或订阅者全部退出也正常执行、提交和清理；等待者停止等待不自动等于用户持久取消。
+- [x] 将旧 `ServerRuntime` 拆为配置／依赖容器 `Runtime`、应用服务和 `ApplicationLifecycle`；各模块均不依赖 Request 或 app.state。
+- [x] 保留原有 TaskGroup、取消竞争和 finally 的清理能力。
 
 ### 与第 4 步的切换方式
 
@@ -170,17 +308,22 @@
 
 ### 验收
 
-- [ ] HTTP 消费者退出后，Task 继续执行。
-- [ ] 本地 Task 结束并移除后，持久 Run 仍能查询。
-- [ ] shutdown 等待本地资源清理，不遗留后台 Task。
-- [ ] Loop 不导入应用数据库或 HTTP 对象。
-- [ ] 同一 Run 的产品终态只有应用持久化流程能确定。
+- [x] HTTP 消费者退出后，Task 继续执行。
+- [x] 本地 Task 结束并移除后，持久 Run 仍能查询。
+- [x] shutdown 等待本地资源清理，不遗留后台 Task。
+- [x] Loop 不导入应用数据库或 HTTP 对象。
+- [x] 新运行模块可在阻断 FastAPI、app.server 和 routes 导入时直接构造和调用；已同时完成基础真实存储验收。
+- [x] 同一 Run 的产品终态只有应用持久化流程能确定。
 
 **交付物：**资源接口、执行结果接口、应用编排骨架及资源生命周期测试；与第 4 步共同完成可运行的应用切换。
 
 参考：[当前 RunManager](../packages/harness/shikigen/run_manager.py)、[当前 Loop](../packages/harness/shikigen/loop.py)、[copy 产品编排](../../shikigen-agent-copy/server/product_run.py)。
 
 ## 七、第 4 步：原子存储与提交后发布
+
+2026-09-15：为接通第 3 步，已实现最小创建／结算事务及第 4D 的共享装配与独立运行。
+尚未完成 schema 约束迁移、旧数据副本审计、严格消息冲突检查和统一事件写入／返回契约。
+下面仅勾选本次有实现和验证依据的子项。
 
 ### 4A：先定义数据和业务操作
 
@@ -200,11 +343,11 @@
 | `list_run_events(...)` | 按确定顺序读取已提交完整事件 |
 
 - [ ] 一个 Thread 在数据库中最多有一个非终态 Run。
-- [ ] 用条件更新校验状态转换，不能只校验 run_id 是否存在。
+- [x] 用条件更新校验状态转换，不能只校验 run_id 是否存在（新结算接口）。
 - [ ] 相同消息身份、相同内容重复写入时返回原事实。
 - [ ] 相同消息身份、不同内容时显式报错。
 - [ ] 数据库唯一冲突转换成应用错误，再由 HTTP 映射为 409。
-- [ ] 事务遇到取消也回滚，避免只捕获普通 Exception 而遗漏取消路径。
+- [x] 事务遇到取消也回滚，避免只捕获普通 Exception 而遗漏取消路径（新创建／结算接口）。
 - [ ] 每个业务操作返回已提交事件，让发布方无需重新拼造一个版本。
 
 ### 4B：处理现有数据的兼容
@@ -224,16 +367,39 @@
 建议顺序：Graph 执行结束 → 提交状态和完整事件 → 发布提交结果 → 关闭当前执行流 → 清理本地资源。
 
 - [ ] 完整消息和生命周期事件只有一个写入／发布入口，借鉴 `RunEventIngestor`。
-- [ ] 成功事务之后才推送持久事实。
-- [ ] 存储失败时不给观察者一个虚假的 completed；返回可识别的观察／执行错误并记录日志。
+- [x] 成功事务之后才推送持久事实（当前生命周期发布路径）。
+- [x] 终态存储失败时不给观察者一个虚假的 completed；返回可识别的观察／执行错误并记录日志。
 - [ ] 区分“事务失败”和“事务成功但发布失败”，后者的事实可以通过后续读取恢复。
-- [ ] 入口消息既然已由创建事务保存，旧 Middleware 不再独立重复创建它。
-- [ ] 第 3 步的新执行结果接入这条链路，切换后移除已无调用者的重复收尾逻辑。
+- [x] 入口消息既然已由创建事务保存，旧 Middleware 不再独立重复创建它。
+- [x] 第 3 步的新执行结果接入这条链路，切换后移除已无调用者的重复收尾逻辑。
+
+### 4D：接通共享装配与无 HTTP 的运行入口
+
+**做什么：**实现协议无关的 `open_runtime(config=...)` 异步上下文入口，接入第 4A—4C 的真实存储和编排；提供一个最小可执行 Python 入口，HTTP lifespan 和路由复用同一实现。
+
+**为什么：**核心能直接执行 Graph，不代表完整 Run 已能独立运行。数据库连接、任务收尾和启动恢复也必须能脱离 FastAPI 使用。
+
+**接口：**装配入口返回第 3 步定义的 `Runtime` 配置／依赖容器，通过其 `threads`、`runs` 服务提供 Thread 创建、Run 启动、等待和查询；事件订阅使用执行句柄。存储仍通过 checkpointer、MessageJournal／后续统一写入接口和运行存储接口注入，HTTP 负责把内部事件编码为 JSONL。
+
+- [x] 从 `app/server.py` lifespan 抽取配置、存储、checkpointer、Agent 和执行注册表的共享装配；HTTP 与独立入口不维护两份装配流程。
+- [x] 共享上下文先回收执行和收尾 Task，再关闭它们使用的存储；初始化中途失败也释放已打开资源。
+- [x] HTTP 的创建和读取路径调用共享运行接口，移除路由内重复的事务、Task 创建与终态收尾逻辑；保留请求校验、鉴权入口、错误映射与 JSONL 编码。
+- [x] 增加最小 Python 脚本或模块入口，说明可复制的启动命令、配置与存储路径，以及如何等待完成或消费事件；不要求同时开发交互式 CLI。
+- [x] 独立入口的调用方维持事件循环与上下文直到所需执行及收尾结束；正常退出和执行异常都走共享清理流程。
+- [x] 直接用运行接口暴露应用错误，例如 Thread busy、Run 不存在、存储失败；HTTP 状态码仅由路由映射。
+- [x] 在阻断 `fastapi`、`app.server`、routes 导入的独立 Python 进程中测试，不借助 TestClient、ASGI lifespan 或监听端口。
+- [x] 使用确定性 Graph 和真实临时存储验证普通问答、工具调用、入口消息和输出消息保存、已提交终态查询；不只用存储替身或直接调用 `agent.ainvoke()`。
+- [x] 关闭并重新打开 runtime 后，仍能查询先前的 Thread、Run 和完整消息；不依赖旧内存注册表。
+- [x] 验证无人订阅和订阅提前关闭时，Run 仍能完成持久化与资源清理；注入终态保存失败时，等待接口和订阅均不报告虚假成功。
+- [x] HTTP 回归验证既有请求和 JSONL 行为，并确认调用的是同一个运行模块。
+
+第 4D 步完成基础独立执行；第 5 步继续完善消息归属，第 6 步补历史与 live 的统一观察，第 7 步补取消与审批恢复，第 8 步补共享启动扫描。这些能力不得另在 HTTP route 中重新编排。
 
 ### 验收
 
 | 场景 | 预期 |
 | --- | --- |
+| 不启动 FastAPI，直接使用共享 runtime | 完成执行、持久化收尾与查询，重开存储仍可读取 |
 | 创建过程任一步失败 | 不留下半个 Run 或孤立入口消息 |
 | 两个请求竞争同一 Thread | 一个成功，另一个得到明确冲突 |
 | 已进入终态后再次完成 | 不覆盖状态，不重复创建终态事实 |
@@ -242,7 +408,7 @@
 | 写终态成功、发布前断连 | 读取持久结果仍能得到终态 |
 | 事务内触发取消 | 没有部分提交 |
 
-**完成条件：**第 3、4 步已共同接通普通问答和工具调用；单一持久状态来源成立；旧数据兼容方式经过副本验证。
+**完成条件：**第 3、4 步已共同接通 HTTP 与无 HTTP 入口的普通问答和工具调用，使用同一运行模块；独立进程真实存储验收通过；单一持久状态来源成立；旧数据兼容方式经过副本验证。
 
 参考：[当前 ChatStore](../app/persistence/chat_store.py)、[当前路由编排](../app/routes/run.py)、[copy RunPersistence](../../shikigen-agent-copy/server/persistence/run_persistence.py)。
 
@@ -320,10 +486,11 @@
 - [ ] 终态 Run 从数据库重建，不依赖 StreamManager 中还留有对象。
 - [ ] 活跃 Run 同步注册订阅，再异步读取历史，避免读取期间漏掉事件。
 - [ ] 以本次 invocation 的起点切分持久前缀与该 invocation 缓冲，不能拿“查询时最新历史”直接拼上“全部缓存”。
-- [ ] 处理读历史期间任务完成、Stream 关闭、handle 被移除的竞争；连接持有的订阅仍能完成交付。
+- [ ] 处理读历史期间任务完成、Stream 关闭、`RunExecution` 从 `ExecutionRegistry` 中移除的竞争；连接持有的订阅仍能完成交付。
 - [ ] 仅关闭自己的订阅，不取消任务或移除其他观察者资源。
 - [ ] 暂时无法定位本地执行时返回明确的可重试错误，不创建新的 Graph 调用。
 - [ ] 明确拒绝尚未实现的 cursor 参数，避免消费者误以为支持增量续传。
+- [ ] 历史与 live 拼接由共享运行／观察接口完成；HTTP 只编码 JSONL，独立调用方能消费相同内部事件。
 
 ### 验收
 
@@ -333,6 +500,7 @@
 - [ ] 两次完整重建的最终投影相同。
 - [ ] 大量文本增量最后只形成一条完整消息。
 - [ ] 两个观察者中一个断连，另一个不受影响。
+- [ ] 不启动 FastAPI，直接通过共享观察接口完成重建与跟随，模型调用计数不增加。
 
 **完成条件：**刷新、断连重接、终态读取均不依赖重新执行任务。明确全量缓存仍有资源上限问题，在后续长时运行优化中处理。
 
@@ -371,7 +539,7 @@
 - [ ] 验证每项 response 的数量、类型与允许动作；后续需要 edit/respond 时再扩展策略。
 - [ ] 同一事务保存 resolved 事实和 running 转换，返回本次恢复所需坐标与输入。
 - [ ] 事务成功后才启动 resume，保持原 run_id。
-- [ ] 前一个暂停 invocation 的资源和用量收尾完成后，再安装新的本地 handle。
+- [ ] 前一个暂停 invocation 的资源和用量收尾完成后，再向 `ExecutionRegistry` 安装新的 `RunExecution`。
 - [ ] 重复响应或旧审批返回明确冲突，不悄悄创建第二次 resume。
 - [ ] 审批冲突后，消费者通过读取现状收敛；不能推断“请求失败，所以服务器一定没接受”。
 
@@ -383,13 +551,13 @@
 
 **为什么：**任务资源是否成功停止，不应让已经接受的取消被普通完成覆盖。
 
-**接口：**`cancel_run()`、handle 的 `request_cancel()`，以及与其他生命周期一致的已提交事件发布入口。
+**接口：**`cancel_run()`、`RunExecution.request_cancel()`，以及与其他生命周期一致的已提交事件发布入口。
 
 - [ ] 对 pending/running/interrupted 定义可取消规则，终态取消明确返回冲突或已有结果。
 - [ ] 取消 interrupted 时，在同一事务写 invalidated 和 cancelled。
 - [ ] 取消赢得状态竞争后，迟到的 complete 不得覆盖它。
 - [ ] 让现有观察者也能获知持久取消结果。建议走统一发布流程，并保证终态不会被正在退出的执行流提前关闭而遗漏。
-- [ ] 已没有活跃 handle 的暂停 Run，仍能通过存储完成取消。
+- [ ] 已没有活跃 `RunExecution` 的暂停 Run，仍能通过存储完成取消。
 - [ ] 取消与恢复请求使用一致的 Thread 执行协调规则。
 
 **验收：**取消先赢、审批先赢后取消、正常完成先赢三种场景各有确定结果；其他观察者能得到取消事实，或按明确协议重建后得到事实。
@@ -411,7 +579,10 @@
 
 **验收：**两次 invocation 用量相加；一次结算重复提交不重复累计（若支持重试）；完成通知与查询时序符合约定；取消保留已知用量。
 
-**阶段完成条件：**一个 Run 可以执行、暂停、刷新、审批、恢复、再次暂停并结束；取消竞争与统计语义都经过确定性场景验证。
+- [ ] `resume_run()`、`cancel_run()` 等操作位于共享运行模块；HTTP 路由只转换请求和错误，不自行提交事务或启动恢复 Task。
+- [ ] 不启动 FastAPI，直接调用同一运行接口完成暂停、读取审批、恢复同 Run、取消与用量查询；与 HTTP 入口具有一致的持久结果。
+
+**阶段完成条件：**一个 Run 可以执行、暂停、刷新、审批、恢复、再次暂停并结束；取消竞争与统计语义都经过确定性场景验证；无 HTTP 入口具备同样的运行能力。
 
 参考：[copy 审批策略](../../shikigen-agent-copy/server/config.py)、[copy 生命周期事务](../../shikigen-agent-copy/server/persistence/run_persistence.py)、[copy 产品流测试](../../shikigen-agent-copy/tests/test_product_run_sse.py)。
 
@@ -421,15 +592,15 @@
 
 **做什么：**恢复可查询、可继续审批交互的产品状态，识别丢失的执行。
 
-**为什么：**进程重启后内存 handle 消失，但数据库仍可能是 running 或 interrupted。
+**为什么：**进程重启后内存中的 `RunExecution` 消失，但数据库仍可能是 running 或 interrupted。
 
 **接口：**`RunRecoveryCoordinator.reconcile_all()`、`reconcile_run()`、`list_nonterminal_runs()`、准确坐标的 checkpoint 查询。
 
-第一版按单进程执行归属设计。running 没有 handle 时收敛为 invocation_lost，不自动重放工具。未来自动续跑需要另行解决执行所有权、恢复意图和副作用幂等。
+第一版按单进程执行归属设计。running 没有本地 `RunExecution` 时收敛为 invocation_lost，不自动重放工具。未来自动续跑需要另行解决执行所有权、恢复意图和副作用幂等。
 
 ### 实现任务
 
-- [ ] 在开始接收业务请求前完成恢复扫描。
+- [ ] 恢复扫描放入共享 runtime 启动流程；HTTP 接收请求或独立入口允许发起 Run 前均完成扫描，不只在 FastAPI lifespan 内执行。
 - [ ] 已有终态只读，不被扫描重写。
 - [ ] 丢失本地执行的 pending/running 转为明确错误事实。
 - [ ] interrupted 的准确 checkpoint 与持久审批匹配时继续保留。
@@ -439,6 +610,7 @@
 - [ ] 日志包含 thread_id/run_id、稳定原因码，公开响应不直接暴露内部堆栈。
 - [ ] 读取／响应审批时执行必要的防御性校验，避免只在启动时查一次。
 - [ ] 将“恢复失败”和“恢复后自动执行”区分清楚；本阶段不承诺后者。
+- [ ] 崩溃矩阵以独立 Python 进程直接打开 runtime 验证；不启动 FastAPI，也能校验暂停事实并识别丢失执行。
 
 ### 崩溃验收矩阵
 
@@ -478,21 +650,23 @@ review 顺序沿用现有偏好：先看做得好的，再看需要修的，最�
 - **显式 workspace_root：**当 harness 在多个工作目录运行时，由工具工厂接收路径，替代导入时 cwd 或源码目录常量。
 - **内存与慢消费者限制：**为事件缓存、工具输出和订阅队列设置容量及超限行为；在真正长时间、高并发使用前完成。
 - **增量游标重连：**必须先建立完整事件提交进度与缓存裁剪的正确关系，再提供 cursor。
-- **多 worker：**加入执行 owner、租约和跨进程事件传递，不能继续用“本进程没有 handle”判定执行丢失。
+- **多 worker：**加入执行 owner、租约和跨进程事件传递，不能继续用“本进程没有 `RunExecution`”判定执行丢失。
 - **崩溃自动续跑：**定义可重放节点、工具副作用幂等与恢复意图，不能仅在启动扫描中再次调用 Graph。
 - **后台子 Agent：**明确独立任务身份、取消、历史归属与恢复；当前 task 工具同步等待子 Agent 的语义不等于后台委派系统。
 
 ## 十四、总完成清单
 
 - [ ] 准备完成：兼容范围、测试基线、数据库验证环境明确。
-- [ ] 第 1 步完成：所有订阅关闭路径正确释放资源。
-- [ ] 第 2 步完成：存储和主／子工具集合由调用者控制。
-- [ ] 第 3、4 步完成：产品状态与本地资源分离，完整事实先提交后发布。
+- [x] 第 1 步完成：所有订阅关闭路径正确释放资源。
+- [x] 第 2 步完成：存储和主／子工具集合由调用者控制。
+- [ ] 第 3、4 步完成：产品状态与本地资源分离，完整事实先提交后发布；HTTP 与无 HTTP 入口共用运行模块及装配流程。
+- [ ] 第 4D 步完成：最小 Python 入口与启动说明齐备，阻断 FastAPI 导入的独立进程可完成执行、持久化、重开查询与资源回收。
 - [ ] 第 5 步完成：跨 Run 消息归属正确，事件契约明确。
 - [ ] 第 6 步完成：重连只重建和观察，不重复执行任务。
 - [ ] 第 7 步完成：审批、取消、重复恢复和用量有一致语义。
 - [ ] 第 8 步完成：重启恢复规则与崩溃矩阵经过验证。
+- [ ] 第 6—8 步新增的重建、取消、同 Run 审批恢复和启动恢复均可不经 HTTP 调用，没有重新引入路由编排。
 - [ ] 现有功能回归通过，已失效的旧应用执行路径完成清理。
 - [ ] 数据与协议切换说明完整，未验证项明确记录。
 
-建议现在从第 1 步开始：任务范围是“订阅对象的创建、消费和释放”，验收围绕资源生命周期，完成后再进入工厂依赖调整。
+第 1、2 步已于 2026-09-15 验收完成。下一步继续第 3 步的未完成项，并与第 4 步协同完成真实存储适配及应用入口切换；现有编排骨架进度见第六节。

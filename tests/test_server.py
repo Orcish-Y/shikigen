@@ -2,304 +2,244 @@ import asyncio
 import json
 import tempfile
 import unittest
-from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import httpx
-from fastapi import FastAPI, HTTPException, Request
-from shikigen.run_manager import RunManager, RunStatus
-from shikigen.stream import StreamManager
+from fastapi import FastAPI, Request
+from runtime_fixtures import deterministic_agent
+from shikigen.app_config import AppConfig, McpConfig, ModelConfig
+from shikigen.execution import RunExecution
+from test_loop import BlockingAgent, MessageAgent
 
+from app.composition import assemble_runtime, open_runtime
 from app.persistence import ChatStore
-from app.routes.run import (
-  ChatRequest,
-  get_run_messages,
-  stream_chat,
-  stream_run_events,
-)
+from app.routes.run import ChatRequest, stream_chat, stream_run_events
 from app.server import app as server_app
 
 
 class LifespanTests(unittest.IsolatedAsyncioTestCase):
-  async def test_startup_initializes_runtime_and_shutdown_releases_resources(self):
-    store_context = MagicMock()
-    checkpoint_context = MagicMock()
-    runtime = SimpleNamespace(shutdown=AsyncMock())
+  async def test_lifespan_uses_shared_context_and_releases_it(self):
+    runtime = SimpleNamespace(lifecycle=SimpleNamespace(shutdown=AsyncMock()))
+    entered, exited = [], []
+
+    @asynccontextmanager
+    async def context():
+      entered.append(True)
+      try:
+        yield runtime
+      finally:
+        await runtime.lifecycle.shutdown()
+        exited.append(True)
+
     app = FastAPI()
-
-    async def close_checkpoint(*_args):
-      runtime.shutdown.assert_awaited_once()
-
-    async def close_store(*_args):
-      checkpoint_context.__aexit__.assert_awaited_once()
-
-    checkpoint_context.__aexit__.side_effect = close_checkpoint
-    store_context.__aexit__.side_effect = close_store
-
-    with (
-      patch("app.server.open_chat_store", return_value=store_context) as open_store,
-      patch("app.server.load_app_config") as load_config,
-      patch("app.server.make_checkpointer", return_value=checkpoint_context) as make_cp,
-      patch("app.server.create_lead_agent") as create_lead_agent,
-      patch("app.server.ServerRuntime", return_value=runtime),
-    ):
-      load_config.return_value.database.path = "custom/chat.db"
+    with patch("app.server.open_runtime", side_effect=context) as factory:
       async with server_app.router.lifespan_context(app):
-        open_store.assert_called_once_with(Path("custom/chat.db"))
         self.assertIs(app.state.runtime, runtime)
-        store_context.__aenter__.assert_awaited_once()
-        checkpoint_context.__aenter__.assert_awaited_once()
-        runtime.shutdown.assert_not_awaited()
-        create_lead_agent.assert_awaited_once()
-        kwargs = create_lead_agent.call_args.kwargs
-        self.assertEqual(set(kwargs), {"config", "middlewares", "checkpointer"})
-        load_config.assert_called_once_with()
-        make_cp.assert_called_once_with(load_config.return_value)
-        self.assertIs(kwargs["config"], load_config.return_value)
-        self.assertIs(
-          kwargs["checkpointer"], checkpoint_context.__aenter__.return_value
-        )
-        self.assertNotIn("tool_registry", kwargs)
-
-    runtime.shutdown.assert_awaited_once()
-    store_context.__aexit__.assert_awaited_once()
-    checkpoint_context.__aexit__.assert_awaited_once()
+        self.assertEqual(entered, [True])
+        self.assertEqual(exited, [])
+        runtime.lifecycle.shutdown.assert_not_awaited()
+      factory.assert_called_once_with()
+    runtime.lifecycle.shutdown.assert_awaited_once()
+    self.assertEqual(exited, [True])
+    self.assertFalse(hasattr(app.state, "runtime"))
 
 
-class RegisteredRoutesTests(unittest.IsolatedAsyncioTestCase):
-  async def test_server_registers_thread_and_run_routes(self) -> None:
-    store = SimpleNamespace(
-      list_threads=AsyncMock(return_value=[]),
-      create_thread=AsyncMock(),
-      thread_exists=AsyncMock(return_value=False),
-      list_messages_by_run=AsyncMock(return_value=None),
+class ServerTests(unittest.IsolatedAsyncioTestCase):
+  async def asyncSetUp(self):
+    self.directory = tempfile.TemporaryDirectory()
+    self.addCleanup(self.directory.cleanup)
+    self.store = await ChatStore.open(Path(self.directory.name) / "runs.db")
+    self.addAsyncCleanup(self.store.close)
+    self.runtime = assemble_runtime(
+      config=AppConfig(model=ModelConfig(), mcp=McpConfig()),
+      agent=MessageAgent(),
+      chat_store=self.store,
     )
-    runtime = SimpleNamespace(chat_store=store)
-    transport = httpx.ASGITransport(app=server_app)
-    with patch.object(server_app.state, "runtime", runtime, create=True):
-      async with httpx.AsyncClient(
-        transport=transport, base_url="http://test"
-      ) as client:
-        response = await client.get("/api/threads")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), [])
-        response = await client.post("/api/threads")
-        self.assertEqual(response.status_code, 200)
-        store.create_thread.assert_awaited_once_with(response.json()["thread_id"])
+    self.addAsyncCleanup(self.runtime.lifecycle.shutdown)
+    patcher = patch.object(server_app.state, "runtime", self.runtime, create=True)
+    patcher.start()
+    self.addCleanup(patcher.stop)
+    self.client = httpx.AsyncClient(
+      transport=httpx.ASGITransport(app=server_app), base_url="http://test"
+    )
+    self.addAsyncCleanup(self.client.aclose)
 
-        for path, detail in (
-          ("/api/threads/missing/messages", "Thread not found"),
-          ("/api/threads/missing/runs/missing/messages", "Run not found"),
-        ):
-          response = await client.get(path)
-          self.assertEqual(response.status_code, 404)
-          self.assertEqual(response.json(), {"detail": detail})
+  async def test_registered_routes_creation_and_not_found(self):
+    self.assertEqual((await self.client.get("/api/threads")).json(), [])
+    with patch.object(
+      self.runtime.threads, "create_thread", wraps=self.runtime.threads.create_thread
+    ) as create:
+      response = await self.client.post("/api/threads")
+      self.assertEqual(response.status_code, 200)
+      create.assert_awaited_once_with()
+    threads = (await self.client.get("/api/threads")).json()
+    self.assertEqual(threads[0]["id"], response.json()["thread_id"])
+    for path, detail in (
+      ("/api/threads/missing/messages", "Thread not found"),
+      ("/api/threads/missing/runs/missing/messages", "Run not found"),
+    ):
+      result = await self.client.get(path)
+      self.assertEqual(result.status_code, 404)
+      self.assertEqual(result.json(), {"detail": detail})
+    result = await self.client.post(
+      "/api/threads/missing/stream", json={"message": "hello"}
+    )
+    self.assertEqual(result.status_code, 404)
 
-        response = await client.post(
-          "/api/threads/missing/stream", json={"message": "hello"}
-        )
-        self.assertEqual(response.status_code, 404)
-        self.assertEqual(response.json(), {"detail": "Thread not found"})
-
-
-class RunMessagesEndpointTests(unittest.IsolatedAsyncioTestCase):
-  async def asyncSetUp(self) -> None:
-    self.temp_dir = tempfile.TemporaryDirectory()
-    self.store = await ChatStore.open(Path(self.temp_dir.name) / "shikigen.db")
-    self.app = FastAPI()
-    self.app.state.runtime = SimpleNamespace(chat_store=self.store)
-    self.request = Request({"type": "http", "app": self.app})
-
-  async def asyncTearDown(self) -> None:
-    await self.store.close()
-    self.temp_dir.cleanup()
-
-  async def test_returns_only_messages_from_the_requested_run(self) -> None:
-    await self.store.create_thread("thread-1")
-    await self.store.create_run("run-1", "thread-1")
-    await self.store.append_event(
-      thread_id="thread-1",
-      run_id="run-1",
-      event_type="human_message",
-      category="message",
-      content={"type": "human", "content": "hello"},
+  async def test_http_uses_shared_start_and_returns_matching_committed_terminal(self):
+    thread = await self.runtime.threads.create_thread()
+    with patch.object(
+      self.runtime.runs, "start_run", wraps=self.runtime.runs.start_run
+    ) as start:
+      response = await self.client.post(
+        f"/api/threads/{thread}/stream", json={"message": "hello"}
+      )
+      start.assert_awaited_once_with(thread, "hello")
+    self.assertEqual(response.status_code, 200)
+    self.assertIn("application/x-ndjson", response.headers["content-type"])
+    events = [json.loads(line) for line in response.text.splitlines()]
+    run_id = events[0]["data"]["run_id"]
+    self.assertEqual(events[-1]["event"], "run.completed")
+    self.assertEqual(
+      (await self.runtime.runs.read_run(thread, run_id))["status"], "completed"
+    )
+    messages = await self.client.get(f"/api/threads/{thread}/runs/{run_id}/messages")
+    self.assertEqual(messages.json()["data"][0]["content"]["content"], "hello")
+    other = await self.runtime.threads.create_thread()
+    self.assertEqual(
+      (
+        await self.client.get(f"/api/threads/{other}/runs/{run_id}/messages")
+      ).status_code,
+      404,
     )
 
-    response = await get_run_messages("thread-1", "run-1", self.request)
+  async def test_busy_thread_returns_conflict(self):
+    thread = await self.runtime.threads.create_thread()
+    self.runtime.runs.agent = BlockingAgent()
+    execution = await self.runtime.runs.start_run(thread, "first")
+    response = await self.client.post(
+      f"/api/threads/{thread}/stream", json={"message": "second"}
+    )
+    self.assertEqual(response.status_code, 409)
+    self.assertEqual(response.json(), {"detail": "Thread is busy with another run"})
+    self.assertFalse(execution.abort_event.is_set())
 
-    data = response["data"]
-    assert isinstance(data, list)
-    self.assertEqual(data[0]["content"]["content"], "hello")
-
-  async def test_returns_not_found_for_a_run_from_another_thread(self) -> None:
-    await self.store.create_thread("thread-1")
-    await self.store.create_thread("thread-2")
-    await self.store.create_run("run-1", "thread-1")
-
-    with self.assertRaises(HTTPException) as caught:
-      await get_run_messages("thread-2", "run-1", self.request)
-
-    self.assertEqual(caught.exception.status_code, 404)
-
-
-class StreamChatTests(unittest.IsolatedAsyncioTestCase):
-  async def test_run_survives_disconnect_and_cleans_up_after_persistence(
-    self,
-  ) -> None:
+  async def test_http_disconnect_leaves_execution_and_commit_running(self):
     for cancel_consumer in (False, True):
       with self.subTest(cancel_consumer=cancel_consumer):
-        manager = RunManager(StreamManager())
-        record = manager.create("thread-1")
-        finish = asyncio.Event()
-        persist = asyncio.Event()
-        finished = asyncio.Event()
-        received = asyncio.Event()
+        entered, release, received = asyncio.Event(), asyncio.Event(), asyncio.Event()
+        original = self.store.settle_execution
 
-        async def produce(record, finish, finished, persist) -> None:
-          record.start()
-          record.stream.publish("metadata", {"run_id": record.run_id})
-          await finish.wait()
-          record.finish(RunStatus.COMPLETED)
-          finished.set()
-          await persist.wait()
+        async def settle(entered=entered, release=release, original=original, **kwargs):
+          entered.set()
+          await release.wait()
+          return await original(**kwargs)
 
-        iterator = stream_run_events(record, manager)
-
-        async def consume(iterator, received) -> None:
-          async for _ in iterator:
-            received.set()
-
-        record.task = asyncio.create_task(produce(record, finish, finished, persist))
-        try:
+        with patch.object(self.store, "settle_execution", side_effect=settle):
+          thread = await self.runtime.threads.create_thread()
+          response = await stream_chat(
+            thread,
+            ChatRequest(message="hello"),
+            Request({"type": "http", "app": server_app}),
+          )
+          iterator = response.body_iterator
+          first = json.loads(await anext(iterator))
+          run_id = first["data"]["run_id"]
+          execution = self.runtime.executions.get(thread, run_id)
+          await asyncio.wait_for(entered.wait(), 2)
           if cancel_consumer:
-            consumer = asyncio.create_task(consume(iterator, received))
-            await asyncio.wait_for(received.wait(), timeout=1)
+
+            async def consume(received=received, iterator=iterator):
+              received.set()
+              async for _ in iterator:
+                pass
+
+            consumer = asyncio.create_task(consume())
+            await received.wait()
             consumer.cancel()
             with self.assertRaises(asyncio.CancelledError):
               await consumer
           else:
-            await anext(iterator)
             await iterator.aclose()
+          self.assertFalse(execution.task.done())
+          self.assertFalse(execution.abort_event.is_set())
+          self.assertEqual(len(execution.stream._subscribers), 0)
+          release.set()
+          self.assertEqual(
+            (await self.runtime.runs.wait_run(execution))["status"], "completed"
+          )
+          self.assertIsNone(self.runtime.executions.get(thread, run_id))
 
-          self.assertFalse(record.abort_event.is_set())
-          self.assertFalse(record.task.done())
-          self.assertIs(manager.get_active_by_thread("thread-1"), record)
-          self.assertEqual(len(record.stream._subscribers), 0)
-          finish.set()
-          await asyncio.wait_for(finished.wait(), timeout=1)
-          self.assertIs(manager.get(record.run_id), record)
-          persist.set()
-          await record.task
-          self.assertIsNone(manager.get(record.run_id))
-          self.assertEqual(record.status, RunStatus.COMPLETED)
-        finally:
-          await manager.shutdown()
-
-  async def test_closing_chat_response_keeps_run_active(self) -> None:
-    manager = RunManager(StreamManager())
-    store = SimpleNamespace(
-      thread_exists=AsyncMock(return_value=True),
-      create_run=AsyncMock(),
-      start_run=AsyncMock(),
-    )
-    app = FastAPI()
-    app.state.runtime = SimpleNamespace(chat_store=store, run_manager=manager)
-    request = Request({"type": "http", "app": app})
-
-    async def produce(_runtime, record, _message, _tracker) -> None:
-      record.start()
-      record.stream.publish("metadata", {"run_id": record.run_id})
-      await asyncio.Event().wait()
-
-    with patch("app.routes.run.run_and_persist_status", side_effect=produce):
-      response = await stream_chat(
-        "thread-1",
-        ChatRequest(message="hello"),
-        request,
+  async def test_storage_failure_has_no_success_terminal(self):
+    thread = await self.runtime.threads.create_thread()
+    with (
+      patch.object(self.store, "settle_execution", side_effect=OSError("disk failed")),
+      self.assertLogs("app.run_execution", level="ERROR"),
+    ):
+      response = await self.client.post(
+        f"/api/threads/{thread}/stream", json={"message": "hello"}
       )
-      try:
-        iterator = response.body_iterator
-        assert isinstance(iterator, AsyncGenerator)
-        await anext(iterator)
-        await iterator.aclose()
-        record = manager.get_active_by_thread("thread-1")
-        self.assertIsNotNone(record)
-        assert record is not None
-        self.assertFalse(record.abort_event.is_set())
-      finally:
-        await manager.shutdown()
-
-  async def test_busy_thread_returns_conflict(self) -> None:
-    manager = RunManager(StreamManager())
-    record = manager.create("thread-1")
-    store = SimpleNamespace(
-      thread_exists=AsyncMock(return_value=True), create_run=AsyncMock()
+    events = [json.loads(line) for line in response.text.splitlines()]
+    self.assertEqual(events[-1]["event"], "stream_failed")
+    self.assertFalse(
+      any(e["event"] in ("run.completed", "run.error", "run.cancelled") for e in events)
     )
-    app = FastAPI()
-    app.state.runtime = SimpleNamespace(chat_store=store, run_manager=manager)
-    app.post("/api/threads/{thread_id}/stream")(stream_chat)
-    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-      for running in (False, True):
-        if running:
-          record.start()
-        response = await client.post(
-          "/api/threads/thread-1/stream", json={"message": "hello"}
+
+  async def test_real_agent_through_http_uses_same_persistence_path(self):
+    config = AppConfig(
+      model=ModelConfig(),
+      mcp=McpConfig(),
+      database={"path": str(Path(self.directory.name) / "real.db")},
+      checkpointer={"type": "memory"},
+    )
+    async with open_runtime(config, agent_factory=deterministic_agent) as runtime:
+      with patch.object(server_app.state, "runtime", runtime):
+        thread = (await self.client.post("/api/threads")).json()["thread_id"]
+        response = await self.client.post(
+          f"/api/threads/{thread}/stream", json={"message": "1+2"}
         )
-        self.assertEqual(response.status_code, 409)
-        self.assertEqual(response.json(), {"detail": "Thread is busy with another run"})
-    store.create_run.assert_not_awaited()
-    self.assertIs(manager.get(record.run_id), record)
-    self.assertFalse(record.abort_event.is_set())
+        events = [json.loads(line) for line in response.text.splitlines()]
+        self.assertEqual(events[-1]["event"], "run.completed")
+        messages = (await self.client.get(f"/api/threads/{thread}/messages")).json()[
+          "data"
+        ]
+        self.assertEqual(
+          [m["content"]["type"] for m in messages], ["human", "ai", "tool", "ai"]
+        )
 
-  async def test_terminal_events_have_matching_names(self) -> None:
-    for terminal_status in (RunStatus.COMPLETED, RunStatus.CANCELLED):
-      with self.subTest(status=terminal_status):
-        manager = RunManager(StreamManager())
-        record = manager.create("thread-1")
-        record.start()
-        record.finish(terminal_status)
-        events = [json.loads(line) async for line in stream_run_events(record, manager)]
-        self.assertEqual(events[-1]["event"], f"run.{terminal_status.value}")
-        self.assertEqual(events[-1]["data"], {"status": terminal_status.value})
 
-  async def test_serializes_complete_events_as_json_lines(self) -> None:
-    manager = RunManager(StreamManager())
-    record = manager.create("thread-1")
-    record.stream.publish("metadata", {"run_id": record.run_id})
-    record.stream.publish("message", {"text": "你", "done": False})
-    record.stream.publish("message", {"text": "", "done": True})
-    record.stream.publish(
-      "tool_call",
-      {"name": "search", "input": {}, "output": {}},
-    )
-    record.stream.close()
+class EncoderTests(unittest.IsolatedAsyncioTestCase):
+  async def test_terminal_names_include_interrupted(self):
+    for status in ("completed", "cancelled", "interrupted"):
+      execution = RunExecution("run", "thread")
+      execution.stream.publish("status", {"status": status})
+      execution.stream.close()
+      events = [json.loads(line) async for line in stream_run_events(execution)]
+      self.assertEqual(events[-1]["event"], f"run.{status}")
+      self.assertEqual(events[-1]["data"], {"status": status})
 
-    lines = [line async for line in stream_run_events(record, manager)]
-    events = [json.loads(line) for line in lines]
-
+  async def test_serializes_complete_events_as_json_lines(self):
+    execution = RunExecution("run", "thread")
+    execution.stream.publish("metadata", {"run_id": "run"})
+    execution.stream.publish("message", {"text": "你", "done": False})
+    execution.stream.publish("message", {"text": "", "done": True})
+    execution.stream.publish("tool_call", {"name": "search", "input": {}, "output": {}})
+    execution.stream.close()
+    lines = [line async for line in stream_run_events(execution)]
     self.assertEqual(
-      events,
+      [json.loads(line) for line in lines],
       [
-        {
-          "id": "0",
-          "event": "metadata",
-          "data": {"run_id": record.run_id},
-        },
+        {"id": "0", "event": "metadata", "data": {"run_id": "run"}},
         {
           "id": "1",
           "event": "message.delta",
           "data": {"delta": "你"},
           "output_index": 0,
         },
-        {
-          "id": "2",
-          "event": "message.completed",
-          "data": {},
-          "output_index": 0,
-        },
+        {"id": "2", "event": "message.completed", "data": {}, "output_index": 0},
         {
           "id": "3",
           "event": "tool_call.completed",

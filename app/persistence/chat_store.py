@@ -9,6 +9,16 @@ from pathlib import Path
 from typing import Any
 
 import aiosqlite
+from langchain_core.messages import HumanMessage
+from shikigen.execution import ExecutionOutcome, ExecutionReason
+
+from app.run_state import (
+  CommittedRunState,
+  RunNotFound,
+  RunStatus,
+  ThreadBusy,
+  ThreadNotFound,
+)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS threads (
@@ -80,14 +90,17 @@ class ChatStore:
     connection = await aiosqlite.connect(path)
     connection.row_factory = aiosqlite.Row
 
-    # 外键默认关闭；busy_timeout 减少短暂写竞争报错；WAL 允许读写并行。
-    await connection.execute("PRAGMA foreign_keys = ON")
-    await connection.execute("PRAGMA busy_timeout = 5000")
-    await connection.execute("PRAGMA journal_mode = WAL")
-
-    store = cls(connection)
-    await store.setup()
-    return store
+    try:
+      # 外键默认关闭；busy_timeout 减少短暂写竞争报错；WAL 允许读写并行。
+      await connection.execute("PRAGMA foreign_keys = ON")
+      await connection.execute("PRAGMA busy_timeout = 5000")
+      await connection.execute("PRAGMA journal_mode = WAL")
+      store = cls(connection)
+      await store.setup()
+      return store
+    except BaseException:
+      await connection.close()
+      raise
 
   async def setup(self) -> None:
     await self._connection.executescript(SCHEMA)
@@ -120,23 +133,32 @@ class ChatStore:
   ) -> None:
     now = _now()
     async with self._write_lock:
-      await self._connection.execute(
-        """
-        INSERT INTO threads(id, user_id, title, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?)
-        """,
-        (thread_id, user_id, title, now, now),
-      )
-      await self._connection.commit()
+      try:
+        await self._connection.execute(
+          """
+          INSERT INTO threads(id, user_id, title, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?)
+          """,
+          (thread_id, user_id, title, now, now),
+        )
+        await self._connection.commit()
+      except BaseException:
+        await self._connection.rollback()
+        raise
 
   async def thread_exists(self, thread_id: str) -> bool:
-    cursor = await self._connection.execute(
-      "SELECT 1 FROM threads WHERE id = ?",
-      (thread_id,),
-    )
-    return await cursor.fetchone() is not None
+    async with self._write_lock:
+      cursor = await self._connection.execute(
+        "SELECT 1 FROM threads WHERE id = ?",
+        (thread_id,),
+      )
+      return await cursor.fetchone() is not None
 
   async def list_threads(self) -> list[dict[str, Any]]:
+    async with self._write_lock:
+      return await self._list_threads()
+
+  async def _list_threads(self) -> list[dict[str, Any]]:
     cursor = await self._connection.execute(
       """
       SELECT id, user_id, title, created_at, updated_at
@@ -146,68 +168,168 @@ class ChatStore:
     )
     return [dict(row) for row in await cursor.fetchall()]
 
-  async def create_run(self, run_id: str, thread_id: str) -> None:
-    now = _now()
-    async with self._write_lock:
-      await self._connection.execute(
-        """
-        INSERT INTO runs(id, thread_id, status, created_at, updated_at)
-        VALUES (?, ?, 'pending', ?, ?)
-        """,
-        (run_id, thread_id, now, now),
-      )
-      await self._connection.commit()
-
-  async def start_run(self, run_id: str, thread_id: str) -> None:
-    await self._set_run_status(run_id, thread_id, "running")
-
-  async def finish_run(
+  async def _insert_fact(
     self,
-    run_id: str,
     thread_id: str,
-    status: str,
-    *,
-    error: str | None = None,
+    run_id: str,
+    event_type: str,
+    category: str,
+    event_key: str,
+    content: Any,
   ) -> None:
-    await self._set_run_status(
-      run_id,
-      thread_id,
-      status,
-      error=error,
-      completed=True,
+    """仅在持有写锁和事务时调用；不自行提交。"""
+    await self._connection.execute(
+      """
+      INSERT INTO run_events(
+        thread_id, run_id, seq, event_type, category, event_key,
+        content_json, metadata_json, created_at
+      )
+      SELECT ?, ?, COALESCE(MAX(seq), 0) + 1, ?, ?, ?, ?, '{}', ?
+      FROM run_events WHERE thread_id = ?
+      """,
+      (
+        thread_id,
+        run_id,
+        event_type,
+        category,
+        event_key,
+        json.dumps(content, ensure_ascii=False),
+        _now(),
+        thread_id,
+      ),
     )
 
-  async def _set_run_status(
+  async def create_run(
     self,
+    *,
     run_id: str,
     thread_id: str,
-    status: str,
-    *,
-    error: str | None = None,
-    completed: bool = False,
+    entry_message: HumanMessage,
   ) -> None:
-    now = _now()
-    completed_at = now if completed else None
-    async with self._write_lock:
-      cursor = await self._connection.execute(
-        """
-        UPDATE runs
-        SET status = ?, error = ?, updated_at = ?, completed_at = ?
-        WHERE id = ? AND thread_id = ?
-        """,
-        (status, error, now, completed_at, run_id, thread_id),
-      )
-      if cursor.rowcount != 1:
-        await self._connection.rollback()
-        raise ValueError(f"Run {run_id} does not belong to thread {thread_id}")
+    """在一个写事务中检查排他并提交 Run、running 事实和入口消息。
 
-      await self._connection.execute(
-        "UPDATE threads SET updated_at = ? WHERE id = ?",
-        (now, thread_id),
-      )
-      await self._connection.commit()
+    BEGIN IMMEDIATE 使本接口在多个连接间也串行检查。
+    schema 级约束升级仍属于数据迁移步骤。
+    """
+    if not entry_message.id:
+      raise ValueError("Entry message requires a stable id")
+    async with self._write_lock:
+      try:
+        await self._connection.execute("BEGIN IMMEDIATE")
+        cursor = await self._connection.execute(
+          "SELECT 1 FROM threads WHERE id = ?", (thread_id,)
+        )
+        if await cursor.fetchone() is None:
+          raise ThreadNotFound("Thread not found")
+        cursor = await self._connection.execute(
+          """
+          SELECT 1 FROM runs WHERE thread_id = ?
+          AND status NOT IN ('completed', 'error', 'cancelled') LIMIT 1
+          """,
+          (thread_id,),
+        )
+        if await cursor.fetchone() is not None:
+          raise ThreadBusy("Thread is busy with another run")
+        now = _now()
+        await self._connection.execute(
+          """INSERT INTO runs(id, thread_id, status, created_at, updated_at)
+          VALUES (?, ?, 'running', ?, ?)""",
+          (run_id, thread_id, now, now),
+        )
+        await self._insert_fact(
+          thread_id,
+          run_id,
+          "run_running",
+          "lifecycle",
+          f"running:{run_id}",
+          {"status": "running"},
+        )
+        await self._insert_fact(
+          thread_id,
+          run_id,
+          "human_message",
+          "message",
+          f"human:{entry_message.id}",
+          {
+            "type": "human",
+            "content": entry_message.content,
+            "message_id": entry_message.id,
+          },
+        )
+        await self._connection.execute(
+          "UPDATE threads SET updated_at = ? WHERE id = ?", (now, thread_id)
+        )
+        await self._connection.commit()
+      except BaseException:
+        await self._connection.rollback()
+        raise
+
+  async def settle_execution(
+    self,
+    *,
+    thread_id: str,
+    run_id: str,
+    outcome: ExecutionOutcome,
+  ) -> CommittedRunState:
+    """只有 running 能结算；已有终态或暂停事实原样返回，禁止覆盖。"""
+    target = {
+      ExecutionReason.COMPLETED: RunStatus.COMPLETED,
+      ExecutionReason.ABORTED: RunStatus.CANCELLED,
+      ExecutionReason.FAILED: RunStatus.ERROR,
+      ExecutionReason.INTERRUPTED: RunStatus.INTERRUPTED,
+    }[outcome.reason]
+    error = str(outcome.error) if outcome.error is not None else None
+    async with self._write_lock:
+      try:
+        await self._connection.execute("BEGIN IMMEDIATE")
+        cursor = await self._connection.execute(
+          "SELECT status, error FROM runs WHERE id = ? AND thread_id = ?",
+          (run_id, thread_id),
+        )
+        row = await cursor.fetchone()
+        if row is None:
+          raise RunNotFound("Run not found")
+        if row["status"] != RunStatus.RUNNING:
+          committed = CommittedRunState(RunStatus(row["status"]), row["error"])
+          await self._connection.commit()
+          return committed
+        now = _now()
+        cursor = await self._connection.execute(
+          """UPDATE runs SET status = ?, error = ?, updated_at = ?, completed_at = ?
+          WHERE id = ? AND thread_id = ? AND status = 'running'""",
+          (target, error, now, now if target.terminal else None, run_id, thread_id),
+        )
+        if cursor.rowcount != 1:
+          raise RuntimeError("Run state changed during settlement")
+        content: dict[str, Any] = {"status": target}
+        if error is not None:
+          content["message"] = error
+        if outcome.pause is not None:
+          content["checkpoint"] = outcome.pause.checkpoint
+          content["interrupts"] = outcome.pause.interrupts
+        await self._insert_fact(
+          thread_id,
+          run_id,
+          f"run_{target}",
+          "lifecycle",
+          f"settled:{run_id}",
+          content,
+        )
+        await self._connection.execute(
+          "UPDATE threads SET updated_at = ? WHERE id = ?", (now, thread_id)
+        )
+        await self._connection.commit()
+        return CommittedRunState(target, error)
+      except BaseException:
+        await self._connection.rollback()
+        raise
 
   async def get_run(self, run_id: str, thread_id: str) -> dict[str, Any] | None:
+    # 同一连接的读也必须等写事务结束，不能把尚未提交的状态暴露出去。
+    async with self._write_lock:
+      return await self._get_run(run_id, thread_id)
+
+  async def _get_run(self, run_id: str, thread_id: str) -> dict[str, Any] | None:
     cursor = await self._connection.execute(
       """
       SELECT id, thread_id, status, error, created_at, updated_at, completed_at
@@ -291,6 +413,14 @@ class ChatStore:
     thread_id: str,
     run_id: str,
   ) -> list[dict[str, Any]] | None:
+    async with self._write_lock:
+      return await self._list_messages_by_run(thread_id, run_id)
+
+  async def _list_messages_by_run(
+    self,
+    thread_id: str,
+    run_id: str,
+  ) -> list[dict[str, Any]] | None:
     # 先验证组合归属，从而区分“run 不存在”和“run 存在但还没有消息”。
     run_cursor = await self._connection.execute(
       "SELECT 1 FROM runs WHERE id = ? AND thread_id = ?",
@@ -313,6 +443,10 @@ class ChatStore:
     return [self._decode_event(row) for row in rows]
 
   async def list_thread_messages(self, thread_id: str) -> list[dict[str, Any]]:
+    async with self._write_lock:
+      return await self._list_thread_messages(thread_id)
+
+  async def _list_thread_messages(self, thread_id: str) -> list[dict[str, Any]]:
     cursor = await self._connection.execute(
       """
       SELECT id, thread_id, run_id, seq, event_type, category, event_key,
@@ -324,6 +458,17 @@ class ChatStore:
       (thread_id,),
     )
     return [self._decode_event(row) for row in await cursor.fetchall()]
+
+  async def list_run_events(self, thread_id: str, run_id: str) -> list[dict[str, Any]]:
+    async with self._write_lock:
+      if await self._get_run(run_id, thread_id) is None:
+        raise RunNotFound("Run not found")
+      cursor = await self._connection.execute(
+        """SELECT * FROM run_events WHERE thread_id = ? AND run_id = ?
+        ORDER BY seq""",
+        (thread_id, run_id),
+      )
+      return [self._decode_event(row) for row in await cursor.fetchall()]
 
   @staticmethod
   def _decode_event(row: aiosqlite.Row) -> dict[str, Any]:

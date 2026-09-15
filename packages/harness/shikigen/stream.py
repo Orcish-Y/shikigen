@@ -41,10 +41,16 @@ class ErrorData(TypedDict):
   message: str
 
 
+class StreamFailedData(TypedDict):
+  """观察通道失败，不表示产品 Run 已进入 error 终态。"""
+
+  code: str
+
+
 class StatusData(TypedDict):
   """状态事件载荷。"""
 
-  status: Literal["completed", "cancelled"]
+  status: Literal["completed", "cancelled", "interrupted"]
 
 
 class UsageModelData(TypedDict):
@@ -72,9 +78,16 @@ type EventName = Literal[
   "error",
   "usage",
   "status",
+  "stream_failed",
 ]
 type EventData = (
-  MetadataData | MessageData | ToolCallData | ErrorData | UsageData | StatusData
+  MetadataData
+  | MessageData
+  | ToolCallData
+  | ErrorData
+  | UsageData
+  | StatusData
+  | StreamFailedData
 )
 
 
@@ -92,6 +105,7 @@ type StreamEventVariant = (
   | StreamEvent[Literal["error"], ErrorData]
   | StreamEvent[Literal["usage"], UsageData]
   | StreamEvent[Literal["status"], StatusData]
+  | StreamEvent[Literal["stream_failed"], StreamFailedData]
 )
 
 
@@ -146,6 +160,11 @@ class Stream:
 
   @overload
   def publish(self, event: Literal["status"], data: StatusData) -> None: ...
+
+  @overload
+  def publish(
+    self, event: Literal["stream_failed"], data: StreamFailedData
+  ) -> None: ...
 
   def publish(self, event: EventName, data: EventData) -> None:
     """生产者发布事件。"""

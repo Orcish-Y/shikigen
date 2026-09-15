@@ -1,23 +1,25 @@
+"""运行时配置与已装配依赖的容器；业务操作和资源生命周期由对应模块负责。"""
+
 from dataclasses import dataclass
 from typing import Any
 
-from langgraph.graph.state import CompiledStateGraph
-from shikigen.run_manager import RunManager
-from shikigen.runtime_context import AgentRunContext
-from shikigen.stream import StreamManager
+from langgraph.checkpoint.base import BaseCheckpointSaver
+from shikigen.app_config import AppConfig
+from shikigen.execution import ExecutionRegistry
 
+from app.lifecycle import ApplicationLifecycle
 from app.persistence import ChatStore
+from app.services.run import RunService
+from app.services.thread import ThreadService
 
 
-@dataclass(slots=True)
-class ServerRuntime:
-  """应用生命周期内由所有 HTTP 请求共享的 Agent 运行时。"""
-
-  agent: CompiledStateGraph[Any, AgentRunContext, Any, Any]
-  stream_manager: StreamManager
-  run_manager: RunManager
+@dataclass(frozen=True, slots=True)
+class Runtime:
+  config: AppConfig
+  agent: Any
+  checkpointer: BaseCheckpointSaver | None
   chat_store: ChatStore
-
-  async def shutdown(self) -> None:
-    """停止并回收服务器仍持有的所有 run。"""
-    await self.run_manager.shutdown()
+  executions: ExecutionRegistry
+  lifecycle: ApplicationLifecycle
+  threads: ThreadService
+  runs: RunService
