@@ -11,6 +11,8 @@
 审批决策、同 Run resume 与启动恢复仍属于后续阶段。下文比较表保留原调查时点，
 当前完成范围以 [第 3 步验收记录](migration-checklist.md#六第-3-步拆分产品-run-与本地执行资源) 为准。
 
+同日 4A 更新：新库已增加非终态排他与状态约束；创建、结算和完整消息操作返回已提交事实，重复消息比较内容与元数据，冲突转换为应用错误。旧 journal 序号接口保留兼容并经过同一校验路径。旧产品库打开时明确要求 4B 迁移，不自动改写；统一发布接线仍属 4C。详见 [4A 契约与实现](4a-storage-contracts.md)和实施清单验收记录。
+
 同日职责调整：`app/runtime.py` 只保留 `Runtime` 配置／依赖容器；
 Thread 操作位于 `app/services/thread.py`，Run 操作位于 `app/services/run.py`，
 后台操作的接收与关闭位于 `app/lifecycle.py`。HTTP 和普通 Python 入口通过
@@ -103,7 +105,9 @@ Thread 操作位于 `app/services/thread.py`，Run 操作位于 `app/services/ru
 
 **接口：**copy 的 `ActiveRunHandle`、`ActiveRunRegistry`、`start_product_run()`、`resume_product_run()`，以及持久化的 `RunPersistence`。Invocation 是调用动作，不需要再生成一个公开领域 ID。
 
-建议落点：产品生命周期和编排可以放在当前 `app/` 的独立运行模块，供 HTTP 和无 HTTP 入口共同调用；通用执行和事件广播仍放在 `shikigen`。运行模块不依赖 FastAPI、Request、app.state 或 HTTP 响应生成器，通用 Loop 不依赖具体产品数据库。`app/` 是包位置，不代表模块必须经 HTTP 才能使用。
+建议落点：按“协议适配层 → 独立 Run runtime → 单次 Agent 执行”分层。Run 生命周期和编排当前可放在 `app/` 的独立运行模块，供 HTTP 和无 HTTP 入口共同调用；执行层在消息形成与执行边界通过注入接口驱动 journal 和 checkpoint 保存。运行模块不依赖 FastAPI、Request、app.state 或 HTTP 响应生成器，通用 Loop 不直接依赖具体产品数据库。
+
+`app/` 是当前包位置，不是永久职责边界。可复用的 Run 调度、取消、恢复和 RunStore 接口也可以纳入 harness/runtime；用户归属等产品语义仍由产品层承担。不应把 harness 限定为只执行一次 Graph，也无需把所有能力塞进 Agent 类。依据：[持久化职责调查](agent-persistence-ownership-research.md)、[运行边界对照](agent-runtime-boundary-comparison.md)。
 
 **验收：**暂停后仍可查询同一个 Run；resume 沿用 run_id；断开观察连接不会改变 Run 状态；本地任务回收后，已结束 Run 仍可读取。
 
@@ -154,7 +158,7 @@ Thread 操作位于 `app/services/thread.py`，Run 操作位于 `app/services/ru
 
 **验收：**实时消息与持久历史能按身份对应；重复快照不重复写；工具结果稳定关联到工具调用；跨轮历史不归入新 Run。
 
-**迁移前置条件：先解决 copy 的跨 Run 历史识别问题。**也不应同时开启旧持久化 Middleware 和新 Ingestor，让同一消息有两条写入路径。
+**迁移前置条件：先解决 copy 的跨 Run 历史识别问题。**同一消息只设一个正常写入归属。可保留 middleware 并接入统一写入接口，也可在执行 runtime 中由新 Ingestor 接管；仅在接管后停用对应旧写入路径。两种方式都在执行侧获取完整事实，不从 HTTP token 流重建消息，也不意味着 harness 退出持久化职责。
 
 来源：[当前持久化中间件](../packages/harness/shikigen/middleware/chat_persistence_middleware.py)、[copy Adapter](../../shikigen-agent-copy/server/langgraph_event_adapter.py:72)、[工具结果转换](../../shikigen-agent-copy/server/langgraph_event_adapter.py:470)。
 
@@ -272,7 +276,7 @@ copy 还区分持久的 Run lifecycle error 与连接／协议 error，并把稳
 
 **做什么：**让 `checkpointer=None` 明确表示不启用持久化，而不是偷偷实例化 JSON saver。
 
-**为什么：**存储策略属于应用入口选择。可复用 harness 在测试、CLI 和服务器中的调用者需求不同。
+**为什么：**是否启用 checkpointer、使用哪个后端由装配入口选择；执行中的 checkpoint 保存时机与恢复语义仍由 runtime 驱动。可复用 harness 在测试、CLI 和服务器中的调用者需求不同。
 
 **接口：**copy 直接把参数传给 `create_agent(checkpointer=checkpointer)`；当前工厂是 `checkpointer or JsonCheckpointer()`。
 
@@ -324,7 +328,8 @@ copy 的默认值不随启动目录变化，但安装成包后会指向源码安
 
 - HTTP 层负责请求校验、鉴权、应用错误映射与 JSONL 编码，调用运行模块；`lifespan` 进入和退出共享装配上下文。
 - 独立运行模块负责 Run 创建、执行协调、持久化结算、事件交付与资源回收，不导入 FastAPI、路由或 `app.server`。
-- Agent 核心继续负责模型、工具、middleware 与 checkpoint 的执行语义；存储实现通过接口注入，不把产品生命周期全部塞进 Agent 工厂。
+- 单次 Agent 执行层负责模型、工具、middleware，并在执行边界通过注入的 journal/checkpointer 接口驱动完整消息和 checkpoint 保存；具体存储实现负责读写与事务。当前入口消息由 Run 创建事务保存，执行侧不重复创建。
+- Run runtime 与单次执行层都可以是可复用 harness 的组成部分；当前 Run 服务放在 `app/` 不代表这些能力永久属于 HTTP 应用，也不把产品生命周期全部塞进 Agent 工厂。
 - 普通 Python 入口保持异步上下文存活，直到所需执行及收尾完成；离开上下文时先停止并回收执行，再关闭存储。无 HTTP 不代表进程退出后协程仍能继续。
 
 **迁移落点：**实施清单第 3 步确定共享运行接口，第 4 步接入真实事务存储、共享装配与最小 Python 入口，同时切换 HTTP；第 6—8 步将重建、审批／取消和启动恢复接入同一运行模块。这是本次迁移范围，不列为未来独立优化项。

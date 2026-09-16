@@ -22,18 +22,20 @@
 
 | 位置 | 应承担的职责 | 调用方需要知道的接口 |
 | --- | --- | --- |
-| `packages/harness/shikigen/` | 创建 Agent、执行一次 Graph 调用、广播事件、提供工具与 middleware | Agent 工厂、执行入口、订阅与取消接口 |
+| `packages/harness/shikigen/` 当前执行层 | 创建 Agent、执行 Graph、广播事件，在消息形成与执行边界驱动 journal 和 checkpoint 保存 | Agent 工厂、执行入口、订阅与取消接口、注入的 MessageJournal / checkpointer |
 | `app/` 的独立 Run 运行模块 | 接受不同入口的 Run 操作，保留本地执行资源，连接执行与持久化 | 创建、执行、等待、查询、观察、取消、恢复一个 Run |
 | `app/runtime.py` | 保存运行配置与已装配依赖的引用，不实现业务方法 | `Runtime` 数据容器，包含 config、存储、执行资源与服务引用 |
 | `app/services/` | Thread 创建与查询、产品 Run 的业务编排 | `runtime.threads` 与 `runtime.runs` 中的业务接口 |
 | `app/lifecycle.py` | 保留已接收的后台操作，协调停止接收与资源回收 | `ApplicationLifecycle.accept()`、`shutdown()` |
 | 协议无关的装配模块 | 打开存储与 checkpointer、创建 Agent 和运行对象，统一启动与关闭 | `open_runtime(config=...)` 异步上下文管理器（建议名称） |
-| `app/persistence/` | 产品状态转换、完整消息和事件写入、历史查询 | 语义明确的原子操作 |
+| `app/persistence/` 当前存储实现 | 校验产品状态转换、原子写入完整消息和事件、历史查询；保存时机由执行层或 Run runtime 驱动 | 语义明确的事务操作与可注入存储接口 |
 | 应用层事件适配模块 | 将框架消息、checkpoint 转成产品需要的数据 | 转换完整消息、增量与暂停状态 |
 | HTTP 路由和编码模块 | 校验请求、鉴权、映射错误、编码 JSONL，调用共享运行模块 | 请求模型、读取结果、流响应 |
 | 无 HTTP 的 Python 入口 | 进入共享装配上下文，发起 Run 并等待所需执行与收尾 | 与 HTTP 相同的运行接口，不复制事务或 Task 编排 |
 
-应用负责存储和产品生命周期；通用 harness 不导入 `app`、FastAPI 或具体产品数据库。新的模块文件名可以自行决定，下面出现的新增接口名是设计建议，不要求与 copy 一字不差。
+职责按“协议适配层 → 独立 Run runtime → 单次 Agent 执行”划分。执行层通过注入的 journal/checkpointer 接口驱动完整消息和执行状态保存；Run runtime 负责 Run 生命周期与持久化编排；具体存储实现负责事务、约束和读写，装配入口负责后端配置及打开关闭。通用 harness 不直接导入 `app`、FastAPI 或具体产品数据库，不等于它不参与持久化。
+
+上述目录是当前组织方式。可复用的 Run 调度、取消、恢复和 RunStore 接口可以纳入 harness/runtime，用户归属等产品语义由产品层承担；harness 不限于单次 Graph 执行。此处 Run runtime 指运行服务与编排能力，不特指 `app/runtime.py` 的数据容器。新的模块文件名可以自行决定，下面出现的新增接口名是设计建议，不要求与 copy 一字不差。依据：[持久化职责调查](agent-persistence-ownership-research.md)、[运行边界对照](agent-runtime-boundary-comparison.md)。
 
 独立运行、装配、存储和内部事件模块也不导入 FastAPI、`app.server` 或 routes，不接收 Request、app.state 或 StreamingResponse。HTTP lifespan 只进入和退出共享装配上下文；普通 Python 调用方直接管理同一上下文。模块可以先留在 `app/`，无需为了脱离 HTTP 全部移入 `agent.py`。本目标保持单进程执行归属，进程退出后的自动续跑仍是后续议题。
 
@@ -289,7 +291,7 @@ shutdown 的强制停止不伪造 cancelled，
 
 - [x] 定义产品状态转换，明确 completed/error/cancelled 是终态，interrupted 是非终态。
 - [x] 让执行资源清理与产品终态提交成为不同操作。
-- [x] 让通用 Loop 报告完成、取消、异常或暂停结果，由应用决定产品状态如何持久化。
+- [x] 让单次执行 Loop 报告完成、取消、异常或暂停结果，由独立 Run runtime 调用事务接口结算产品状态；执行层仍通过注入接口驱动消息与 checkpoint 保存。
 - [x] 取消与正常完成同时发生时，明确以哪次有效持久状态转换为准。
 - [x] 执行 Task 由应用保留，不由 HTTP 响应生成器拥有。
 - [x] 本地注册表负责定位资源、等待结束与移除，不独立维护另一份权威产品状态。
@@ -313,7 +315,7 @@ shutdown 的强制停止不伪造 cancelled，
 - [x] shutdown 等待本地资源清理，不遗留后台 Task。
 - [x] Loop 不导入应用数据库或 HTTP 对象。
 - [x] 新运行模块可在阻断 FastAPI、app.server 和 routes 导入时直接构造和调用；已同时完成基础真实存储验收。
-- [x] 同一 Run 的产品终态只有应用持久化流程能确定。
+- [x] 同一 Run 的产品终态以 Run runtime 调用事务接口后的已提交结果为准。
 
 **交付物：**资源接口、执行结果接口、应用编排骨架及资源生命周期测试；与第 4 步共同完成可运行的应用切换。
 
@@ -322,16 +324,38 @@ shutdown 的强制停止不伪造 cancelled，
 ## 七、第 4 步：原子存储与提交后发布
 
 2026-09-15：为接通第 3 步，已实现最小创建／结算事务及第 4D 的共享装配与独立运行。
-尚未完成 schema 约束迁移、旧数据副本审计、严格消息冲突检查和统一事件写入／返回契约。
+随后 4A 已补齐新库 schema 约束、消息冲突检查与业务写入返回契约。旧库约束迁移、数据副本审计及统一发布接线仍未完成。
 下面仅勾选本次有实现和验证依据的子项。
 
 ### 4A：先定义数据和业务操作
+
+### 2026-09-15 4A 验收记录：已完成（新库；旧库迁移见 4B）
+
+实现见 [ChatStore](../app/persistence/chat_store.py)、[状态与返回模型](../app/run_state.py)；
+新增 [存储契约测试](../tests/test_storage_contracts.py)，并补充 HTTP 身份冲突映射测试。
+创建返回 `RunWriteResult`，消息／事件业务写入返回 `EventWriteResult`，
+结算返回携带完整 lifecycle 事件的 `CommittedRunState`；重试保留原事实身份、序号和时间。
+旧 `MessageJournal.append_event()` 保留序号返回值，但不能绕过消息身份、内容和归属校验。
+失败码默认 `execution_failed`，也可由结算调用方显式指定稳定 `error_code`。
+
+新库使用部分唯一索引约束非终态排他，CHECK 约束状态值与完成时间，
+独立 `chat_schema` 表记录产品 schema 版本。未迁移旧库抛出 `SchemaMigrationRequired`，
+不在打开时自动升级；已验证拒绝前后旧库内容未改写。
+因此现有旧库须完成 4B 后再用于新版运行入口。
+
+验证命令：`.venv/bin/python -m unittest discover -s tests -p 'test_*.py'`，
+**153 项通过**；本次修改的 7 个 Python 文件通过 Ruff 检查与格式检查。
+数据库测试在沙箱外使用临时数据库与确定性 Agent 执行，未调用真实模型或迁移实际数据库。
+覆盖创建／消息／结算回滚、双连接消息重试、数据库直接写入排他、暂停事实重读与 HTTP 409。
+4C 的统一完整事件发布接线尚未完成，不能因本次增加返回值而勾选该项。
 
 **做什么：**让 Run 创建、终态转换与消息保存有明确的事务接口。
 
 **为什么：**调用方不应自己掌握多次 INSERT/UPDATE 的顺序、回滚和状态竞争规则。
 
 此处先定义最低限度的 Run、完整消息和 lifecycle 数据模型；第 5 步再补齐框架转换和传输契约，避免存储设计等待一个尚未存在的模型层。
+
+具体字段、现有保证与目标接口见 [4A 数据与操作契约](4a-storage-contracts.md)。定义事务接口不改变保存时机的归属：完整输出消息在执行侧形成并经注入接口写入，入口消息由创建事务拥有，Run 生命周期由独立 Run runtime 编排；HTTP 不重新实现这些保存流程。
 
 | 建议接口 | 必须一起完成的动作 |
 | --- | --- |
@@ -342,13 +366,13 @@ shutdown 的强制停止不伪造 cancelled，
 | `read_run(...)` | 返回持久状态及需要的元数据 |
 | `list_run_events(...)` | 按确定顺序读取已提交完整事件 |
 
-- [ ] 一个 Thread 在数据库中最多有一个非终态 Run。
+- [x] 一个 Thread 在数据库中最多有一个非终态 Run。
 - [x] 用条件更新校验状态转换，不能只校验 run_id 是否存在（新结算接口）。
-- [ ] 相同消息身份、相同内容重复写入时返回原事实。
-- [ ] 相同消息身份、不同内容时显式报错。
-- [ ] 数据库唯一冲突转换成应用错误，再由 HTTP 映射为 409。
+- [x] 相同消息身份、相同内容重复写入时返回原事实。
+- [x] 相同消息身份、不同内容时显式报错。
+- [x] 数据库唯一冲突转换成应用错误，再由 HTTP 映射为 409。
 - [x] 事务遇到取消也回滚，避免只捕获普通 Exception 而遗漏取消路径（新创建／结算接口）。
-- [ ] 每个业务操作返回已提交事件，让发布方无需重新拼造一个版本。
+- [x] 创建、结算及新的完整消息／事件业务接口返回已提交事件；旧 `append_event()` 仅保留序号兼容外观，并委托统一校验写入路径。
 
 ### 4B：处理现有数据的兼容
 
@@ -432,7 +456,7 @@ shutdown 的强制停止不伪造 cancelled，
 - [ ] 明确同 ID 修改内容是支持更新还是报冲突；本迁移建议完整历史先采用不可变事实，遇到变化显式失败。
 - [ ] 工具结果以稳定调用身份关联，处理 artifact 未提供和明确 null 的区别。
 - [ ] 明确父图／子图可持久化范围；先以 root 状态中能建立身份的产品消息为主，子图内部输出另行界定。
-- [ ] 完成新写入链路后停用对应的旧消息持久化 Middleware，避免双写。
+- [ ] 明确完整消息的单一正常写入归属：保留 middleware 时接入统一写入接口；若由执行 runtime 中的新 Ingestor 接管，完成接管后停用对应旧写入路径。两种方案都在执行侧获取完整事实，不依赖 HTTP token 流重建。
 
 **关键验收：**用有 checkpoint 的确定性 Graph，在同 Thread 连续执行两轮；第二轮历史只能新增第二轮事实，第一轮消息不重复出现。这项通过之前不进入第 6 步。
 

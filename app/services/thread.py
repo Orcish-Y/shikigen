@@ -5,7 +5,7 @@ from typing import Any
 
 from app.lifecycle import ApplicationLifecycle
 from app.persistence import ChatStore
-from app.run_state import ThreadNotFound
+from app.run_state import CommittedEvent, ThreadNotFound
 
 
 class ThreadService:
@@ -29,7 +29,7 @@ class ThreadService:
   async def list_threads(self) -> list[dict[str, Any]]:
     return await self._store.list_threads()
 
-  async def list_thread_messages(self, thread_id: str) -> list[dict[str, Any]]:
+  async def list_thread_messages(self, thread_id: str) -> list[CommittedEvent]:
     if not await self._store.thread_exists(thread_id):
       raise ThreadNotFound("Thread not found")
     return await self._store.list_thread_messages(thread_id)

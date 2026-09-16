@@ -16,7 +16,13 @@ from shikigen.utils.text_safety import replace_surrogates
 from app.lifecycle import ApplicationLifecycle
 from app.persistence import ChatStore
 from app.run_execution import start_run_execution
-from app.run_state import ExecutionStopped, RunNotFound, RunStatus
+from app.run_state import (
+  CommittedEvent,
+  ExecutionStopped,
+  RunNotFound,
+  RunSnapshot,
+  RunStatus,
+)
 
 
 class RunService:
@@ -62,7 +68,7 @@ class RunService:
 
     return await self._lifecycle.accept(start())
 
-  async def wait_run(self, execution: RunExecution) -> dict[str, Any]:
+  async def wait_run(self, execution: RunExecution) -> RunSnapshot:
     """等待这次执行及持久化收尾，返回已提交状态（包括 interrupted）。
 
     句柄在注册表移除后仍可等待。停止等待不取消执行；Task 异常原样传播。
@@ -85,7 +91,7 @@ class RunService:
       raise ExecutionStopped("Execution ended without a committed result")
     return row
 
-  async def read_run(self, thread_id: str, run_id: str) -> dict[str, Any]:
+  async def read_run(self, thread_id: str, run_id: str) -> RunSnapshot:
     row = await self._store.get_run(run_id, thread_id)
     if row is None:
       raise RunNotFound("Run not found")
@@ -93,11 +99,11 @@ class RunService:
 
   async def list_run_messages(
     self, thread_id: str, run_id: str
-  ) -> list[dict[str, Any]]:
+  ) -> list[CommittedEvent]:
     messages = await self._store.list_messages_by_run(thread_id, run_id)
     if messages is None:
       raise RunNotFound("Run not found")
     return messages
 
-  async def list_run_events(self, thread_id: str, run_id: str) -> list[dict[str, Any]]:
+  async def list_run_events(self, thread_id: str, run_id: str) -> list[CommittedEvent]:
     return await self._store.list_run_events(thread_id, run_id)

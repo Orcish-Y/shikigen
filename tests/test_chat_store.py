@@ -34,7 +34,13 @@ class ChatStoreTests(unittest.IsolatedAsyncioTestCase):
       run_id="run-1",
       event_type="ai_message",
       category="message",
-      content={"type": "ai", "content": "thinking"},
+      event_key="ai:thinking",
+      content={
+        "type": "ai",
+        "content": "thinking",
+        "message_id": "thinking",
+        "tool_calls": [],
+      },
     )
     second_seq = await self.store.append_event(
       thread_id="thread-1",
@@ -48,7 +54,8 @@ class ChatStoreTests(unittest.IsolatedAsyncioTestCase):
       run_id="run-1",
       event_type="ai_message",
       category="message",
-      content={"type": "ai", "content": "hi"},
+      event_key="ai:answer",
+      content={"type": "ai", "content": "hi", "message_id": "answer", "tool_calls": []},
     )
     await self.store.settle_execution(
       thread_id="thread-1",
@@ -61,7 +68,13 @@ class ChatStoreTests(unittest.IsolatedAsyncioTestCase):
       run_id="run-2",
       event_type="ai_message",
       category="message",
-      content={"type": "ai", "content": "other answer"},
+      event_key="ai:other",
+      content={
+        "type": "ai",
+        "content": "other answer",
+        "message_id": "other",
+        "tool_calls": [],
+      },
     )
 
     messages = await self.store.list_messages_by_run("thread-1", "run-1")

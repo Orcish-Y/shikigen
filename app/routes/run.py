@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from shikigen.execution import RunExecution
 from shikigen.stream import StreamEventVariant
 
-from app.run_state import RunNotFound, ThreadBusy, ThreadNotFound
+from app.run_state import RunNotFound, StorageConflict, ThreadNotFound
 from app.runtime import Runtime
 
 router = APIRouter(prefix="/api/threads/{thread_id}")
@@ -153,9 +153,9 @@ async def stream_chat(
     execution = await runtime.runs.start_run(thread_id, body.message)
   except ThreadNotFound as error:
     raise HTTPException(status_code=404, detail=str(error)) from error
-  except ThreadBusy as error:
+  except StorageConflict as error:
     raise HTTPException(
       status_code=status.HTTP_409_CONFLICT,
-      detail="Thread is busy with another run",
+      detail=str(error),
     ) from error
   return _jsonl_response(stream_run_events(execution))

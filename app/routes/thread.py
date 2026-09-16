@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Request
 
-from app.run_state import ThreadNotFound
+from app.run_state import StorageConflict, ThreadNotFound
 from app.runtime import Runtime
 
 router = APIRouter(prefix="/api/threads")
@@ -27,7 +27,10 @@ async def get_thread(request: Request) -> list[dict[str, object]]:
 )
 async def create_thread(request: Request) -> dict[str, str]:
   runtime: Runtime = request.app.state.runtime
-  thread_id = await runtime.threads.create_thread()
+  try:
+    thread_id = await runtime.threads.create_thread()
+  except StorageConflict as error:
+    raise HTTPException(status_code=409, detail=str(error)) from error
   return {"thread_id": thread_id}
 
 

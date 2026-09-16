@@ -17,6 +17,7 @@ from test_loop import BlockingAgent, MessageAgent
 from app.composition import assemble_runtime, open_runtime
 from app.persistence import ChatStore
 from app.routes.run import ChatRequest, stream_chat, stream_run_events
+from app.run_state import StorageConflict
 from app.server import app as server_app
 
 
@@ -126,6 +127,19 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(response.status_code, 409)
     self.assertEqual(response.json(), {"detail": "Thread is busy with another run"})
     self.assertFalse(execution.abort_event.is_set())
+
+  async def test_storage_identity_conflicts_map_to_409(self):
+    for service, operation, path, body in (
+      (self.runtime.threads, "create_thread", "/api/threads", None),
+      (self.runtime.runs, "start_run", "/api/threads/thread/stream", {"message": "hi"}),
+    ):
+      with self.subTest(operation=operation):
+        with patch.object(
+          service, operation, side_effect=StorageConflict("Persistent identity exists")
+        ):
+          response = await self.client.post(path, json=body)
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json(), {"detail": "Persistent identity exists"})
 
   async def test_http_disconnect_leaves_execution_and_commit_running(self):
     for cancel_consumer in (False, True):
