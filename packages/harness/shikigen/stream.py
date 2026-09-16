@@ -1,5 +1,5 @@
 import asyncio
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator, Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, Literal, TypedDict, cast, overload
 
@@ -79,6 +79,7 @@ type EventName = Literal[
   "usage",
   "status",
   "stream_failed",
+  "durable_event",
 ]
 type EventData = (
   MetadataData
@@ -88,6 +89,7 @@ type EventData = (
   | UsageData
   | StatusData
   | StreamFailedData
+  | Mapping[str, Any]
 )
 
 
@@ -106,6 +108,7 @@ type StreamEventVariant = (
   | StreamEvent[Literal["usage"], UsageData]
   | StreamEvent[Literal["status"], StatusData]
   | StreamEvent[Literal["stream_failed"], StreamFailedData]
+  | StreamEvent[Literal["durable_event"], Mapping[str, Any]]
 )
 
 
@@ -164,6 +167,11 @@ class Stream:
   @overload
   def publish(
     self, event: Literal["stream_failed"], data: StreamFailedData
+  ) -> None: ...
+
+  @overload
+  def publish(
+    self, event: Literal["durable_event"], data: Mapping[str, Any]
   ) -> None: ...
 
   def publish(self, event: EventName, data: EventData) -> None:

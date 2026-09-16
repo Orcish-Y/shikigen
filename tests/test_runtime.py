@@ -88,9 +88,10 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
     original = self.store.create_run
 
     async def create(**kwargs):
-      await original(**kwargs)
+      result = await original(**kwargs)
       entered.set()
       await release.wait()
+      return result
 
     with patch.object(self.store, "create_run", side_effect=create):
       starter = asyncio.create_task(
@@ -336,6 +337,7 @@ class CompositionTests(unittest.IsolatedAsyncioTestCase):
       self.assertTrue(pause["interrupts"][0]["id"])
       events = [event async for event in execution.stream.subscribe()]
       self.assertEqual(events[-1].data, {"status": "interrupted"})
+      self.assertEqual([e.data for e in events if e.event == "durable_event"], facts)
       with self.assertRaises(ThreadBusy):
         await runtime.runs.start_run(thread_id, "another")
 
@@ -343,7 +345,7 @@ class CompositionTests(unittest.IsolatedAsyncioTestCase):
     captured = {}
 
     async def fail(**kwargs):
-      captured["store"] = kwargs["middlewares"][0]._journal
+      captured["store"] = kwargs["middlewares"][0]._journal._store
       captured["checkpointer"] = kwargs["checkpointer"]
       raise ValueError("factory failed")
 
@@ -364,7 +366,7 @@ class CompositionTests(unittest.IsolatedAsyncioTestCase):
         async def factory(
           captured=captured, entered=entered, cleaned=cleaned, **kwargs
         ):
-          store = kwargs["middlewares"][0]._journal
+          store = kwargs["middlewares"][0]._journal._store
           checkpointer = kwargs["checkpointer"]
           captured.update(store=store, checkpointer=checkpointer)
 

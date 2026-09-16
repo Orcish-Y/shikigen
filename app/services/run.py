@@ -43,8 +43,8 @@ class RunService:
     async def start() -> RunExecution:
       run_id = uuid.uuid4().hex
       entry = HumanMessage(id=uuid.uuid4().hex, content=replace_surrogates(message))
-      # todo 这里部分逻辑写到store里面了，后面要考虑抽离出来
-      await self._store.create_run(
+      # todo. 这个后面都要手动到event文件里面（created生成event）
+      created = await self._store.create_run(
         run_id=run_id,
         thread_id=thread_id,
         entry_message=entry,
@@ -57,6 +57,7 @@ class RunService:
           run_id=run_id,
           registry=self._executions,
           settlement=self._store,
+          initial_events=created.events,
         )
       except Exception as error:
         await self._store.settle_execution(

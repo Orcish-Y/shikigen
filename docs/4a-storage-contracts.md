@@ -1,6 +1,6 @@
 # 4A：ChatStore 数据字段与业务操作契约
 
-日期：2026-09-15。4A 已实现并在临时数据库上验收；本页记录最终接口及后续阶段边界。旧产品库升级属于 4B，尚未执行。
+日期：2026-09-15。4A 已实现并在临时数据库上验收；本页记录最终接口及后续阶段边界。4B 离线迁移工具已于 2026-09-16 完成副本验证，实际旧库尚未切换，见 [4B 说明](4b-storage-migration.md)。
 
 对应任务：[迁移清单 4A](migration-checklist.md#4a先定义数据和业务操作)。设计背景：[业务事务](branch-comparison-and-migration.md#32-用业务操作封装事务完整事实先提交再发布)。
 
@@ -52,7 +52,7 @@
 
 **已实现约束：**每个 Thread 最多一个非终态 Run。创建接口使用 `BEGIN IMMEDIATE` 加事务内查询，新库增加部分唯一索引 `uq_runs_one_nonterminal_per_thread`，直接 SQL 写入也不能绕过排他。状态值及终态／完成时间关系由 CHECK 约束保护。
 
-产品 schema 版本单独记录在 `chat_schema`，不占用与 checkpointer 共库时的全库版本号。已有旧产品表但缺少版本标记、产品表不齐或版本不支持时，打开操作抛出 `SchemaMigrationRequired`；不自动迁移。4B 完成前，旧库不能直接用于新版运行入口，但原数据保持可供旧实现或迁移工具读取。
+产品 schema 版本单独记录在 `chat_schema`，不占用与 checkpointer 共库时的全库版本号。已有旧产品表但缺少版本标记、产品表不齐或版本不支持时，打开操作抛出 `SchemaMigrationRequired`；不自动迁移。完成显式副本升级前，旧库不能直接用于新版运行入口，但原数据保持可供旧实现或迁移工具读取。
 
 ### 2.2 已保存事件
 
@@ -171,4 +171,4 @@
 
 新增场景见 [存储契约测试](../tests/test_storage_contracts.py)，既有回归见 [Runtime 测试](../tests/test_runtime.py)、[HTTP 测试](../tests/test_server.py) 与 [ChatStore 测试](../tests/test_chat_store.py)。完整验证结果记录在迁移清单的 4A 验收记录中。
 
-后续仍包括：4B 旧数据副本审计与迁移、4C 统一提交后发布、第 5 步跨 Run 消息归属与严格框架转换、第 7 步同 Run 恢复。这些步骤未因 4A 完成而自动完成。
+4B 旧数据副本审计与迁移现已完成验证，实际切换另行安排。后续仍包括：4C 统一提交后发布、第 5 步跨 Run 消息归属与严格框架转换、第 7 步同 Run 恢复。这些步骤未因 4A 完成而自动完成。

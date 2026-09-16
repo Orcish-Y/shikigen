@@ -13,7 +13,8 @@ from shikigen.callback_handler import TokenTracker
 from shikigen.execution import ExecutionOutcome, ExecutionRegistry, RunExecution
 from shikigen.loop import execute_agent_loop
 
-from app.run_state import CommittedRunState, RunStatus
+from app.run_events import RunEventIngestor
+from app.run_state import CommittedEvent, CommittedRunState
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,7 @@ def start_run_execution(
   run_id: str,
   registry: ExecutionRegistry,
   settlement: RunSettlement,
+  initial_events: tuple[CommittedEvent, ...] = (),
 ) -> RunExecution:
   """为已持久创建的 Run 启动一次执行；不依赖 HTTP 消费者回收资源。"""
   execution = RunExecution(run_id=run_id, thread_id=thread_id)
@@ -46,6 +48,7 @@ def start_run_execution(
 
   async def execute() -> None:
     try:
+      RunEventIngestor.publish(execution.stream, initial_events)
       outcome = await execute_agent_loop(
         agent,
         message,
@@ -57,23 +60,13 @@ def start_run_execution(
           thread_id=thread_id, run_id=run_id, outcome=outcome
         )
       except Exception:
-        execution.stream.publish("stream_failed", {"code": "run_persistence_failed"})
+        RunEventIngestor.notify_failure(execution.stream, "run_persistence_failed")
         raise
 
-      # 只发布存储返回的事实，不能根据 outcome 推断产品终态。
-      if committed.status is RunStatus.ERROR:
-        execution.stream.publish("error", {"message": committed.error or "Run failed"})
-      elif committed.status is RunStatus.COMPLETED:
-        execution.stream.publish("status", {"status": "completed"})
-      elif committed.status is RunStatus.CANCELLED:
-        execution.stream.publish("status", {"status": "cancelled"})
-      elif committed.status is RunStatus.INTERRUPTED:
-        execution.stream.publish("status", {"status": "interrupted"})
-      else:
-        raise ValueError(f"Cannot publish unsettled run status: {committed.status}")
+      RunEventIngestor.publish(execution.stream, committed.events, settlement=committed)
     except asyncio.CancelledError:
       # shutdown／外部 Task 取消不是用户的持久取消操作。
-      execution.stream.publish("stream_failed", {"code": "execution_stopped"})
+      RunEventIngestor.notify_failure(execution.stream, "execution_stopped")
       raise
     finally:
       execution.stream.close()
