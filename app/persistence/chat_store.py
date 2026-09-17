@@ -35,7 +35,7 @@ class ChatStore:
 
   @classmethod
   async def open(cls, database_path: str | Path) -> ChatStore:
-    """异步创建已连接且完成建表/迁移的 store。
+    """异步创建已连接且完成当前 schema 建表的 store。
 
     __init__ 不能 await，因此连接数据库的工作放在类方法中；使用 cls
     创建实例，也让子类调用 open() 时仍能得到子类实例。
@@ -95,7 +95,7 @@ class ChatStore:
     """在一个写事务中检查排他并提交 Run、running 事实和入口消息。
 
     BEGIN IMMEDIATE 使本接口在多个连接间也串行检查。
-    新库有 schema 排他约束；旧库升级属于 4B。
+    新库有 schema 排他约束；数据库必须使用当前 schema。
     """
     return await self._runs.create_run(
       run_id=run_id,
@@ -130,7 +130,7 @@ class ChatStore:
     event_key: str,
     content: Any,
   ) -> None:
-    """保留旧存储门面的事务注入钩子；调用方需持有写锁和事务。"""
+    """事务注入钩子；调用方需持有写锁和事务。"""
     await self._events.insert_fact(
       thread_id,
       run_id,
@@ -158,7 +158,7 @@ class ChatStore:
     metadata: dict[str, Any] | None = None,
     event_key: str | None = None,
   ) -> int:
-    """兼容 MessageJournal 的序号接口；所有消息仍经过统一校验。"""
+    """实现 MessageJournal 的序号接口；所有消息仍经过统一校验。"""
     return await self._events.append_event(
       thread_id=thread_id,
       run_id=run_id,

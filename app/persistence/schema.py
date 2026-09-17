@@ -1,8 +1,6 @@
-"""产品数据库的表结构、版本检查与初始化。"""
+"""产品数据库的当前表结构与初始化。旧数据库不做迁移。"""
 
 import aiosqlite
-
-from app.run_state import SchemaMigrationRequired
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS threads (
@@ -17,7 +15,7 @@ CREATE TABLE IF NOT EXISTS runs (
   id TEXT PRIMARY KEY,
   thread_id TEXT NOT NULL,
   status TEXT NOT NULL CHECK (status IN (
-    'pending', 'running', 'interrupted', 'completed', 'error', 'cancelled'
+    'running', 'interrupted', 'completed', 'error', 'cancelled'
   )),
   error TEXT,
   error_code TEXT,
@@ -35,9 +33,6 @@ CREATE INDEX IF NOT EXISTS ix_runs_thread_created
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_runs_one_nonterminal_per_thread
   ON runs(thread_id) WHERE status NOT IN ('completed', 'error', 'cancelled');
-
-CREATE TABLE IF NOT EXISTS chat_schema (version INTEGER PRIMARY KEY);
-INSERT OR IGNORE INTO chat_schema(version) VALUES (1);
 
 CREATE TABLE IF NOT EXISTS run_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -62,18 +57,7 @@ CREATE INDEX IF NOT EXISTS ix_run_events_run_category_seq
 
 
 async def setup_schema(connection: aiosqlite.Connection) -> None:
-  cursor = await connection.execute(
-    "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN "
-    "('threads', 'runs', 'run_events', 'chat_schema')"
-  )
-  tables = {row[0] for row in await cursor.fetchall()}
-  if tables:
-    if tables != {"threads", "runs", "run_events", "chat_schema"}:
-      raise SchemaMigrationRequired("Product database requires a 4B migration")
-    cursor = await connection.execute("SELECT version FROM chat_schema")
-    if [row[0] for row in await cursor.fetchall()] != [1]:
-      raise SchemaMigrationRequired("Unsupported product schema version")
-  # 不改写旧产品库；新库建表与约束在同一事务中安装。
+  # 只安装当前 schema；历史数据库由部署者删除，不在启动时转换或检查。
   try:
     await connection.executescript(
       "BEGIN IMMEDIATE;\n"

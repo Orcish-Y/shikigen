@@ -37,7 +37,7 @@ class RunStore:
     """在一个写事务中检查排他并提交 Run、running 事实和入口消息。
 
     BEGIN IMMEDIATE 使本接口在多个连接间也串行检查。
-    新库有 schema 排他约束；旧库升级属于 4B。
+    新库有 schema 排他约束；数据库必须使用当前 schema。
     """
     self._events.message_identity(
       {
@@ -140,8 +140,6 @@ class RunStore:
         if row is None:
           raise RunNotFound("Run not found")
         if row["status"] != RunStatus.RUNNING:
-          if row["status"] == RunStatus.PENDING:
-            raise InvalidRunState("Pending run requires recovery before settlement")
           event = await self._events.event_by_key(
             thread_id, run_id, f"settled:{run_id}"
           )

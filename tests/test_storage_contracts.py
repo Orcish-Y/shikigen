@@ -12,10 +12,8 @@ from shikigen.execution import ExecutionOutcome, ExecutionPause, ExecutionReason
 
 from app.persistence import ChatStore
 from app.run_state import (
-  InvalidRunState,
   MessageConflict,
   RunNotFound,
-  SchemaMigrationRequired,
   StorageConflict,
   ThreadBusy,
 )
@@ -101,7 +99,7 @@ class StorageContractTests(unittest.IsolatedAsyncioTestCase):
       )
     self.assertEqual(len(await self.reader.list_run_events("thread", "run")), 3)
 
-  async def test_legacy_journal_cannot_bypass_identity_or_conflict_checks(self):
+  async def test_journal_cannot_bypass_identity_or_conflict_checks(self):
     original = await self.append()
     params = dict(
       thread_id="thread",
@@ -181,7 +179,7 @@ class StorageContractTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_database_rejects_second_nonterminal_even_without_store_api(self):
     # 排他必须覆盖所有非终态，不能只依赖 create_run 的先查后写。
-    for current in ("pending", "running", "interrupted"):
+    for current in ("running", "interrupted"):
       with self.subTest(current=current):
         await self.store._connection.execute("UPDATE runs SET status = ?", (current,))
         await self.store._connection.commit()
@@ -238,16 +236,6 @@ class StorageContractTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(second.events[0]["content"]["checkpoint"], {"id": "checkpoint"})
     self.assertIsNone((await self.reader.get_run("run", "thread"))["completed_at"])
 
-  async def test_pending_cannot_be_settled_as_success(self):
-    await self.store._connection.execute("UPDATE runs SET status = 'pending'")
-    await self.store._connection.commit()
-    with self.assertRaises(InvalidRunState):
-      await self.store.settle_execution(
-        thread_id="thread",
-        run_id="run",
-        outcome=ExecutionOutcome(ExecutionReason.COMPLETED),
-      )
-
   async def test_settlement_cancellation_rolls_back_and_can_retry(self):
     with patch.object(
       self.store._connection, "commit", side_effect=asyncio.CancelledError()
@@ -266,18 +254,3 @@ class StorageContractTests(unittest.IsolatedAsyncioTestCase):
       outcome=ExecutionOutcome(ExecutionReason.COMPLETED),
     )
     self.assertEqual(settled.events[0]["seq"], 3)
-
-
-class LegacySchemaTests(unittest.IsolatedAsyncioTestCase):
-  async def test_legacy_database_is_rejected_without_schema_or_data_rewrite(self):
-    with tempfile.TemporaryDirectory() as directory:
-      path = Path(directory) / "legacy.db"
-      with sqlite3.connect(path) as connection:
-        connection.executescript(
-          "CREATE TABLE threads(id TEXT PRIMARY KEY, title TEXT);"
-          "INSERT INTO threads VALUES ('old', 'keep me');"
-        )
-      before = path.read_bytes()
-      with self.assertRaises(SchemaMigrationRequired):
-        await ChatStore.open(path)
-      self.assertEqual(path.read_bytes(), before)

@@ -6,7 +6,6 @@ from typing import Any, TypedDict
 
 
 class RunStatus(StrEnum):
-  PENDING = "pending"  # 只为旧数据保留；新 Run 直接创建为 running。
   RUNNING = "running"
   INTERRUPTED = "interrupted"
   COMPLETED = "completed"
@@ -40,10 +39,6 @@ class ThreadBusy(StorageConflict):
 
 class MessageConflict(StorageConflict):
   """相同事件身份对应不同的完整事实。"""
-
-
-class SchemaMigrationRequired(RunError):
-  """旧产品库需先在副本上审计和迁移，不能隐式升级。"""
 
 
 class InvalidRunState(RunError):
@@ -102,6 +97,6 @@ class CommittedRunState:
 
   def __post_init__(self) -> None:
     status = RunStatus(self.status)
-    if status in (RunStatus.PENDING, RunStatus.RUNNING):
+    if status is RunStatus.RUNNING:
       raise ValueError("Execution settlement must finish or interrupt the invocation")
     object.__setattr__(self, "status", status)

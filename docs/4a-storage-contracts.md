@@ -1,6 +1,6 @@
 # 4A：ChatStore 数据字段与业务操作契约
 
-日期：2026-09-15。4A 已实现并在临时数据库上验收；本页记录最终接口及后续阶段边界。4B 离线迁移工具已于 2026-09-16 完成副本验证，实际旧库尚未切换，见 [4B 说明](4b-storage-migration.md)。
+日期：2026-09-15。4A 已实现并在临时数据库上验收；本页记录当前新库接口及后续阶段边界。
 
 对应任务：[迁移清单 4A](migration-checklist.md#4a先定义数据和业务操作)。设计背景：[业务事务](branch-comparison-and-migration.md#32-用业务操作封装事务完整事实先提交再发布)。
 
@@ -38,7 +38,7 @@
 
 | 对象 | 当前字段 | 含义与约束 |
 | --- | --- | --- |
-| Thread | `id`、`user_id`、`title`、`created_at`、`updated_at` | 会话身份、所属用户和展示信息；迁移需保留 |
+| Thread | `id`、`user_id`、`title`、`created_at`、`updated_at` | 会话身份、所属用户和展示信息 |
 | Run | `id`、`thread_id` | 任务身份及会话归属；外键关联 Thread |
 | Run | `status` | 当前产品状态；Python 有枚举，数据库有状态值 CHECK |
 | Run | `error`、`error_code` | 诊断文本与稳定错误码；失败结算默认码为 `execution_failed`，调用方可显式指定 |
@@ -46,13 +46,13 @@
 
 状态划分：
 
-- 非终态：`pending`、`running`、`interrupted`。`pending` 仅为旧数据保留，新 Run 直接创建为 `running`。
+- 非终态：`running`、`interrupted`。
 - 终态：`completed`、`error`、`cancelled`。
 - `interrupted` 表示本次执行暂停，仍占用 Thread，不能因此创建另一个 Run。
 
 **已实现约束：**每个 Thread 最多一个非终态 Run。创建接口使用 `BEGIN IMMEDIATE` 加事务内查询，新库增加部分唯一索引 `uq_runs_one_nonterminal_per_thread`，直接 SQL 写入也不能绕过排他。状态值及终态／完成时间关系由 CHECK 约束保护。
 
-产品 schema 版本单独记录在 `chat_schema`，不占用与 checkpointer 共库时的全库版本号。已有旧产品表但缺少版本标记、产品表不齐或版本不支持时，打开操作抛出 `SchemaMigrationRequired`；不自动迁移。完成显式副本升级前，旧库不能直接用于新版运行入口，但原数据保持可供旧实现或迁移工具读取。
+当前实现只在新数据库上安装当前 schema；历史数据库不在支持范围内。不会读取、转换或删除旧数据，使用新版前请手动删除旧数据库并创建新库。
 
 ### 2.2 已保存事件
 
@@ -101,7 +101,7 @@
 
 ### 3.2 保存完整消息：`append_message(...)`
 
-业务接口 `append_message(...)` 根据完整消息推导类型和稳定 key，调用 `append_committed_event(...)` 返回完整事实。原 `append_event(...)` 保留返回 `seq` 的 MessageJournal 兼容契约，内部委托同一校验与事务路径；它不是新的完整事实返回接口。
+业务接口 `append_message(...)` 根据完整消息推导类型和稳定 key，调用 `append_committed_event(...)` 返回完整事实。执行侧通过注入的 `MessageJournal.append_event()` 写入同一事务路径。
 
 已实现契约：
 
@@ -115,7 +115,7 @@
 
 比较使用严格序列化、排序对象键后的 JSON。JSON 对象键顺序不同不算冲突，数组顺序和消息内容变化算冲突。类型、完整 payload 和持久 metadata 纳入比较；生成的事件行 ID、序号和写入时间不参与比较。非法对象和 NaN 不会被默认转成字符串入库。
 
-兼容 `append_event(...)` 同样校验消息类型、分类和稳定 key 的一致性。公开追加接口拒绝 lifecycle 和 `run_*` 事件，状态事实只能由创建／结算事务写入。
+`append_event(...)` 同样校验消息类型、分类和稳定 key 的一致性。公开追加接口拒绝 lifecycle 和 `run_*` 事件，状态事实只能由创建／结算事务写入。
 
 ### 3.3 结算执行：`settle_execution(...)`
 
@@ -129,7 +129,7 @@
 
 错误文本使用 `str(outcome.error)`，稳定码由 `error_code` 单独存储。默认失败码为 `execution_failed`；非失败 outcome 不能传入错误码。
 
-`pending` 不能直接走正常结算，显式抛出 `InvalidRunState`；已终态或暂停但缺少匹配结算事件时同样报错。旧任务恢复在后续阶段处理。
+已终态或暂停但缺少匹配结算事件时显式抛出 `InvalidRunState`；同 Run 恢复在后续阶段处理。
 
 当前生命周期 key 是 `running:{run_id}` 和 `settled:{run_id}`，只适合当前单次执行链。第 7 步实现同 Run 恢复前，必须调整生命周期事件身份，否则第二次结算会撞键；4A 不把它定义成永久的多次执行契约。
 
@@ -143,7 +143,7 @@
 
 当前同一连接的读取会等待写锁，避免暴露该连接尚未提交的状态。写入返回和历史读取共用 `CommittedEvent` 形状。
 
-## 4. 返回模型与兼容边界
+## 4. 返回模型与数据库边界
 
 模型定义在 [app/run_state.py](../app/run_state.py)：
 
@@ -155,7 +155,7 @@
 
 这些返回值只在 commit 成功后交给调用方。写入返回与重开数据库读取的事实一致。
 
-当前 middleware 仍通过兼容的 `append_event()` 获取序号，现有执行发布模块仍消费结算结果中的状态。4C 接入完整事件发布时使用新返回值，不再重新拼造事实；本次未宣称统一发布链路已经完成。提交后发布失败的补读能力在第 6 步继续完善。
+当前 middleware 通过注入的 `append_event()` 写入完整事实，执行发布模块消费结算结果中的状态。4C 使用存储返回值发布，不重新拼造事实；提交后发布失败的补读能力在第 6 步继续完善。
 
 ## 5. 验收与后续工作
 
@@ -163,12 +163,12 @@
 
 - 新库数据库级非终态排他、状态值与完成时间约束。
 - 相同消息重试返回原事件；内容／元数据冲突报错且不增加记录；双连接并发重试只新增一条事实。
-- 兼容 journal 无法绕过消息校验或自行写生命周期事实。
+- 注入的 journal 无法绕过消息校验或自行写生命周期事实。
 - 创建、消息写入、结算返回结果与另一连接读取一致；重复结算返回原状态、错误与暂停信息。
 - 创建／消息／结算失败或取消回滚；原终态不被迟到结果覆盖。
 - 身份冲突转换为应用错误，HTTP 映射为 409。
-- 未迁移旧库被明确拒绝，schema 和数据未被改写。
+- 当前只验收新建数据库；历史数据库不在支持范围内，使用新版前由部署者删除并重建。
 
 新增场景见 [存储契约测试](../tests/test_storage_contracts.py)，既有回归见 [Runtime 测试](../tests/test_runtime.py)、[HTTP 测试](../tests/test_server.py) 与 [ChatStore 测试](../tests/test_chat_store.py)。完整验证结果记录在迁移清单的 4A 验收记录中。
 
-4B 旧数据副本审计与迁移现已完成验证，实际切换另行安排。后续仍包括：4C 统一提交后发布、第 5 步跨 Run 消息归属与严格框架转换、第 7 步同 Run 恢复。这些步骤未因 4A 完成而自动完成。
+旧数据迁移不在本项目范围内；4C 已接通统一提交后发布，后续仍包括第 5 步消息归属、第 6 步重建以及第 7 步同 Run 恢复。
