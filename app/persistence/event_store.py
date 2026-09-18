@@ -8,6 +8,7 @@ import json
 from typing import Any
 
 import aiosqlite
+from shikigen.messages import message_identity, normalize_message
 
 from app.persistence.database import Database, _now, integrity_error
 from app.run_state import CommittedEvent, EventWriteResult, MessageConflict, RunNotFound
@@ -107,6 +108,7 @@ class EventStore:
     if category == "lifecycle" or event_type.startswith("run_"):
       raise ValueError("Lifecycle events require a run transaction")
     if category == "message" or event_type.endswith("_message"):
+      content = normalize_message(content)
       expected_type, expected_key = self.message_identity(content)
       if (category, event_type, event_key) != ("message", expected_type, expected_key):
         raise ValueError("Message type, category and identity must agree")
@@ -120,7 +122,11 @@ class EventStore:
         await self._db.connection.execute("BEGIN IMMEDIATE")
         if not await self._run_exists(run_id, thread_id):
           raise RunNotFound("Run not found")
-        existing = await self.event_by_key(thread_id, run_id, event_key)
+        existing = (
+          await self.message_by_key(thread_id, event_key)
+          if category == "message"
+          else await self.event_by_key(thread_id, run_id, event_key)
+        )
         if existing is not None:
           if (
             existing["event_type"] != event_type
@@ -164,28 +170,18 @@ class EventStore:
   def _json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, allow_nan=False)
 
-  @staticmethod
-  def message_identity(content: Any) -> tuple[str, str]:
-    if not isinstance(content, dict):
-      raise ValueError("Complete message must be an object")
-    kind = content.get("type")
-    if kind not in ("human", "ai", "tool"):
-      raise ValueError("Unsupported complete message type")
-    if not isinstance(content.get("content"), (str, list)):
-      raise ValueError("Message content must be text or content blocks")
-    identity = content.get("message_id")
-    if kind == "ai" and not isinstance(content.get("tool_calls"), list):
-      raise ValueError("AI message requires tool_calls")
-    if kind == "tool":
-      call_id = content.get("tool_call_id")
-      if not isinstance(call_id, str) or not call_id.strip():
-        raise ValueError("Tool message requires tool_call_id")
-      if content.get("status") not in ("success", "error"):
-        raise ValueError("Tool message requires success/error status")
-      identity = identity or call_id
-    if not isinstance(identity, str) or not identity.strip():
-      raise ValueError("Message requires a stable identity")
-    return f"{kind}_message", f"{kind}:{identity}"
+  message_identity = staticmethod(message_identity)
+
+  async def message_by_key(
+    self, thread_id: str, event_key: str | None
+  ) -> CommittedEvent | None:
+    cursor = await self._db.connection.execute(
+      "SELECT * FROM run_events WHERE thread_id = ? "
+      "AND category = 'message' AND event_key = ?",
+      (thread_id, event_key),
+    )
+    row = await cursor.fetchone()
+    return self._decode_event(row) if row is not None else None
 
   async def event_by_key(
     self,

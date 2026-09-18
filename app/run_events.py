@@ -46,7 +46,8 @@ class RunEventIngestor:
       metadata=metadata,
       event_key=event_key,
     )
-    self.publish(execution.stream, (result.event,))
+    if result.event["run_id"] == run_id:
+      self.publish(execution.stream, (result.event,))
     return result.event["seq"]
 
   @staticmethod

@@ -1,4 +1,4 @@
 docs/branch-comparison-and-migration.md
 docs/migration-checklist.md
 
-4A：先定义数据和业务操作
+现在完成 ## 八、第 5 步：消息身份、归属与契约

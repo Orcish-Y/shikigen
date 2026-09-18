@@ -12,6 +12,7 @@ from app.persistence.event_store import EventStore
 from app.run_state import (
   CommittedRunState,
   InvalidRunState,
+  MessageConflict,
   RunNotFound,
   RunSnapshot,
   RunStatus,
@@ -64,6 +65,8 @@ class RunStore:
         )
         if await cursor.fetchone() is not None:
           raise ThreadBusy("Thread is busy with another run")
+        if await self._events.message_by_key(thread_id, f"human:{entry_message.id}"):
+          raise MessageConflict("Entry message already belongs to a run")
         now = _now()
         await self._db.connection.execute(
           """INSERT INTO runs(id, thread_id, status, created_at, updated_at)

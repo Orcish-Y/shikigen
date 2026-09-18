@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Protocol
 
 from langchain_core.language_models.chat_model_stream import AsyncChatModelStream
 from langchain_core.messages import HumanMessage
+from pydantic import BaseModel
 
 from shikigen.execution import (
   ExecutionOutcome,
@@ -14,6 +15,7 @@ from shikigen.execution import (
   RunExecution,
 )
 from shikigen.runtime_context import AgentRunContext
+from shikigen.stream import MessageData, ToolCallData
 
 if TYPE_CHECKING:
   from shikigen.callback_handler import TokenTracker
@@ -57,10 +59,18 @@ async def execute_agent_loop(
     async for message in event_stream.messages:
       emitted_text = False
       async for text_delta in message.text:
+        if getattr(message, "namespace", []):
+          continue
         emitted_text = True
-        execution.stream.publish("message", {"text": text_delta, "done": False})
+        data: MessageData = {"text": text_delta, "done": False}
+        if identity := getattr(message, "message_id", None):
+          data["message_id"] = identity
+        execution.stream.publish("message", data)
       if emitted_text:
-        execution.stream.publish("message", {"text": "", "done": True})
+        end: MessageData = {"text": "", "done": True}
+        if identity := getattr(message, "message_id", None):
+          end["message_id"] = identity
+        execution.stream.publish("message", end)
 
   async def handle_tool_calls(event_stream: AgentEventStream) -> None:
     async for call in event_stream.tool_calls:
@@ -68,14 +78,21 @@ async def execute_agent_loop(
       async for _ in call.output_deltas:
         pass
 
-      execution.stream.publish(
-        "tool_call",
-        {
-          "name": call.tool_name,
-          "input": call.input,
-          "output": call.output,
-        },
-      )
+      if getattr(call, "namespace", []):
+        continue
+      data: ToolCallData = {
+        "name": call.tool_name,
+        "input": call.input,
+        "output": (
+          call.output.model_dump(mode="json")
+          if isinstance(call.output, BaseModel)
+          else call.output
+        ),
+      }
+      if identity := getattr(call, "tool_call_id", None):
+        data["tool_call_id"] = identity
+        data["message_id"] = f"tool-result:{identity}"
+      execution.stream.publish("tool_call", data)
 
   async def consume_event_stream(event_stream: AgentEventStream) -> None:
     async with asyncio.TaskGroup() as group:

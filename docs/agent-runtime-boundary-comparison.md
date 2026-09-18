@@ -59,7 +59,7 @@ CLI 和 gateway 共用 SQLite SessionDB。正常 transcript 由 Agent 保存；�
 
 | 做什么（What） | 为什么（Why） | 接口方向（How，建议而非现有承诺） |
 | --- | --- | --- |
-| HTTP 层只做请求解析、认证入口、响应/流编码和错误映射 | 切换 CLI、cron、子 Agent 不应重写 run 流程 | 调用独立 run service；将内部事件编码为当前使用的 JSONL 响应 |
+| HTTP 层只做请求解析、认证入口、响应/流编码和错误映射 | 切换 CLI、cron、子 Agent 不应重写 run 流程 | 调用独立 run service；将内部事件编码为当前使用的 SSE 响应 |
 | 独立 run 服务管理开始、取消、等待、收尾及持久状态 | 这些能力跨网络入口复用，又比单次模型/工具 loop 更高层 | 对外提供 start/cancel/wait/subscribe 类能力；复用 RunExecution/Registry |
 | Agent execution 保留模型、工具、middleware、执行 checkpoint | 单轮执行不必知道 HTTP、用户表或后台作业资源 | 输入运行上下文和取消信号，输出执行结果/事件 |
 | 存储实现保持可注入，执行 journal 与产品查询职责分开 | 保存语义、查询需求和物理后端可以独立演进 | MessageJournal、checkpointer、run repository 等窄接口 |

@@ -87,7 +87,10 @@ class StorageContractTests(unittest.IsolatedAsyncioTestCase):
     )
     self.assertFalse(repeated.inserted)
     self.assertEqual(repeated.event, original.event)
-    for changes in ({"content": "different"}, {"tool_calls": [{"id": "call"}]}):
+    for changes in (
+      {"content": "different"},
+      {"tool_calls": [{"id": "call", "name": "add", "args": {}}]},
+    ):
       with self.subTest(changes=changes), self.assertRaises(MessageConflict):
         await self.append(**changes)
     with self.assertRaises(MessageConflict):

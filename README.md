@@ -5,7 +5,7 @@
 - `packages/harness/shikigen/`：框架包，包含 Agent、执行 Loop、运行时、工具和 middleware，使用 `shikigen.*` 导入。
 - `app/`：应用层，包含 FastAPI 服务器，依赖 `shikigen`。
 - `app/routes/thread.py`：会话列表、创建会话、会话历史消息。
-- `app/routes/run.py`：发起流式运行、查询运行消息和 JSONL 事件编码。
+- `app/routes/run.py`：发起流式运行、查询运行消息；SSE 事件编码位于 `app/run_contract.py`。
 - `app/persistence/`：会话与运行数据库、SQLite checkpoint 连接管理。
 - `app/runtime.py`：HTTP 请求共享的应用运行时。
 - `tests/`：测试。
@@ -69,7 +69,7 @@ AppConfigError: Config field "..." requires missing environment variable "GITHUB
 curl -X POST http://127.0.0.1:8000/api/threads
 ```
 
-复制响应中的 `thread_id`，然后发送一条消息并消费 JSONL 事件流：
+复制响应中的 `thread_id`，然后发送一条消息并消费 SSE 事件流：
 
 ```bash
 curl -N \
@@ -78,29 +78,38 @@ curl -N \
   -d '{"message":"你好，请介绍一下自己"}'
 ```
 
-`curl -N` 会关闭输出缓冲，使每一行 JSON 事件到达后立即显示。模型回答以
-`message.delta` 事件逐段返回；同一个输出项的事件共享 `output_index`，客户端可据此
-将事件归并成最终数组。
+`curl -N` 关闭输出缓冲。响应类型是 `text/event-stream`，每帧包含 `event:` 和
+`data:`，以空行结束。只有 `metadata`、`delta`、`event`、`error` 四类事件：
 
-同一 thread 已有 pending 或 running 的 run 时，请求返回 HTTP 409。
-正常结束发送 `run.completed`，取消发送 `run.cancelled`，失败发送 `run.error`。
+- `metadata`：Thread／Run 身份、运行状态，可携带 usage。
+- `delta`：按 message_id 关联的文本增量，field 表示 content 或 reasoning；当前 Loop 输出 content。
+- `event`：已提交完整事实，category 区分 message／lifecycle，payload 保存内容。
+- `error`：观察失败；Run 执行失败由 lifecycle 事实表达。
 
-客户端断线后只关闭该连接的流式订阅，Agent 和 run 继续执行并保存结果，
-后台任务结束后自动回收内存中的 run 和事件流。目前不提供实时断线重连；
-可通过 `GET /api/threads/{thread_id}/messages` 查询已保存的消息，
-或使用 metadata 中的 run_id 调用 `GET /api/threads/{thread_id}/runs/{run_id}/messages`。
-服务器关闭时仍会取消未结束的任务。
+同一 Thread 已有 running 或 interrupted 的 Run 时，请求返回 HTTP 409。
+客户端按稳定消息身份合并预览；完整事实到达后覆盖预览，按 seq 去重。
+EOF 不表示运行成功，完成状态以 lifecycle 事实为准。
 
-```jsonl
-{"id":"0","event":"metadata","data":{"run_id":"abc"}}
-{"id":"1","event":"message.delta","data":{"delta":"你"},"output_index":0}
-{"id":"2","event":"message.delta","data":{"delta":"好"},"output_index":0}
-{"id":"3","event":"message.completed","data":{},"output_index":0}
-{"id":"4","event":"run.completed","data":{"status":"completed"}}
+客户端断线后只关闭自己的订阅，Agent 继续执行并保存结果。目前不提供实时重连，
+也不发送 SSE id 或支持 Last-Event-ID 恢复。通过
+`GET /api/threads/{thread_id}/messages` 查询已保存的消息，或使用首帧 run_id 调用
+`GET /api/threads/{thread_id}/runs/{run_id}/messages`。不要重发创建请求来恢复观察，
+它会新建 Run。服务器关闭时会取消未结束的任务。
+
+帧格式示例（省略中间的完整消息和生命周期事实）：
+
+```text
+event: metadata
+data: {"thread_id":"thread-1","run_id":"run-1","status":"running"}
+
+event: delta
+data: {"message_id":"answer-1","field":"content","value":"你好"}
+
 ```
 
-Agent 和 Stream 内部只发布与传输格式无关的通用事件；JSONL 事件名称转换、
-`output_index` 分配和逐行编码集中在 Server 的传输 adapter 中完成。
+本入口是 POST，浏览器应使用 fetch 流式读取并解析 SSE 帧，不能直接用原生 EventSource
+发送请求体。详细契约见 [消息与事件契约](docs/5-message-identity-and-event-contract.md)。
+Agent 和 Stream 发布协议无关内部事件，`app/run_contract.py` 负责投影和 SSE 编码。
 
 ### 允许容器或局域网访问
 

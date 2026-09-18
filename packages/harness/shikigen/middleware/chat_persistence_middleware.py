@@ -6,6 +6,7 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.runtime import Runtime
 from langgraph.types import Command
 
+from shikigen.messages import message_content, message_identity
 from shikigen.runtime_context import AgentRunContext
 
 
@@ -30,15 +31,6 @@ def _context(context: object) -> AgentRunContext:
   if not isinstance(context, AgentRunContext):
     raise RuntimeError("Chat persistence requires AgentRunContext")
   return context
-
-
-def _message_key(prefix: str, message: HumanMessage | AIMessage | ToolMessage) -> str:
-  # 稳定 key 让 checkpoint 重放同一条消息时命中数据库幂等约束。
-  if message.id:
-    return f"{prefix}:{message.id}"
-  if isinstance(message, ToolMessage):
-    return f"{prefix}:{message.tool_call_id}"
-  raise RuntimeError(f"{type(message).__name__} requires a stable message id")
 
 
 def _tool_messages(result: ToolMessage | Command[Any]) -> list[ToolMessage]:
@@ -78,17 +70,14 @@ class ChatPersistenceMiddleware(AgentMiddleware[AgentState, AgentRunContext]):
 
     message = messages[-1]
     context = _context(runtime.context)
+    content = message_content(message)
     await self._journal.append_event(
       thread_id=context.thread_id,
       run_id=context.run_id,
       event_type="human_message",
       category="message",
-      event_key=_message_key("human", message),
-      content={
-        "type": "human",
-        "content": message.content,
-        "message_id": message.id,
-      },
+      event_key=message_identity(content)[1],
+      content=content,
     )
 
   @override
@@ -104,18 +93,14 @@ class ChatPersistenceMiddleware(AgentMiddleware[AgentState, AgentRunContext]):
 
     message = messages[-1]
     context = _context(runtime.context)
+    content = message_content(message)
     await self._journal.append_event(
       thread_id=context.thread_id,
       run_id=context.run_id,
       event_type="ai_message",
       category="message",
-      event_key=_message_key("ai", message),
-      content={
-        "type": "ai",
-        "content": message.content,
-        "message_id": message.id,
-        "tool_calls": message.tool_calls,
-      },
+      event_key=message_identity(content)[1],
+      content=content,
     )
 
   @override
@@ -128,19 +113,13 @@ class ChatPersistenceMiddleware(AgentMiddleware[AgentState, AgentRunContext]):
     result = await handler(request)
     context = _context(request.runtime.context)
     for message in _tool_messages(result):
+      content = message_content(message)
       await self._journal.append_event(
         thread_id=context.thread_id,
         run_id=context.run_id,
         event_type="tool_message",
         category="message",
-        event_key=_message_key("tool", message),
-        content={
-          "type": "tool",
-          "content": message.content,
-          "message_id": message.id,
-          "tool_call_id": message.tool_call_id,
-          "name": message.name,
-          "status": message.status,
-        },
+        event_key=message_identity(content)[1],
+        content=content,
       )
     return result

@@ -1,7 +1,7 @@
 import asyncio
 from collections.abc import AsyncGenerator, Callable, Mapping
 from dataclasses import dataclass
-from typing import Any, Literal, TypedDict, cast, overload
+from typing import Any, Literal, NotRequired, TypedDict, cast, overload
 
 
 class MetadataData(TypedDict):
@@ -13,6 +13,7 @@ class MetadataData(TypedDict):
 class MessageChunkData(TypedDict):
   """一条逻辑消息的文本块。"""
 
+  message_id: NotRequired[str]
   text: str
   done: Literal[False]
 
@@ -20,6 +21,7 @@ class MessageChunkData(TypedDict):
 class MessageDoneData(TypedDict):
   """一条逻辑消息已经结束。"""
 
+  message_id: NotRequired[str]
   text: Literal[""]
   done: Literal[True]
 
@@ -30,6 +32,8 @@ type MessageData = MessageChunkData | MessageDoneData
 class ToolCallData(TypedDict):
   """工具调用事件载荷。"""
 
+  message_id: NotRequired[str]
+  tool_call_id: NotRequired[str]
   name: str
   input: Any
   output: Any

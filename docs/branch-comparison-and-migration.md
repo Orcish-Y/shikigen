@@ -4,7 +4,7 @@
 
 2026-09-16 策略调整：历史产品数据库内容直接放弃，不再设计或执行 4B 数据迁移。当前
 `ChatStore` 只在新数据库上安装当前 schema；历史数据库不在支持范围内，部署者需要先删除旧数据库再创建新库。旧迁移模块、迁移测试和说明已删除。HTTP 的
-`event_version` 暂不升级，继续使用现有 JSONL，v2 模型和版本切换代码已删除。下文更早的
+`event_version` 暂不升级，HTTP 已于 2026-09-18 切换 SSE，v2 模型和版本切换代码已删除。下文更早的
 4B／5B 记录属于已被本条策略覆盖的历史记录。
 
 2026-09-14 补充迁移目标：不启动 FastAPI，也能通过同一套 Run 运行模块执行 Agent，并完成持久化、查询与资源回收。该目标纳入本次迁移的完成条件，详见第 3.15 节和 [实施清单](migration-checklist.md)；下文原始比较与测试记录仍对应首次调查时点。
@@ -33,6 +33,17 @@ Thread、Run、消息或 checkpoint。4B 当前只表示“放弃历史库并从
 Thread 操作位于 `app/services/thread.py`，Run 操作位于 `app/services/run.py`，
 后台操作的接收与关闭位于 `app/lifecycle.py`。HTTP 和普通 Python 入口通过
 `runtime.threads`、`runtime.runs` 访问服务，装配与存储释放仍由 `composition.py` 负责。
+
+2026-09-17 第 5 步更新：已集中完整消息转换与严格事件契约，保留 middleware 写入路径。
+Thread 内持久事实决定唯一归属，重放保留原 Run，同身份内容变化报冲突；工具结果身份
+由 tool_call_id 决定。Loop 不增加 checkpoint baseline 读取。真实两轮 checkpoint 和同 Run
+恢复重放验收通过；2026-09-18 传输改为 SSE，删除 JSONL，event_version 不升级。
+详见 [第 5 步实现与边界](5-message-identity-and-event-contract.md)。
+下文原始比较中的 Adapter/baseline 方案属于调查建议，实际实施以此记录与清单为准。
+
+2026-09-18 SSE 更新：HTTP 与 copy 一样使用 metadata、delta、event、error 四类 SSE。
+删除 JSONL 编码及 output_index；完整事实转换成 category/event_type/payload。
+本项目 delta 暂按 message_id 定位，seq 预留仍属于第 6 步。下方比较表保留原调查时点。
 
 ## 1. 比较范围与结论
 
@@ -204,9 +215,9 @@ copy 的具体拼接方式是：同步注册订阅，读取持久历史中不超
 
 **验收：**重连不调用 Graph；数据库读取期间产生的事件不遗漏；终态 Run 不依赖内存也能重建；重复重建结果相同。
 
-这是**全量重建协议**。copy 明确拒绝 `cursor` 和 `Last-Event-ID`，不能描述为已经实现断点增量续传。当前 JSONL 可以承载同样语义，没有必要先换成 SSE。
+这是**全量重建协议**。copy 明确拒绝 `cursor` 和 `Last-Event-ID`，不能描述为已经实现断点增量续传。当前项目已切换 SSE；全量重建仍属于第 6 步。
 
-来源：[copy 历史与 live 拼接](../../shikigen-agent-copy/server/routes/runs.py:327)、[既有 Run 流](../../shikigen-agent-copy/server/routes/runs.py:373)、[当前 JSONL encoder](../app/routes/run.py:65)。
+来源：[copy 历史与 live 拼接](../../shikigen-agent-copy/server/routes/runs.py:327)、[既有 Run 流](../../shikigen-agent-copy/server/routes/runs.py:373)、[当前 SSE encoder](../app/run_contract.py)。
 
 ### 3.7 审批作为持久产品事实，同一个 Run 可以多次恢复
 
@@ -258,7 +269,7 @@ copy 还区分持久的 Run lifecycle error 与连接／协议 error，并把稳
 
 **验收：**schema 生成结果无漂移；未知字段按契约拒绝；必需 JSON 字段的显式 null 不被序列化丢失；协议错误不污染持久状态。
 
-迁移时先定义当前 JSONL 的严格事件模型即可。copy 的通用 delta path 包含字符串、数组下标和 selector，如果当前只更新消息文本，可以保留更窄的事件接口。客户端只记录状态模型启发，不把 React UI 列为本项目迁移任务。
+当前已实现 SSE 严格事件模型。copy 的通用 delta path 包含字符串、数组下标和 selector，如果当前只更新消息文本，可以保留更窄的事件接口。客户端只记录状态模型启发，不把 React UI 列为本项目迁移任务。
 
 来源：[产品模型](../../shikigen-agent-copy/server/models.py)、[传输契约](../../shikigen-agent-copy/server/protocol/contract.py)、[schema 生成](../../shikigen-agent-copy/scripts/generate_sse_contract.py)、[客户端状态分离](../../shikigen-agent-copy/packages/react-client/src/state/run.ts:31)。
 
@@ -342,7 +353,7 @@ copy 的默认值不随启动目录变化，但安装成包后会指向源码安
 
 职责分工：
 
-- HTTP 层负责请求校验、鉴权、应用错误映射与 JSONL 编码，调用运行模块；`lifespan` 进入和退出共享装配上下文。
+- HTTP 层负责请求校验、鉴权、应用错误映射与 SSE 编码，调用运行模块；`lifespan` 进入和退出共享装配上下文。
 - 独立运行模块负责 Run 创建、执行协调、持久化结算、事件交付与资源回收，不导入 FastAPI、路由或 `app.server`。
 - 单次 Agent 执行层负责模型、工具、middleware，并在执行边界通过注入的 journal/checkpointer 接口驱动完整消息和 checkpoint 保存；具体存储实现负责读写与事务。当前入口消息由 Run 创建事务保存，执行侧不重复创建。
 - Run runtime 与单次执行层都可以是可复用 harness 的组成部分；当前 Run 服务放在 `app/` 不代表这些能力永久属于 HTTP 应用，也不把产品生命周期全部塞进 Agent 工厂。

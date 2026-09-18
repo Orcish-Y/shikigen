@@ -47,6 +47,7 @@ class ToolCall:
 
 
 class Message:
+  message_id = "answer"
   text = AsyncItems("你", "好")
 
 
@@ -129,9 +130,9 @@ class RunAgentLoopTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(
       [event.data for event in message_events],
       [
-        {"text": "你", "done": False},
-        {"text": "好", "done": False},
-        {"text": "", "done": True},
+        {"text": "你", "done": False, "message_id": "answer"},
+        {"text": "好", "done": False, "message_id": "answer"},
+        {"text": "", "done": True, "message_id": "answer"},
       ],
     )
 

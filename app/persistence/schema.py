@@ -50,6 +50,9 @@ CREATE TABLE IF NOT EXISTS run_events (
   UNIQUE (thread_id, seq)
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS uq_thread_message_identity
+  ON run_events(thread_id, event_key) WHERE category = 'message';
+
 CREATE INDEX IF NOT EXISTS ix_run_events_run_category_seq
   ON run_events(thread_id, run_id, category, seq);
 

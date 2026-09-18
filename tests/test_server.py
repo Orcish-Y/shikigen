@@ -1,5 +1,4 @@
 import asyncio
-import json
 import tempfile
 import unittest
 from contextlib import asynccontextmanager
@@ -12,6 +11,7 @@ from fastapi import FastAPI, Request
 from runtime_fixtures import deterministic_agent
 from shikigen.app_config import AppConfig, McpConfig, ModelConfig
 from shikigen.execution import RunExecution
+from sse_fixtures import parse_sse, parse_sse_frames
 from test_loop import BlockingAgent, MessageAgent
 
 from app.composition import assemble_runtime, open_runtime
@@ -100,10 +100,11 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
       )
       start.assert_awaited_once_with(thread, "hello")
     self.assertEqual(response.status_code, 200)
-    self.assertIn("application/x-ndjson", response.headers["content-type"])
-    events = [json.loads(line) for line in response.text.splitlines()]
+    self.assertIn("text/event-stream", response.headers["content-type"])
+    events = parse_sse_frames(response.text)
     run_id = events[0]["data"]["run_id"]
-    self.assertEqual(events[-1]["event"], "run.completed")
+    self.assertEqual(events[-1]["event"], "metadata")
+    self.assertEqual(events[-1]["data"]["status"], "completed")
     self.assertEqual(
       (await self.runtime.runs.read_run(thread, run_id))["status"], "completed"
     )
@@ -160,7 +161,7 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
             Request({"type": "http", "app": server_app}),
           )
           iterator = response.body_iterator
-          first = json.loads(await anext(iterator))
+          first = parse_sse(await anext(iterator))
           run_id = first["data"]["run_id"]
           execution = self.runtime.executions.get(thread, run_id)
           await asyncio.wait_for(entered.wait(), 2)
@@ -196,8 +197,8 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
       response = await self.client.post(
         f"/api/threads/{thread}/stream", json={"message": "hello"}
       )
-    events = [json.loads(line) for line in response.text.splitlines()]
-    self.assertEqual(events[-1]["event"], "stream_failed")
+    events = parse_sse_frames(response.text)
+    self.assertEqual(events[-1]["event"], "error")
     self.assertFalse(
       any(e["event"] in ("run.completed", "run.error", "run.cancelled") for e in events)
     )
@@ -215,8 +216,8 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
         response = await self.client.post(
           f"/api/threads/{thread}/stream", json={"message": "1+2"}
         )
-        events = [json.loads(line) for line in response.text.splitlines()]
-        self.assertEqual(events[-1]["event"], "run.completed")
+        events = parse_sse_frames(response.text)
+        self.assertEqual(events[-1]["data"]["status"], "completed")
         messages = (await self.client.get(f"/api/threads/{thread}/messages")).json()[
           "data"
         ]
@@ -231,35 +232,103 @@ class EncoderTests(unittest.IsolatedAsyncioTestCase):
       execution = RunExecution("run", "thread")
       execution.stream.publish("status", {"status": status})
       execution.stream.close()
-      events = [json.loads(line) async for line in stream_run_events(execution)]
-      self.assertEqual(events[-1]["event"], f"run.{status}")
-      self.assertEqual(events[-1]["data"], {"status": status})
+      events = [parse_sse(line) async for line in stream_run_events(execution)]
+      self.assertEqual(events[-1]["event"], "metadata")
+      self.assertEqual(
+        events[-1]["data"], {"thread_id": "thread", "run_id": "run", "status": status}
+      )
 
-  async def test_serializes_complete_events_as_json_lines(self):
+  async def test_serializes_sse_and_omits_ephemeral_completion_events(self):
     execution = RunExecution("run", "thread")
     execution.stream.publish("metadata", {"run_id": "run"})
-    execution.stream.publish("message", {"text": "你", "done": False})
+    execution.stream.publish(
+      "message", {"text": "你\n好", "done": False, "message_id": "answer"}
+    )
     execution.stream.publish("message", {"text": "", "done": True})
     execution.stream.publish("tool_call", {"name": "search", "input": {}, "output": {}})
     execution.stream.close()
-    lines = [line async for line in stream_run_events(execution)]
+    frames = [frame async for frame in stream_run_events(execution)]
     self.assertEqual(
-      [json.loads(line) for line in lines],
+      [parse_sse(frame) for frame in frames],
       [
-        {"id": "0", "event": "metadata", "data": {"run_id": "run"}},
         {
-          "id": "1",
-          "event": "message.delta",
-          "data": {"delta": "你"},
-          "output_index": 0,
+          "event": "metadata",
+          "data": {"thread_id": "thread", "run_id": "run", "status": "running"},
         },
-        {"id": "2", "event": "message.completed", "data": {}, "output_index": 0},
         {
-          "id": "3",
-          "event": "tool_call.completed",
-          "data": {"name": "search", "input": {}, "output": {}},
-          "output_index": 1,
+          "event": "delta",
+          "data": {"message_id": "answer", "field": "content", "value": "你\n好"},
         },
       ],
     )
-    self.assertTrue(all(line.endswith("\n") for line in lines))
+    self.assertTrue(all(frame.endswith("\n\n") for frame in frames))
+
+  async def test_run_failure_is_lifecycle_fact_and_metadata_not_observation_error(self):
+    execution = RunExecution("run", "thread")
+    execution.stream.publish(
+      "durable_event",
+      {
+        "id": 1,
+        "thread_id": "thread",
+        "run_id": "run",
+        "seq": 1,
+        "event_type": "run_error",
+        "category": "lifecycle",
+        "event_key": "settled:run",
+        "content": {
+          "status": "error",
+          "message": "model failed",
+          "error_code": "execution_failed",
+        },
+        "metadata": {},
+        "created_at": "2026-09-18T00:00:00+00:00",
+      },
+    )
+    execution.stream.publish("error", {"message": "model failed"})
+    execution.stream.close()
+    frames = [parse_sse(frame) async for frame in stream_run_events(execution)]
+    self.assertEqual(
+      [frame["event"] for frame in frames], ["metadata", "event", "metadata"]
+    )
+    self.assertEqual(frames[1]["data"]["event_type"], "status_changed")
+    self.assertEqual(frames[1]["data"]["payload"]["status"], "error")
+    self.assertEqual(frames[-1]["data"]["status"], "error")
+
+  async def test_usage_is_metadata_and_null_artifact_survives_sse(self):
+    execution = RunExecution("run", "thread")
+    usage = {
+      "total_input": 1,
+      "total_output": 2,
+      "total_tokens": 3,
+      "calls": 1,
+      "by_model": {},
+    }
+    execution.stream.publish("usage", usage)
+    execution.stream.publish(
+      "durable_event",
+      {
+        "id": 2,
+        "thread_id": "thread",
+        "run_id": "run",
+        "seq": 2,
+        "event_type": "tool_message",
+        "category": "message",
+        "event_key": "tool:call",
+        "content": {
+          "type": "tool",
+          "message_id": "tool-result:call",
+          "tool_call_id": "call",
+          "content": "ok",
+          "status": "success",
+          "artifact": None,
+        },
+        "metadata": {},
+        "created_at": "2026-09-18T00:00:00+00:00",
+      },
+    )
+    execution.stream.close()
+    frames = [parse_sse(frame) async for frame in stream_run_events(execution)]
+    self.assertEqual(frames[1]["data"]["usage"], usage)
+    self.assertEqual(frames[2]["event"], "event")
+    self.assertIsNone(frames[2]["data"]["payload"]["artifact"])
+    self.assertNotIn("name", frames[2]["data"]["payload"])
