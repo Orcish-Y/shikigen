@@ -43,6 +43,7 @@ class Metadata(StrictModel):
 
 
 class Preview(StrictModel):
+  seq: Annotated[int, Field(gt=0)] | None = None
   text: str
   done: bool
   message_id: Identity | None = None

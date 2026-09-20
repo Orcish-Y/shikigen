@@ -43,7 +43,11 @@ Thread 内持久事实决定唯一归属，重放保留原 Run，同身份内容
 
 2026-09-18 SSE 更新：HTTP 与 copy 一样使用 metadata、delta、event、error 四类 SSE。
 删除 JSONL 编码及 output_index；完整事实转换成 category/event_type/payload。
-本项目 delta 暂按 message_id 定位，seq 预留仍属于第 6 步。下方比较表保留原调查时点。
+2026-09-18 6A 更新：delta 已携带预留 seq 和 message_id，完整消息复用同一 seq。
+所有持久事实通过事务内 Thread 分配器取号；预留空洞允许存在，最大 seq 不代表提交水位。
+后续入口调整：Loop 顺序消费原始 Graph 事件，GraphEventAdapter 转换根图完整消息；
+已移除持久化 middleware 与 wait_preview。存储继续负责跨 Run 归属，已有事实不重复发布。
+第 6B 步的只读重建与实时跟随尚未实现。下方比较表保留原调查时点。
 
 ## 1. 比较范围与结论
 
@@ -73,7 +77,7 @@ Thread 内持久事实决定唯一归属，重放保留原 Run，同身份内容
 - **运行清理已有明确职责。** Loop 使用 TaskGroup、取消信号竞争和 finally 收尾；`RunManager.detach()` 允许消费者断连后继续执行，待任务和持久化完成再回收。
 - **已存在产品消息记录、幂等键和 Thread 内序号。** copy 的优势是进一步完善规则，不是首次引入这些能力。
 
-来源：[workspace 配置](../pyproject.toml)、[包配置](../packages/harness/pyproject.toml)、[持久化接口与中间件](../packages/harness/shikigen/middleware/chat_persistence_middleware.py)、[RunManager](../packages/harness/shikigen/run_manager.py)、[ChatStore](../app/persistence/chat_store.py)。
+来源：[workspace 配置](../pyproject.toml)、[包配置](../packages/harness/pyproject.toml)、[当前 Graph 事件转换](../packages/harness/shikigen/graph_events.py)、[RunManager](../packages/harness/shikigen/run_manager.py)、[ChatStore](../app/persistence/chat_store.py)。
 
 ### 2.2 总体差异表
 
@@ -187,7 +191,7 @@ Thread 内持久事实决定唯一归属，重放保留原 Run，同身份内容
 
 **迁移前置条件：先解决 copy 的跨 Run 历史识别问题。**同一消息只设一个正常写入归属。可保留 middleware 并接入统一写入接口，也可在执行 runtime 中由新 Ingestor 接管；仅在接管后停用对应旧写入路径。两种方式都在执行侧获取完整事实，不从 HTTP token 流重建消息，也不意味着 harness 退出持久化职责。
 
-来源：[当前持久化中间件](../packages/harness/shikigen/middleware/chat_persistence_middleware.py)、[copy Adapter](../../shikigen-agent-copy/server/langgraph_event_adapter.py:72)、[工具结果转换](../../shikigen-agent-copy/server/langgraph_event_adapter.py:470)。
+来源：[当前 Graph 事件转换](../packages/harness/shikigen/graph_events.py)、[copy Adapter](../../shikigen-agent-copy/server/langgraph_event_adapter.py:72)、[工具结果转换](../../shikigen-agent-copy/server/langgraph_event_adapter.py:470)。
 
 ### 3.5 稳定 seq、完整事件与临时增量分工
 

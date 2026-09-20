@@ -480,7 +480,7 @@ interrupted 的完整 checkpoint 事实。测试使用临时数据库和确定�
 **做什么：**集中转换完整消息，按 Thread 内持久事实确定唯一 Run 归属。
 
 **为什么：**checkpoint 负责 Graph 状态恢复，持久事实负责产品历史；历史重放不能改归新 Run。
-现有 middleware 只提交当前模型／工具的完整结果，因此无需在 Loop 注入 checkpoint baseline。
+当前 Loop 通过 GraphEventAdapter 提取根图完整消息候选，存储判断归属，无需 checkpoint baseline。
 
 **接口：**`message_content()`、`normalize_message()`、`EventStore.message_by_key()`，
 以及现有 `MessageJournal`／`RunEventIngestor`。
@@ -492,8 +492,8 @@ interrupted 的完整 checkpoint 事实。测试使用临时数据库和确定�
 - [x] 不同 Run 的历史重放保留原归属，不广播到新 Run。
 - [x] 完整事实不可变，同身份内容变化明确报冲突。
 - [x] 工具结果身份由 tool_call_id 决定，保留 artifact 省略与 null 的区别。
-- [x] 主 Agent middleware 保存产品消息，子 Agent 内部消息不纳入父 Run。
-- [x] 保留 middleware 单一写入路径，不消费 root values 全量快照写库，不从 token 重建消息。
+- [x] 根图 values 提供产品消息，子 Agent 内部消息不纳入父 Run。
+- [x] 完整消息由 Loop → Ingestor 单一路径接入；Adapter 过滤重复快照，存储判断跨 Run 归属，不从 token 重建。
 
 **关键验收：**确定性 Agent 在同 Thread 使用真实 SQLite checkpoint 连续执行两轮，
 每轮仅保存本轮 4 条消息；实时身份对应持久历史。重复消息、工具重放、同 Run checkpoint
@@ -527,12 +527,27 @@ interrupted 的完整 checkpoint 事实。测试使用临时数据库和确定�
 
 **接口：**`reserve_message_sequence()`、`ingest_delta()`、`ingest_message()`。
 
-- [ ] Thread 序号分配在事务中完成，支持先预留后保存完整事实。
-- [ ] 同消息后续增量复用原 seq，不为每个 token 申请持久序号。
-- [ ] 完整消息覆盖同 seq 的预览；预览内容不同只产生诊断，不压过完整事实。
-- [ ] 未完成的消息可能留下序号空洞，消费者按大小排序但不要求连续。
-- [ ] 完整消息已经提交后再收到其增量，按明确协议错误处理。
-- [ ] 不把“预留到的最大 seq”当成全部历史均已提交的游标。
+- [x] Thread 序号分配在事务中完成，支持先预留后保存完整事实。
+- [x] 同消息后续增量复用原 seq，不为每个 token 申请持久序号。
+- [x] 完整消息覆盖同 seq 的预览；预览内容不同只产生诊断，不压过完整事实。
+- [x] 未完成的消息可能留下序号空洞，消费者按大小排序但不要求连续。
+- [x] 完整消息已经提交后再收到其增量，按明确协议错误处理。
+- [x] 不把“预留到的最大 seq”当成全部历史均已提交的游标。
+
+### 2026-09-18：6A 已完成
+
+- `thread_sequences` 在写事务内统一分配 Thread 序号，生命周期和消息共用分配器；
+  `message_sequences` 保存 AI 消息预留身份及原 Run 归属。没有旧库迁移或 schema marker。
+- `RunEventIngestor.ingest_delta()` 首个增量预留，后续增量复用执行内缓存；
+  `ingest_message()` 将根图完整消息提交到同一 seq。
+- SSE delta 现在包含 `seq`、`message_id`、`field`、`value`。消费者按 seq 排序和覆盖，
+  完整事实优先；文本预览与完整文本不同只记录诊断。
+- Loop 顺序消费原始 Graph messages／根图 values，通过注入接口调用应用 Ingestor；
+  已删除持久化 middleware、wait_preview 和 drained 协调。harness 不导入应用存储。
+- 预留不是事实，不出现在历史查询中；较大 seq 先提交时，较小 seq 仍可能稍后提交。
+  因此最大 seq 不能作为“此前全部提交”的续传游标。6B 仍未实现。
+- 验证：170 项测试通过，覆盖真实两轮 checkpoint、多连接竞争、重新打开存储、
+  预留跨 Run 冲突、序号空洞、乱序提交、提交后增量拒绝及预览纠正。
 
 ### 6B：增加只读的既有 Run 内容流
 
@@ -730,3 +745,14 @@ review 顺序沿用现有偏好：先看做得好的，再看需要修的，最�
 
 第 1—5 步已验收完成。下一步是第 6 步：完整重建与实时跟随；
 实际数据库使用新版前需先删除旧库并从当前 schema 新建。
+
+### 2026-09-18：完整消息采集入口调整
+
+完整消息现在由 GraphEventAdapter 从根图 values 提取，Loop 与预览一起顺序接入 Ingestor。
+第 4、5 步早期验收记录中的持久化 middleware 属于历史实现；当前代码已删除它。
+同 Run 和跨 Run 的已有事实均不重复发布；完整消息身份与 seq 规则不变。
+没有新增 checkpoint baseline、旧库兼容或 event_version 升级；6B 尚未实现。
+
+本次完整消息入口迁移验证：171 项测试通过；覆盖真实逐字流式输出、根图消息提取、
+Command 工具结果、多轮归属、同 Run 恢复去重及后续节点失败前的完整消息接入。
+Ruff、格式检查与 diff 空白检查通过。

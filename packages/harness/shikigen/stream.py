@@ -14,6 +14,7 @@ class MessageChunkData(TypedDict):
   """一条逻辑消息的文本块。"""
 
   message_id: NotRequired[str]
+  seq: NotRequired[int]
   text: str
   done: Literal[False]
 
@@ -22,6 +23,7 @@ class MessageDoneData(TypedDict):
   """一条逻辑消息已经结束。"""
 
   message_id: NotRequired[str]
+  seq: NotRequired[int]
   text: Literal[""]
   done: Literal[True]
 

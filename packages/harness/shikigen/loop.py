@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterable
-from typing import TYPE_CHECKING, Protocol
+from collections.abc import AsyncIterable, Awaitable, Callable
+from typing import TYPE_CHECKING, Any
 
-from langchain_core.language_models.chat_model_stream import AsyncChatModelStream
 from langchain_core.messages import HumanMessage
-from pydantic import BaseModel
 
 from shikigen.execution import (
   ExecutionOutcome,
@@ -14,6 +12,7 @@ from shikigen.execution import (
   ExecutionReason,
   RunExecution,
 )
+from shikigen.graph_events import GraphEventAdapter
 from shikigen.runtime_context import AgentRunContext
 from shikigen.stream import MessageData, ToolCallData
 
@@ -22,32 +21,18 @@ if TYPE_CHECKING:
   from shikigen.run_manager import RunRecord
 
 
-class ToolCallStream(Protocol):
-  tool_name: str
-  input: object
-  output: object
-
-  @property
-  def output_deltas(self) -> AsyncIterable[object]: ...
-
-
-class AgentEventStream(Protocol):
-  """Loop 消费的 v3 投影；上游通过 setattr 动态挂载，未提供静态属性声明。"""
-
-  messages: AsyncIterable[AsyncChatModelStream]
-  tool_calls: AsyncIterable[ToolCallStream]
-
-
 async def execute_agent_loop(
   agent,  # 编译好的 agent graph
   new_message: HumanMessage,
   *,
   execution: RunExecution,
   token_tracker: TokenTracker | None = None,
+  ingest_delta: Callable[[MessageData], Awaitable[None]] | None = None,
+  ingest_message: Callable[[dict[str, Any]], Awaitable[int]] | None = None,
 ) -> ExecutionOutcome:
   """使用新消息执行 agent，由 checkpointer 恢复此前的完整状态。
 
-  并发消费 messages（token 流）和 tool_calls（工具调用）。
+  顺序消费原始 messages 与根图 values，完整消息经注入接口接入。
   返回执行结果，不发布产品终态、不关闭 Stream；外部 Task 取消继续传播。
   使用 checkpoint 的 Graph 在调用退出后检查暂停；审批策略由应用负责。
   """
@@ -55,51 +40,37 @@ async def execute_agent_loop(
   if execution.abort_event.is_set():
     return ExecutionOutcome(ExecutionReason.ABORTED)
 
-  async def handle_messages(event_stream: AgentEventStream) -> None:
-    async for message in event_stream.messages:
-      emitted_text = False
-      async for text_delta in message.text:
-        if getattr(message, "namespace", []):
-          continue
-        emitted_text = True
-        data: MessageData = {"text": text_delta, "done": False}
-        if identity := getattr(message, "message_id", None):
-          data["message_id"] = identity
-        execution.stream.publish("message", data)
-      if emitted_text:
-        end: MessageData = {"text": "", "done": True}
-        if identity := getattr(message, "message_id", None):
-          end["message_id"] = identity
-        execution.stream.publish("message", end)
+  async def consume_event_stream(event_stream: AsyncIterable[object]) -> None:
+    adapter = GraphEventAdapter()
+    tool_calls: dict[str, dict[str, Any]] = {}
+    async for event in event_stream:
+      delta = adapter.delta(event)
+      if delta is not None:
+        if ingest_delta is not None and not delta["done"]:
+          await ingest_delta(delta)
+        else:
+          execution.stream.publish("message", delta)
+      for content in adapter.messages(event):
+        if ingest_message is not None:
+          await ingest_message(content)
+        if content["type"] == "ai":
+          for call in content["tool_calls"]:
+            tool_calls[call["id"]] = call
+        elif content["type"] == "tool" and ingest_message is None:
+          call = tool_calls.get(content["tool_call_id"])
+          if call is not None:
+            data: ToolCallData = {
+              "message_id": content["message_id"],
+              "tool_call_id": content["tool_call_id"],
+              "name": call["name"],
+              "input": call["args"],
+              "output": content,
+            }
+            execution.stream.publish("tool_call", data)
 
-  async def handle_tool_calls(event_stream: AgentEventStream) -> None:
-    async for call in event_stream.tool_calls:
-      # 消费完增量后，call.output 才是完整的工具输出。
-      async for _ in call.output_deltas:
-        pass
-
-      if getattr(call, "namespace", []):
-        continue
-      data: ToolCallData = {
-        "name": call.tool_name,
-        "input": call.input,
-        "output": (
-          call.output.model_dump(mode="json")
-          if isinstance(call.output, BaseModel)
-          else call.output
-        ),
-      }
-      if identity := getattr(call, "tool_call_id", None):
-        data["tool_call_id"] = identity
-        data["message_id"] = f"tool-result:{identity}"
-      execution.stream.publish("tool_call", data)
-
-  async def consume_event_stream(event_stream: AgentEventStream) -> None:
-    async with asyncio.TaskGroup() as group:
-      group.create_task(handle_messages(event_stream))
-      group.create_task(handle_tool_calls(event_stream))
-
-  async def wait_for_stream_outcome(event_stream: AgentEventStream) -> ExecutionReason:
+  async def wait_for_stream_outcome(
+    event_stream: AsyncIterable[object],
+  ) -> ExecutionReason:
     """等待流消费完成或取消信号，并在返回前回收两个等待任务。"""
     consume_task = asyncio.create_task(consume_event_stream(event_stream))
     abort_task = asyncio.create_task(execution.abort_event.wait())
@@ -136,6 +107,7 @@ async def execute_agent_loop(
       ),
       version="v3",
     ) as event_stream:
+      # todo. 这里发布了什么？？
       execution.stream.publish("metadata", {"run_id": execution.run_id})
       outcome = await wait_for_stream_outcome(event_stream)
 

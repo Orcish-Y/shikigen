@@ -18,6 +18,59 @@ class EventStore:
   def __init__(self, database: Database):
     self._db = database
 
+  async def allocate_sequence(self, thread_id: str) -> int:
+    """调用方持有写事务；预留序号不是历史提交游标。"""
+    cursor = await self._db.connection.execute(
+      "INSERT INTO thread_sequences(thread_id, value) VALUES (?, 1) "
+      "ON CONFLICT(thread_id) DO UPDATE SET value = value + 1 RETURNING value",
+      (thread_id,),
+    )
+    row = await cursor.fetchone()
+    assert row is not None
+    return row[0]
+
+  async def reserved_sequence(
+    self, thread_id: str, run_id: str, event_key: str | None
+  ) -> int | None:
+    cursor = await self._db.connection.execute(
+      "SELECT run_id, seq FROM message_sequences WHERE thread_id = ? AND event_key = ?",
+      (thread_id, event_key),
+    )
+    row = await cursor.fetchone()
+    if row is None:
+      return None
+    if row["run_id"] != run_id:
+      raise MessageConflict("Message reservation belongs to another run")
+    return row["seq"]
+
+  async def reserve_message_sequence(
+    self, *, thread_id: str, run_id: str, message_id: str
+  ) -> int:
+    normalize_message(
+      {"type": "ai", "message_id": message_id, "content": "", "tool_calls": []}
+    )
+    event_key = f"ai:{message_id}"
+    async with self._db.lock:
+      try:
+        await self._db.connection.execute("BEGIN IMMEDIATE")
+        if not await self._run_exists(run_id, thread_id):
+          raise RunNotFound("Run not found")
+        if await self.message_by_key(thread_id, event_key) is not None:
+          raise MessageConflict("Delta received after complete message was committed")
+        seq = await self.reserved_sequence(thread_id, run_id, event_key)
+        if seq is None:
+          seq = await self.allocate_sequence(thread_id)
+          await self._db.connection.execute(
+            "INSERT INTO message_sequences(thread_id, run_id, event_key, seq) "
+            "VALUES (?, ?, ?, ?)",
+            (thread_id, run_id, event_key, seq),
+          )
+        await self._db.connection.commit()
+        return seq
+      except BaseException:
+        await self._db.connection.rollback()
+        raise
+
   # todo 为什么有个 insert_fact 还有 append_event，又什么差别
   async def insert_fact(
     self,
@@ -29,24 +82,24 @@ class EventStore:
     content: Any,
   ) -> None:
     """仅在持有写锁和事务时调用；不自行提交。"""
+    seq = await self.allocate_sequence(thread_id)
     await self._db.connection.execute(
       """
       INSERT INTO run_events(
         thread_id, run_id, seq, event_type, category, event_key,
         content_json, metadata_json, created_at
       )
-      SELECT ?, ?, COALESCE(MAX(seq), 0) + 1, ?, ?, ?, ?, '{}', ?
-      FROM run_events WHERE thread_id = ?
+      VALUES (?, ?, ?, ?, ?, ?, ?, '{}', ?)
       """,
       (
         thread_id,
         run_id,
+        seq,
         event_type,
         category,
         event_key,
         self._json(content),
         _now(),
-        thread_id,
       ),
     )
 
@@ -61,7 +114,7 @@ class EventStore:
     metadata: dict[str, Any] | None = None,
     event_key: str | None = None,
   ) -> int:
-    """兼容 MessageJournal 的序号接口；所有消息仍经过统一校验。"""
+    """返回已提交事件的序号；所有消息仍经过统一校验。"""
     result = await self.append_committed_event(
       thread_id=thread_id,
       run_id=run_id,
@@ -137,22 +190,28 @@ class EventStore:
             raise MessageConflict("Event identity already has different content")
           result = EventWriteResult(existing, inserted=False)
         else:
+          seq = (
+            await self.reserved_sequence(thread_id, run_id, event_key)
+            if category == "message"
+            else None
+          )
+          if seq is None:
+            seq = await self.allocate_sequence(thread_id)
           cursor = await self._db.connection.execute(
             """INSERT INTO run_events(
               thread_id, run_id, seq, event_type, category, event_key,
               content_json, metadata_json, created_at
-            ) SELECT ?, ?, COALESCE(MAX(seq), 0) + 1, ?, ?, ?, ?, ?, ?
-            FROM run_events WHERE thread_id = ? RETURNING *""",
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *""",
             (
               thread_id,
               run_id,
+              seq,
               event_type,
               category,
               event_key,
               content_json,
               metadata_json,
               _now(),
-              thread_id,
             ),
           )
           rows = list(await cursor.fetchall())

@@ -202,6 +202,5 @@ class RunEventTests(unittest.IsolatedAsyncioTestCase):
         )
       execution.stream.close()
       events = [e async for e in execution.stream.subscribe()]
-      self.assertEqual(len(events), 2)
-      self.assertEqual(events[0].data, events[1].data)
+      self.assertEqual(len(events), 1)
       self.assertEqual(len(await runtime.runs.list_run_events(thread, "run")), 3)

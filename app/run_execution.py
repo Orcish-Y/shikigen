@@ -6,12 +6,14 @@
 
 import asyncio
 import logging
-from typing import Protocol
+from collections.abc import Awaitable, Callable
+from typing import Any, Protocol
 
 from langchain_core.messages import HumanMessage
 from shikigen.callback_handler import TokenTracker
 from shikigen.execution import ExecutionOutcome, ExecutionRegistry, RunExecution
 from shikigen.loop import execute_agent_loop
+from shikigen.stream import MessageData
 
 from app.run_events import RunEventIngestor
 from app.run_state import CommittedEvent, CommittedRunState
@@ -41,6 +43,8 @@ def start_run_execution(
   registry: ExecutionRegistry,
   settlement: RunSettlement,
   initial_events: tuple[CommittedEvent, ...] = (),
+  ingest_delta: Callable[[MessageData], Awaitable[None]] | None = None,
+  ingest_message: Callable[[dict[str, Any]], Awaitable[int]] | None = None,
 ) -> RunExecution:
   """为已持久创建的 Run 启动一次执行；不依赖 HTTP 消费者回收资源。"""
   execution = RunExecution(run_id=run_id, thread_id=thread_id)
@@ -54,6 +58,10 @@ def start_run_execution(
         message,
         execution=execution,
         token_tracker=TokenTracker(),
+        # 这里传入了 ingest_delta 和 ingest_message 回调，用于处理增量消息和完整消息。
+        # todo. 后续看看是不是可以穿一个 adapter 来统一处理增量和完整消息。
+        ingest_delta=ingest_delta,
+        ingest_message=ingest_message,
       )
       try:
         committed = await settlement.settle_execution(

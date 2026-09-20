@@ -13,6 +13,8 @@
   "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
   "python.analysis.useLibraryCodeForTypes": true,
   "cSpell.words": [
+    "astream",
+    "checkpointer",
     "Ingestor",
     "shikigen"
   ]

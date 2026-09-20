@@ -312,7 +312,12 @@ class CompositionTests(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(messages[3]["content"]["content"], "3")
       events = [event async for event in execution.stream.subscribe()]
       self.assertEqual(events[-1].data, {"status": "completed"})
-      self.assertTrue(any(e.event == "tool_call" for e in events))
+      self.assertTrue(
+        any(
+          e.event == "durable_event" and e.data["event_type"] == "tool_message"
+          for e in events
+        )
+      )
     async with open_runtime(self.config, agent_factory=deterministic_agent) as runtime:
       self.assertEqual(await runtime.runs.read_run(thread_id, execution.run_id), row)
       self.assertEqual(
@@ -345,13 +350,21 @@ class CompositionTests(unittest.IsolatedAsyncioTestCase):
     captured = {}
 
     async def fail(**kwargs):
-      captured["store"] = kwargs["middlewares"][0]._journal._store
+      self.assertEqual(kwargs["middlewares"], [])
       captured["checkpointer"] = kwargs["checkpointer"]
       raise ValueError("factory failed")
 
-    with self.assertRaisesRegex(ValueError, "factory failed"):
-      async with open_runtime(self.config, agent_factory=fail):
-        self.fail("Unexpected runtime")
+    original_open = ChatStore.open
+
+    async def capture_store(path):
+      store = await original_open(path)
+      captured["store"] = store
+      return store
+
+    with patch("app.persistence.chat_store.ChatStore.open", side_effect=capture_store):
+      with self.assertRaisesRegex(ValueError, "factory failed"):
+        async with open_runtime(self.config, agent_factory=fail):
+          self.fail("Unexpected runtime")
     with self.assertRaises(ValueError):
       await captured["store"].list_threads()
     with self.assertRaises(ValueError):
@@ -366,9 +379,8 @@ class CompositionTests(unittest.IsolatedAsyncioTestCase):
         async def factory(
           captured=captured, entered=entered, cleaned=cleaned, **kwargs
         ):
-          store = kwargs["middlewares"][0]._journal._store
           checkpointer = kwargs["checkpointer"]
-          captured.update(store=store, checkpointer=checkpointer)
+          captured.update(checkpointer=checkpointer)
 
           class Agent(BlockingAgent):
             async def astream_events(self, *args, **params):
@@ -380,7 +392,7 @@ class CompositionTests(unittest.IsolatedAsyncioTestCase):
                   return stream
 
                 async def __aexit__(self, *args):
-                  await store.list_threads()
+                  await captured["store"].list_threads()
                   await checkpointer.conn.execute("SELECT 1")
                   cleaned.set()
 
@@ -390,6 +402,7 @@ class CompositionTests(unittest.IsolatedAsyncioTestCase):
 
         try:
           async with open_runtime(self.config, agent_factory=factory) as runtime:
+            captured["store"] = runtime.chat_store
             thread_id = await runtime.threads.create_thread()
             execution = await runtime.runs.start_run(thread_id, "hello")
             await asyncio.wait_for(entered.wait(), 2)

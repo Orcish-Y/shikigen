@@ -35,7 +35,7 @@ class ExecutionOutcome:
       raise ValueError("Only an interrupted execution must carry a pause")
 
 
-@dataclass(eq=False, slots=True)
+@dataclass(eq=False, slots=True, weakref_slot=True)
 class RunExecution:
   run_id: str
   thread_id: str

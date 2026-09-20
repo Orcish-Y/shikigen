@@ -147,6 +147,13 @@ class ChatStore:
       thread_id,
     )
 
+  async def reserve_message_sequence(
+    self, *, thread_id: str, run_id: str, message_id: str
+  ) -> int:
+    return await self._events.reserve_message_sequence(
+      thread_id=thread_id, run_id=run_id, message_id=message_id
+    )
+
   async def append_event(
     self,
     *,
@@ -158,7 +165,7 @@ class ChatStore:
     metadata: dict[str, Any] | None = None,
     event_key: str | None = None,
   ) -> int:
-    """实现 MessageJournal 的序号接口；所有消息仍经过统一校验。"""
+    """返回已提交事件的序号；所有消息仍经过统一校验。"""
     return await self._events.append_event(
       thread_id=thread_id,
       run_id=run_id,

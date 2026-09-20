@@ -82,12 +82,13 @@ curl -N \
 `data:`，以空行结束。只有 `metadata`、`delta`、`event`、`error` 四类事件：
 
 - `metadata`：Thread／Run 身份、运行状态，可携带 usage。
-- `delta`：按 message_id 关联的文本增量，field 表示 content 或 reasoning；当前 Loop 输出 content。
+- `delta`：携带预留 seq 和 message_id 的文本增量，field 表示 content 或 reasoning；当前 Loop 输出 content。
 - `event`：已提交完整事实，category 区分 message／lifecycle，payload 保存内容。
 - `error`：观察失败；Run 执行失败由 lifecycle 事实表达。
 
 同一 Thread 已有 running 或 interrupted 的 Run 时，请求返回 HTTP 409。
-客户端按稳定消息身份合并预览；完整事实到达后覆盖预览，按 seq 去重。
+客户端按 seq 排序和合并预览；完整事实到达后覆盖同 seq 预览，重复事实按 seq 去重。
+seq 可以有空洞；预留序号不表示完整消息已提交，也不能作为增量续传游标。
 EOF 不表示运行成功，完成状态以 lifecycle 事实为准。
 
 客户端断线后只关闭自己的订阅，Agent 继续执行并保存结果。目前不提供实时重连，
@@ -103,7 +104,7 @@ event: metadata
 data: {"thread_id":"thread-1","run_id":"run-1","status":"running"}
 
 event: delta
-data: {"message_id":"answer-1","field":"content","value":"你好"}
+data: {"seq":3,"message_id":"answer-1","field":"content","value":"你好"}
 
 ```
 
@@ -124,3 +125,9 @@ uv run uvicorn app.server:app \
 ```
 
 `0.0.0.0` 是服务器的监听地址。前端请求时应使用宿主机的实际 IP 或域名，不能把 `0.0.0.0` 当作目标地址。
+
+### 完整消息采集
+
+Loop 顺序消费 LangGraph v3 原始事件：`GraphEventAdapter` 将根图 `messages` 转为文本预览、
+将根图 `values` 转为完整消息候选。应用 `RunEventIngestor` 负责 seq 预留、持久化和提交后发布。
+完整消息不再通过 middleware 保存；Graph 的 checkpoint 恢复职责保持不变。

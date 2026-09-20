@@ -18,8 +18,8 @@ from shikigen.execution import (
   ExecutionRegistry,
   RunExecution,
 )
+from shikigen.graph_events import GraphEventAdapter
 from shikigen.messages import message_content, normalize_message
-from shikigen.middleware.chat_persistence_middleware import ChatPersistenceMiddleware
 from shikigen.runtime_context import AgentRunContext
 from shikigen.stream import StreamEvent
 from sse_fixtures import parse_sse
@@ -168,8 +168,31 @@ class MessageContractTests(unittest.IsolatedAsyncioTestCase):
           e.data for e in events if e.event == "message" and not e.data["done"]
         ]
         self.assertTrue(previews)
+        answer = next(
+          f for f in facts if f["content"]["message_id"] == f"answer-{round_id}"
+        )
+        self.assertEqual({p["seq"] for p in previews}, {answer["seq"]})
+        complete_index = next(
+          i
+          for i, e in enumerate(events)
+          if e.event == "durable_event" and e.data["seq"] == answer["seq"]
+        )
+        self.assertTrue(
+          all(
+            i < complete_index
+            for i, e in enumerate(events)
+            if e.event == "message" and not e.data["done"]
+          )
+        )
         self.assertEqual({p["message_id"] for p in previews}, {f"answer-{round_id}"})
-        tools = [e.data for e in events if e.event == "tool_call"]
+        tools = [
+          e.data["content"]
+          for e in events
+          if e.event == "durable_event"
+          and e.data["category"] == "message"
+          and e.data["content"]["type"] == "tool"
+        ]
+        self.assertEqual(len(tools), 1)
         self.assertEqual(tools[0]["message_id"], f"tool-result:call-{round_id}")
       self.assertTrue(
         {f["seq"] for f in histories[0]}.isdisjoint(f["seq"] for f in histories[1])
@@ -178,26 +201,41 @@ class MessageContractTests(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(len(snapshot.values["messages"]), 8)
 
   async def test_same_run_checkpoint_resume_replay_returns_existing_fact(self):
-    middleware = ChatPersistenceMiddleware(self.store, persist_entry=False)
-    from langgraph.runtime import Runtime
-
-    context = AgentRunContext(thread_id="thread", run_id="first")
-
     async def node(state):
-      message = AIMessage(id="before-pause", content="persisted before interrupt")
-      await middleware.aafter_model({"messages": [message]}, Runtime(context=context))
       interrupt("continue")
-      return {"messages": [message]}
+      return {
+        "messages": [AIMessage(id="after-pause", content="persisted after interrupt")]
+      }
 
     graph = StateGraph(MessagesState)
     graph.add_node("node", node)
     graph.add_edge(START, "node")
     agent = graph.compile(checkpointer=InMemorySaver())
     config = {"configurable": {"thread_id": "thread"}}
-    await agent.ainvoke({"messages": [HumanMessage(id="entry", content="hi")]}, config)
+    registry = ExecutionRegistry()
+    execution = RunExecution(run_id="first", thread_id="thread")
+    registry.install(execution)
+    ingestor = RunEventIngestor(self.store, registry)
+
+    async def consume(value):
+      adapter = GraphEventAdapter()
+      async with await agent.astream_events(
+        value, config=config, version="v3"
+      ) as events:
+        async for event in events:
+          for content in adapter.messages(event):
+            await ingestor.ingest_message(content, thread_id="thread", run_id="first")
+
+    await consume({"messages": [HumanMessage(id="entry", content="hi")]})
+    await consume(Command(resume=True))
     before = await self.store.list_messages_by_run("thread", "first")
-    await agent.ainvoke(Command(resume=True), config)
+    await consume(None)
     self.assertEqual(await self.store.list_messages_by_run("thread", "first"), before)
+    execution.stream.close()
+    facts = [
+      e async for e in execution.stream.subscribe() if e.event == "durable_event"
+    ]
+    self.assertEqual(len(facts), 1)
 
   def test_contract_rejects_unknown_fields_and_separates_preview_and_facts(self):
     with self.assertRaises(ValidationError):
@@ -217,7 +255,7 @@ class MessageContractTests(unittest.IsolatedAsyncioTestCase):
         StreamEvent(
           id="2",
           event="message",
-          data={"text": "draft", "done": False, "message_id": "answer"},
+          data={"text": "draft", "done": False, "message_id": "answer", "seq": 3},
         )
       )
     )
@@ -258,7 +296,7 @@ class MessageContractTests(unittest.IsolatedAsyncioTestCase):
       StreamEvent(
         id="1",
         event="message",
-        data={"text": "draft", "done": False, "message_id": "answer"},
+        data={"text": "draft", "done": False, "message_id": "answer", "seq": 3},
       ),
       StreamEvent(id="2", event="durable_event", data=complete.event),
       StreamEvent(id="3", event="durable_event", data=complete.event),
@@ -270,8 +308,8 @@ class MessageContractTests(unittest.IsolatedAsyncioTestCase):
       SSE_EVENT.validate_python(frame)
       if frame["event"] == "delta":
         data = frame["data"]
-        projection[data["message_id"]] = data["value"]
+        projection[data["seq"]] = data["value"]
       else:
-        data = frame["data"]["payload"]
-        projection[data["message_id"]] = data["content"]
-    self.assertEqual(projection, {"answer": "corrected"})
+        data = frame["data"]
+        projection[data["seq"]] = data["payload"]["content"]
+    self.assertEqual(projection, {complete.event["seq"]: "corrected"})

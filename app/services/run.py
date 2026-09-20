@@ -2,6 +2,7 @@
 
 import asyncio
 import uuid
+from functools import partial
 from typing import Any
 
 from langchain_core.messages import HumanMessage
@@ -15,6 +16,7 @@ from shikigen.utils.text_safety import replace_surrogates
 
 from app.lifecycle import ApplicationLifecycle
 from app.persistence import ChatStore
+from app.run_events import RunEventIngestor
 from app.run_execution import start_run_execution
 from app.run_state import (
   CommittedEvent,
@@ -33,11 +35,15 @@ class RunService:
     store: ChatStore,
     executions: ExecutionRegistry,
     lifecycle: ApplicationLifecycle,
+    ingestor: RunEventIngestor | None = None,
   ) -> None:
     self.agent = agent
     self._store = store
     self._executions = executions
     self._lifecycle = lifecycle
+    self._ingestor = (
+      ingestor if ingestor is not None else RunEventIngestor(store, executions)
+    )
 
   async def start_run(self, thread_id: str, message: str) -> RunExecution:
     async def start() -> RunExecution:
@@ -58,6 +64,14 @@ class RunService:
           registry=self._executions,
           settlement=self._store,
           initial_events=created.events,
+          ingest_message=partial(
+            self._ingestor.ingest_message, thread_id=thread_id, run_id=run_id
+          ),
+          ingest_delta=partial(
+            self._ingestor.ingest_delta,
+            thread_id=thread_id,
+            run_id=run_id,
+          ),
         )
       except Exception as error:
         await self._store.settle_execution(

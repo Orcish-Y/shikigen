@@ -17,6 +17,7 @@ class MetadataData(StrictModel):
 
 
 class DeltaData(StrictModel):
+  seq: Annotated[int, Field(gt=0)]
   message_id: Identity
   field: Literal["content", "reasoning"]
   value: str
@@ -64,9 +65,7 @@ class ErrorEnvelope(StrictModel):
   data: StreamErrorData
 
 
-type SseEnvelope = (
-  MetadataEnvelope | DeltaEnvelope | EventEnvelope | ErrorEnvelope
-)
+type SseEnvelope = MetadataEnvelope | DeltaEnvelope | EventEnvelope | ErrorEnvelope
 type SseEvent = SseEnvelope
 
 SSE_EVENT = TypeAdapter(Annotated[SseEnvelope, Field(discriminator="event")])
@@ -120,9 +119,7 @@ class RunSseEncoder:
               "event_type": "created"
               if event_data.category == "message"
               else "status_changed",
-              "payload": event_data.content.model_dump(
-                mode="json", exclude_unset=True
-              ),
+              "payload": event_data.content.model_dump(mode="json", exclude_unset=True),
             }
           }
         )
@@ -135,6 +132,7 @@ class RunSseEncoder:
           {
             "data": {
               "message_id": parsed.data.message_id,
+              "seq": parsed.data.seq,
               "field": "content",
               "value": parsed.data.text,
             }

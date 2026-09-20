@@ -1,7 +1,7 @@
 import asyncio
 import unittest
 
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from shikigen.callback_handler import TokenTracker
 from shikigen.loop import run_agent_loop
 from shikigen.run_manager import RunRecord, RunStatus
@@ -51,11 +51,55 @@ class Message:
   text = AsyncItems("你", "好")
 
 
+def protocol(method, data, namespace=None):
+  return {"method": method, "params": {"namespace": namespace or [], "data": data}}
+
+
 class EventStream:
   def __init__(self):
     self.values = AsyncItems({"messages": [HumanMessage(content="hello")]})
     self.messages = AsyncItems()
     self.tool_calls = AsyncItems(ToolCall())
+
+  def __aiter__(self):
+    async def events():
+      async for message in self.messages:
+        yield protocol(
+          "messages",
+          [{"event": "message-start", "role": "ai", "id": message.message_id}, {}],
+        )
+        async for text in message.text:
+          yield protocol(
+            "messages",
+            [
+              {
+                "event": "content-block-delta",
+                "delta": {"type": "text-delta", "text": text},
+              },
+              {},
+            ],
+          )
+        yield protocol("messages", [{"event": "message-finish"}, {}])
+      async for call in self.tool_calls:
+        async for _ in call.output_deltas:
+          pass
+        yield protocol(
+          "values",
+          {
+            "messages": [
+              AIMessage(
+                id="call-message",
+                content="",
+                tool_calls=[{"id": "call", "name": call.tool_name, "args": call.input}],
+              ),
+              ToolMessage(
+                tool_call_id="call", content=str(call.output), name=call.tool_name
+              ),
+            ]
+          },
+        )
+
+    return events()
 
   async def __aenter__(self):
     return self
@@ -187,7 +231,16 @@ class RunAgentLoopTests(unittest.IsolatedAsyncioTestCase):
       {
         "name": "add",
         "input": {"a": 1, "b": 2},
-        "output": 3,
+        "message_id": "tool-result:call",
+        "tool_call_id": "call",
+        "output": {
+          "type": "tool",
+          "message_id": "tool-result:call",
+          "tool_call_id": "call",
+          "content": "3",
+          "name": "add",
+          "status": "success",
+        },
       },
     )
     self.assertEqual(status_events[-1].data, {"status": "completed"})

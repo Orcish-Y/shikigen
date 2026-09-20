@@ -27,7 +27,7 @@ class PackageImportTests(unittest.TestCase):
           "-I",
           "-c",
           "import shikigen; import shikigen.tools; "
-          "import shikigen.middleware.chat_persistence_middleware; "
+          "import shikigen.graph_events; "
           "import shikigen.utils.text_safety",
         ],
         cwd=directory,

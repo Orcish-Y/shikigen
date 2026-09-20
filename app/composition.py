@@ -10,7 +10,6 @@ from shikigen.agent import create_lead_agent
 from shikigen.app_config import AppConfig, load_app_config
 from shikigen.checkpoint import make_checkpointer
 from shikigen.execution import ExecutionRegistry
-from shikigen.middleware.chat_persistence_middleware import ChatPersistenceMiddleware
 
 from app.lifecycle import ApplicationLifecycle
 from app.persistence.chat_store import ChatStore, open_chat_store
@@ -27,6 +26,7 @@ def assemble_runtime(
   chat_store: ChatStore,
   checkpointer: BaseCheckpointSaver | None = None,
   executions: ExecutionRegistry | None = None,
+  ingestor: RunEventIngestor | None = None,
 ) -> Runtime:
   """将调用者提供的依赖组装为 Runtime；调用者负责关闭生命周期与存储。"""
   executions = executions if executions is not None else ExecutionRegistry()
@@ -44,6 +44,7 @@ def assemble_runtime(
       store=chat_store,
       executions=executions,
       lifecycle=lifecycle,
+      ingestor=ingestor,
     ),
   )
 
@@ -65,7 +66,7 @@ async def open_runtime(
     ingestor = RunEventIngestor(store, executions)
     agent = await factory(
       config=app_config,
-      middlewares=[ChatPersistenceMiddleware(ingestor, persist_entry=False)],
+      middlewares=[],
       checkpointer=checkpointer,
     )
     runtime = assemble_runtime(
@@ -74,6 +75,7 @@ async def open_runtime(
       chat_store=store,
       checkpointer=checkpointer,
       executions=executions,
+      ingestor=ingestor,
     )
     try:
       yield runtime

@@ -242,7 +242,7 @@ class EncoderTests(unittest.IsolatedAsyncioTestCase):
     execution = RunExecution("run", "thread")
     execution.stream.publish("metadata", {"run_id": "run"})
     execution.stream.publish(
-      "message", {"text": "你\n好", "done": False, "message_id": "answer"}
+      "message", {"text": "你\n好", "done": False, "message_id": "answer", "seq": 3}
     )
     execution.stream.publish("message", {"text": "", "done": True})
     execution.stream.publish("tool_call", {"name": "search", "input": {}, "output": {}})
@@ -257,7 +257,12 @@ class EncoderTests(unittest.IsolatedAsyncioTestCase):
         },
         {
           "event": "delta",
-          "data": {"message_id": "answer", "field": "content", "value": "你\n好"},
+          "data": {
+            "message_id": "answer",
+            "seq": 3,
+            "field": "content",
+            "value": "你\n好",
+          },
         },
       ],
     )
