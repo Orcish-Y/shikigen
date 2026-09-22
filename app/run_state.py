@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, TypedDict
 
+from shikigen.stream import UsageData
+
 
 class RunStatus(StrEnum):
   RUNNING = "running"
@@ -41,6 +43,21 @@ class MessageConflict(StorageConflict):
   """相同事件身份对应不同的完整事实。"""
 
 
+class ApprovalConflict(StorageConflict):
+  """审批已被接受或响应对应旧暂停；调用者应读取当前事实。"""
+
+
+class InvalidApprovalResponse(RunError):
+  """响应数量或决策不符合当前审批请求。"""
+
+
+@dataclass(frozen=True, slots=True)
+class AcceptedApproval:
+  checkpoint: dict[str, Any]
+  resume: dict[str, Any]
+  events: tuple["CommittedEvent", ...]
+
+
 class InvalidRunState(RunError):
   """持久状态或生命周期事实不支持本次操作。"""
 
@@ -54,6 +71,8 @@ class RunSnapshot(TypedDict):
   created_at: str
   updated_at: str
   completed_at: str | None
+  usage: UsageData | None
+  usage_pending: bool
 
 
 class CommittedEvent(TypedDict):
@@ -94,6 +113,7 @@ class CommittedRunState:
   error_code: str | None = None
   events: tuple[CommittedEvent, ...] = ()
   changed: bool = field(default=True, compare=False)
+  usage: UsageData | None = None
 
   def __post_init__(self) -> None:
     status = RunStatus(self.status)

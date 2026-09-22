@@ -31,6 +31,9 @@ class RunEventIngestor:
   Stream 自己的 id 仅表示当前内存流顺序。
   """
 
+  _published: WeakKeyDictionary[Stream, set[int]] = WeakKeyDictionary()
+  _statuses: WeakKeyDictionary[Stream, RunStatus] = WeakKeyDictionary()
+
   def __init__(self, store: ChatStore, executions: ExecutionRegistry) -> None:
     self._store = store
     self._executions: ExecutionRegistry = executions
@@ -51,7 +54,7 @@ class RunEventIngestor:
     if execution is None:
       raise RuntimeError("Delta ingestion requires an active execution")
     state = self._state(execution)
-    # todo. 这里后续查一下 lock 后，后面的事件是按顺序执行的还是竞态的，会不会导致乱序输出
+    # todo. 检查持锁后的事件顺序与并发行为。
     async with state.lock:
       if preview.message_id in state.committed:
         raise MessageConflict("Delta received after complete message was committed")
@@ -138,9 +141,16 @@ class RunEventIngestor:
   ) -> None:
     """唯一事实发布入口；简化终态事件保留为现有传输的兼容投影。"""
     try:
+      published = RunEventIngestor._published.setdefault(stream, set())
       for event in events:
-        stream.publish("durable_event", event)
-      if settlement is not None:
+        if event["id"] not in published:
+          stream.publish("durable_event", event)
+          published.add(event["id"])
+      if (
+        settlement is not None
+        and RunEventIngestor._statuses.get(stream) != settlement.status
+      ):
+        RunEventIngestor._statuses[stream] = settlement.status
         if settlement.status is RunStatus.ERROR:
           stream.publish("error", {"message": settlement.error or "Run failed"})
         elif settlement.status is RunStatus.COMPLETED:

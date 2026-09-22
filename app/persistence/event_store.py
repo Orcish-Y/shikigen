@@ -158,8 +158,10 @@ class EventStore:
     event_key: str | None = None,
   ) -> EventWriteResult:
     """返回提交后的完整事件；生命周期仅由创建／结算事务写入。"""
-    if category == "lifecycle" or event_type.startswith("run_"):
-      raise ValueError("Lifecycle events require a run transaction")
+    if category in ("lifecycle", "approval") or event_type.startswith(
+      ("run_", "approval_")
+    ):
+      raise ValueError("Lifecycle and approval events require a run transaction")
     if category == "message" or event_type.endswith("_message"):
       content = normalize_message(content)
       expected_type, expected_key = self.message_identity(content)

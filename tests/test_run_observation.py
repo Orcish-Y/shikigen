@@ -188,7 +188,16 @@ class ObservationTests(unittest.IsolatedAsyncioTestCase):
           outcome=ExecutionOutcome(
             reason,
             error=ValueError("failed") if reason is ExecutionReason.FAILED else None,
-            pause=ExecutionPause(checkpoint={}, interrupts=())
+            pause=ExecutionPause(
+              checkpoint={
+                "configurable": {
+                  "thread_id": thread,
+                  "checkpoint_ns": "",
+                  "checkpoint_id": "cp",
+                }
+              },
+              interrupts=({"id": "pending", "namespace": "", "value": "approve"},),
+            )
             if reason is ExecutionReason.INTERRUPTED
             else None,
           ),

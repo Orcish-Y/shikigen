@@ -278,20 +278,21 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
       database={"path": str(Path(self.directory.name) / "real.db")},
       checkpointer={"type": "memory"},
     )
-    async with open_runtime(config, agent_factory=deterministic_agent) as runtime:
-      with patch.object(server_app.state, "runtime", runtime):
-        thread = (await self.client.post("/api/threads")).json()["thread_id"]
-        response = await self.client.post(
-          f"/api/threads/{thread}/stream", json={"message": "1+2"}
-        )
-        events = parse_sse_frames(response.text)
-        self.assertEqual(events[-1]["data"]["status"], "completed")
-        messages = (await self.client.get(f"/api/threads/{thread}/messages")).json()[
-          "data"
-        ]
-        self.assertEqual(
-          [m["content"]["type"] for m in messages], ["human", "ai", "tool", "ai"]
-        )
+    with patch("app.composition.create_lead_agent", new=deterministic_agent):
+      async with open_runtime(config) as runtime:
+        with patch.object(server_app.state, "runtime", runtime):
+          thread = (await self.client.post("/api/threads")).json()["thread_id"]
+          response = await self.client.post(
+            f"/api/threads/{thread}/stream", json={"message": "1+2"}
+          )
+          events = parse_sse_frames(response.text)
+          self.assertEqual(events[-1]["data"]["status"], "completed")
+          messages = (await self.client.get(f"/api/threads/{thread}/messages")).json()[
+            "data"
+          ]
+          self.assertEqual(
+            [m["content"]["type"] for m in messages], ["human", "ai", "tool", "ai"]
+          )
 
 
 class EncoderTests(unittest.IsolatedAsyncioTestCase):

@@ -43,6 +43,8 @@ class RunExecution:
   abort_event: asyncio.Event = field(default_factory=asyncio.Event)
   # 本次 invocation 缓存覆盖的首个持久序号；不是客户端续传游标。
   replay_start_seq: int = 0
+  # 应用编排串行提交、发布与关闭，避免取消事实被提前关闭的流吞掉。
+  settlement_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
   _task: asyncio.Task[None] | None = field(default=None, init=False, repr=False)
 
   @property
@@ -79,6 +81,9 @@ class ExecutionRegistry:
     if execution is None or execution.thread_id != thread_id:
       return None
     return execution
+
+  def for_thread(self, thread_id: str) -> tuple[RunExecution, ...]:
+    return tuple(e for e in self._executions.values() if e.thread_id == thread_id)
 
   def remove(self, execution: RunExecution) -> None:
     """旧执行迟到的清理不能删除同 run_id 的新执行。"""

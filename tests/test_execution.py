@@ -25,7 +25,9 @@ class ControlledSettlement:
     self.saved = None
     self.outcome = None
 
-  async def settle_execution(self, *, thread_id, run_id, outcome):
+  async def settle_execution(
+    self, *, thread_id, run_id, outcome, invocation_seq=None, usage=None
+  ):
     self.outcome = outcome
     self.entered.set()
     await self.allow_commit.wait()

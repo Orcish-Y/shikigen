@@ -34,6 +34,16 @@ CREATE INDEX IF NOT EXISTS ix_runs_thread_created
 CREATE UNIQUE INDEX IF NOT EXISTS uq_runs_one_nonterminal_per_thread
   ON runs(thread_id) WHERE status NOT IN ('completed', 'error', 'cancelled');
 
+-- todo. 这个需要存储吗？？
+CREATE TABLE IF NOT EXISTS run_usage (
+  thread_id TEXT NOT NULL,
+  run_id TEXT NOT NULL,
+  invocation_seq INTEGER NOT NULL,
+  usage_json TEXT NOT NULL,
+  PRIMARY KEY (thread_id, run_id, invocation_seq),
+  FOREIGN KEY (thread_id, run_id) REFERENCES runs(thread_id, id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS thread_sequences (
   thread_id TEXT PRIMARY KEY REFERENCES threads(id) ON DELETE CASCADE,
   value INTEGER NOT NULL

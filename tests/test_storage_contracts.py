@@ -226,7 +226,16 @@ class StorageContractTests(unittest.IsolatedAsyncioTestCase):
       outcome=ExecutionOutcome(
         ExecutionReason.INTERRUPTED,
         pause=ExecutionPause(
-          checkpoint={"id": "checkpoint"}, interrupts=({"id": "approval"},)
+          checkpoint={
+            "configurable": {
+              "thread_id": "thread",
+              "checkpoint_ns": "",
+              "checkpoint_id": "checkpoint",
+            }
+          },
+          interrupts=(
+            {"id": "approval", "namespace": "", "value": {"request": "approve"}},
+          ),
         ),
       ),
     )
@@ -236,7 +245,10 @@ class StorageContractTests(unittest.IsolatedAsyncioTestCase):
       outcome=ExecutionOutcome(ExecutionReason.COMPLETED),
     )
     self.assertEqual(first.events, second.events)
-    self.assertEqual(second.events[0]["content"]["checkpoint"], {"id": "checkpoint"})
+    self.assertEqual(
+      second.events[0]["content"]["checkpoint"]["configurable"]["checkpoint_id"],
+      "checkpoint",
+    )
     self.assertIsNone((await self.reader.get_run("run", "thread"))["completed_at"])
 
   async def test_settlement_cancellation_rolls_back_and_can_retry(self):

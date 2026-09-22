@@ -3,6 +3,7 @@ from collections.abc import AsyncGenerator, AsyncIterator
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ValidationError
+from shikigen.event_contract import ApprovalSubmission
 from shikigen.execution import RunExecution
 from starlette.types import Receive, Scope, Send
 
@@ -15,6 +16,8 @@ from app.run_contract import (
 )
 from app.run_observation import RunObservation
 from app.run_state import (
+  InvalidApprovalResponse,
+  InvalidRunState,
   ObservationUnavailable,
   RunNotFound,
   StorageConflict,
@@ -132,6 +135,8 @@ async def stream_observation(observation: RunObservation) -> AsyncGenerator[str,
             "thread_id": run["thread_id"],
             "run_id": run["id"],
             "status": run["status"],
+            "usage": run["usage"],
+            "usage_pending": run["usage_pending"],
           }
         )
       )
@@ -195,3 +200,47 @@ async def observe_run(
       status_code=503, detail=str(error), headers={"Retry-After": "1"}
     ) from error
   return ObservationResponse(observation)
+
+
+@router.post(
+  "/runs/{run_id}/approval-decisions", summary="提交全部审批响应并恢复同一个 Run"
+)
+async def submit_approval_decisions(
+  thread_id: str, run_id: str, body: ApprovalSubmission, request: Request
+) -> StreamingResponse:
+  runtime: Runtime = request.app.state.runtime
+  try:
+    execution = await runtime.runs.resume_run(thread_id, run_id, body.responses)
+  except RunNotFound as error:
+    raise HTTPException(status_code=404, detail=str(error)) from error
+  except StorageConflict as error:
+    raise HTTPException(
+      status_code=409,
+      detail={
+        "message": str(error),
+        "stream": f"/api/threads/{thread_id}/runs/{run_id}/stream",
+      },
+    ) from error
+  except InvalidApprovalResponse as error:
+    raise HTTPException(status_code=422, detail=str(error)) from error
+  except InvalidRunState as error:
+    raise HTTPException(
+      status_code=503, detail=str(error), headers={"Retry-After": "1"}
+    ) from error
+  return _sse_response(stream_run_events(execution))
+
+
+@router.post("/runs/{run_id}/cancel", summary="取消运行或暂停中的 Run")
+async def cancel_run(
+  thread_id: str, run_id: str, request: Request
+) -> dict[str, object]:
+  runtime: Runtime = request.app.state.runtime
+  try:
+    run = await runtime.runs.cancel_run(thread_id, run_id)
+  except RunNotFound as error:
+    raise HTTPException(status_code=404, detail=str(error)) from error
+  except InvalidRunState as error:
+    raise HTTPException(
+      status_code=503, detail=str(error), headers={"Retry-After": "1"}
+    ) from error
+  return {"data": run}

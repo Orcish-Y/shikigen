@@ -4,7 +4,14 @@ import json
 from typing import Annotated, Literal
 
 from pydantic import Field, TypeAdapter
-from shikigen.event_contract import EVENT, Lifecycle, Usage
+from shikigen.event_contract import (
+  EVENT,
+  ApprovalInvalidated,
+  ApprovalRequired,
+  ApprovalResolved,
+  Lifecycle,
+  Usage,
+)
 from shikigen.messages import CompleteMessage, Identity, StrictModel
 from shikigen.stream import StreamEventVariant
 
@@ -14,6 +21,7 @@ class MetadataData(StrictModel):
   run_id: Identity
   status: Literal["running", "completed", "cancelled", "interrupted", "error"]
   usage: Usage | None = None
+  usage_pending: bool | None = None
 
 
 class DeltaData(StrictModel):
@@ -39,6 +47,17 @@ class LifecycleEvent(StrictModel):
   payload: Lifecycle
 
 
+class ApprovalEvent(StrictModel):
+  seq: Annotated[int, Field(gt=0)]
+  created_at: str
+  category: Literal["approval"]
+  event_type: Literal["required", "resolved", "invalidated"]
+  payload: Annotated[
+    ApprovalRequired | ApprovalResolved | ApprovalInvalidated,
+    Field(discriminator="status"),
+  ]
+
+
 class StreamErrorData(StrictModel):
   code: Identity
   message: Identity
@@ -57,7 +76,9 @@ class DeltaEnvelope(StrictModel):
 
 class EventEnvelope(StrictModel):
   event: Literal["event"] = "event"
-  data: Annotated[MessageEvent | LifecycleEvent, Field(discriminator="category")]
+  data: Annotated[
+    MessageEvent | LifecycleEvent | ApprovalEvent, Field(discriminator="category")
+  ]
 
 
 class ErrorEnvelope(StrictModel):
@@ -116,9 +137,11 @@ class RunSseEncoder:
               "seq": event_data.seq,
               "created_at": event_data.created_at,
               "category": event_data.category,
-              "event_type": "created"
-              if event_data.category == "message"
-              else "status_changed",
+              "event_type": {
+                "message": "created",
+                "approval": event_data.event_type.removeprefix("approval_"),
+                "lifecycle": "status_changed",
+              }[event_data.category],
               "payload": event_data.content.model_dump(mode="json", exclude_unset=True),
             }
           }

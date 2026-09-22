@@ -299,58 +299,62 @@ class CompositionTests(unittest.IsolatedAsyncioTestCase):
     self.assertIn(b"NO_HTTP_RUNTIME_OK", stdout)
 
   async def test_real_graph_tool_messages_and_reopened_runtime(self):
-    async with open_runtime(self.config, agent_factory=deterministic_agent) as runtime:
-      thread_id = await runtime.threads.create_thread()
-      execution = await runtime.runs.start_run(thread_id, "1 + 2")
-      row = await runtime.runs.wait_run(execution)
-      self.assertEqual(row["status"], "completed")
-      messages = await runtime.runs.list_run_messages(thread_id, execution.run_id)
-      self.assertEqual(
-        [m["content"]["type"] for m in messages], ["human", "ai", "tool", "ai"]
-      )
-      self.assertEqual(messages[2]["content"]["content"], "3")
-      self.assertEqual(messages[3]["content"]["content"], "3")
-      events = [event async for event in execution.stream.subscribe()]
-      self.assertEqual(events[-1].data, {"status": "completed"})
-      self.assertTrue(
-        any(
-          e.event == "durable_event" and e.data["event_type"] == "tool_message"
-          for e in events
+    with patch("app.composition.create_lead_agent", new=deterministic_agent):
+      async with open_runtime(self.config) as runtime:
+        thread_id = await runtime.threads.create_thread()
+        execution = await runtime.runs.start_run(thread_id, "1 + 2")
+        row = await runtime.runs.wait_run(execution)
+        self.assertEqual(row["status"], "completed")
+        messages = await runtime.runs.list_run_messages(thread_id, execution.run_id)
+        self.assertEqual(
+          [m["content"]["type"] for m in messages], ["human", "ai", "tool", "ai"]
         )
-      )
-    async with open_runtime(self.config, agent_factory=deterministic_agent) as runtime:
-      self.assertEqual(await runtime.runs.read_run(thread_id, execution.run_id), row)
-      self.assertEqual(
-        await runtime.runs.list_run_messages(thread_id, execution.run_id), messages
-      )
+        self.assertEqual(messages[2]["content"]["content"], "3")
+        self.assertEqual(messages[3]["content"]["content"], "3")
+        events = [event async for event in execution.stream.subscribe()]
+        self.assertEqual(events[-1].data, {"status": "completed"})
+        self.assertTrue(
+          any(
+            e.event == "durable_event" and e.data["event_type"] == "tool_message"
+            for e in events
+          )
+        )
+    with patch("app.composition.create_lead_agent", new=deterministic_agent):
+      async with open_runtime(self.config) as runtime:
+        self.assertEqual(await runtime.runs.read_run(thread_id, execution.run_id), row)
+        self.assertEqual(
+          await runtime.runs.list_run_messages(thread_id, execution.run_id), messages
+        )
 
   async def test_pause_commits_checkpoint_and_remains_busy_after_resource_removal(self):
     async def factory(**kwargs):
-      kwargs["middlewares"].append(HumanInTheLoopMiddleware(interrupt_on={"add": True}))
+      kwargs["middlewares"] = [HumanInTheLoopMiddleware(interrupt_on={"add": True})]
       return await deterministic_agent(**kwargs)
 
-    async with open_runtime(self.config, agent_factory=factory) as runtime:
-      thread_id = await runtime.threads.create_thread()
-      execution = await runtime.runs.start_run(thread_id, "1 + 2")
-      row = await runtime.runs.wait_run(execution)
-      self.assertEqual(row["status"], "interrupted")
-      self.assertIsNone(row["completed_at"])
-      self.assertIsNone(runtime.executions.get(thread_id, execution.run_id))
-      facts = await runtime.runs.list_run_events(thread_id, execution.run_id)
-      pause = facts[-1]["content"]
-      self.assertTrue(pause["checkpoint"]["configurable"]["checkpoint_id"])
-      self.assertTrue(pause["interrupts"][0]["id"])
-      events = [event async for event in execution.stream.subscribe()]
-      self.assertEqual(events[-1].data, {"status": "interrupted"})
-      self.assertEqual([e.data for e in events if e.event == "durable_event"], facts)
-      with self.assertRaises(ThreadBusy):
-        await runtime.runs.start_run(thread_id, "another")
+    with patch("app.composition.create_lead_agent", new=factory):
+      async with open_runtime(self.config) as runtime:
+        thread_id = await runtime.threads.create_thread()
+        execution = await runtime.runs.start_run(thread_id, "1 + 2")
+        row = await runtime.runs.wait_run(execution)
+        self.assertEqual(row["status"], "interrupted")
+        self.assertIsNone(row["completed_at"])
+        self.assertIsNone(runtime.executions.get(thread_id, execution.run_id))
+        facts = await runtime.runs.list_run_events(thread_id, execution.run_id)
+        pause = facts[-2]["content"]
+        self.assertTrue(pause["checkpoint"]["configurable"]["checkpoint_id"])
+        self.assertTrue(pause["interrupts"][0]["id"])
+        events = [event async for event in execution.stream.subscribe()]
+        self.assertEqual(events[-1].data, {"status": "interrupted"})
+        self.assertEqual([e.data for e in events if e.event == "durable_event"], facts)
+        with self.assertRaises(ThreadBusy):
+          await runtime.runs.start_run(thread_id, "another")
 
   async def test_initialization_failure_closes_store_and_checkpointer(self):
     captured = {}
 
     async def fail(**kwargs):
-      self.assertEqual(kwargs["middlewares"], [])
+      self.assertEqual(len(kwargs["middlewares"]), 1)
+      self.assertIsInstance(kwargs["middlewares"][0], HumanInTheLoopMiddleware)
       captured["checkpointer"] = kwargs["checkpointer"]
       raise ValueError("factory failed")
 
@@ -363,8 +367,9 @@ class CompositionTests(unittest.IsolatedAsyncioTestCase):
 
     with patch("app.persistence.chat_store.ChatStore.open", side_effect=capture_store):
       with self.assertRaisesRegex(ValueError, "factory failed"):
-        async with open_runtime(self.config, agent_factory=fail):
-          self.fail("Unexpected runtime")
+        with patch("app.composition.create_lead_agent", new=fail):
+          async with open_runtime(self.config):
+            self.fail("Unexpected runtime")
     with self.assertRaises(ValueError):
       await captured["store"].list_threads()
     with self.assertRaises(ValueError):
@@ -401,13 +406,14 @@ class CompositionTests(unittest.IsolatedAsyncioTestCase):
           return Agent()
 
         try:
-          async with open_runtime(self.config, agent_factory=factory) as runtime:
-            captured["store"] = runtime.chat_store
-            thread_id = await runtime.threads.create_thread()
-            execution = await runtime.runs.start_run(thread_id, "hello")
-            await asyncio.wait_for(entered.wait(), 2)
-            if caller_fails:
-              raise ValueError("caller failed")
+          with patch("app.composition.create_lead_agent", new=factory):
+            async with open_runtime(self.config) as runtime:
+              captured["store"] = runtime.chat_store
+              thread_id = await runtime.threads.create_thread()
+              execution = await runtime.runs.start_run(thread_id, "hello")
+              await asyncio.wait_for(entered.wait(), 2)
+              if caller_fails:
+                raise ValueError("caller failed")
         except ValueError as error:
           self.assertTrue(caller_fails)
           self.assertEqual(str(error), "caller failed")

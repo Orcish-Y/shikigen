@@ -39,27 +39,28 @@ class RunEventTests(unittest.IsolatedAsyncioTestCase):
         observed.append(data)
       return original(stream, event, data)
 
-    async with open_runtime(self.config, agent_factory=deterministic_agent) as runtime:
-      thread = await runtime.threads.create_thread()
-      with patch.object(Stream, "publish", publish):
-        execution = await runtime.runs.start_run(thread, "add")
-        await runtime.runs.wait_run(execution)
-      facts = await runtime.runs.list_run_events(thread, execution.run_id)
-      self.assertEqual(observed, facts)
-      self.assertEqual(
-        [fact["event_type"] for fact in facts],
-        [
-          "run_running",
-          "human_message",
-          "ai_message",
-          "tool_message",
-          "ai_message",
-          "run_completed",
-        ],
-      )
-      events = [event async for event in execution.stream.subscribe()]
-      self.assertEqual([e.data for e in events if e.event == "durable_event"], facts)
-      self.assertIsNone(runtime.executions.get(thread, execution.run_id))
+    with patch("app.composition.create_lead_agent", new=deterministic_agent):
+      async with open_runtime(self.config) as runtime:
+        thread = await runtime.threads.create_thread()
+        with patch.object(Stream, "publish", publish):
+          execution = await runtime.runs.start_run(thread, "add")
+          await runtime.runs.wait_run(execution)
+        facts = await runtime.runs.list_run_events(thread, execution.run_id)
+        self.assertEqual(observed, facts)
+        self.assertEqual(
+          [fact["event_type"] for fact in facts],
+          [
+            "run_running",
+            "human_message",
+            "ai_message",
+            "tool_message",
+            "ai_message",
+            "run_completed",
+          ],
+        )
+        events = [event async for event in execution.stream.subscribe()]
+        self.assertEqual([e.data for e in events if e.event == "durable_event"], facts)
+        self.assertIsNone(runtime.executions.get(thread, execution.run_id))
 
   async def test_publication_failure_does_not_fail_graph_or_lose_committed_facts(self):
     original = Stream.publish
@@ -71,31 +72,29 @@ class RunEventTests(unittest.IsolatedAsyncioTestCase):
             raise OSError("broadcast unavailable")
           return original(stream, event, data)
 
-        async with open_runtime(
-          self.config, agent_factory=deterministic_agent
-        ) as runtime:
-          thread = await runtime.threads.create_thread()
-          with (
-            patch.object(Stream, "publish", publish),
-            self.assertLogs("app.run_events"),
-          ):
-            execution = await runtime.runs.start_run(thread, "add")
-            row = await runtime.runs.wait_run(execution)
-          self.assertEqual(row["status"], "completed")
-          facts = await runtime.runs.list_run_events(thread, execution.run_id)
-          self.assertEqual(len(facts), 6)
-          events = [event async for event in execution.stream.subscribe()]
-          self.assertTrue(
-            any(e.data == {"code": "event_publication_failed"} for e in events)
-          )
-          self.assertFalse(any(e.event == "error" for e in events))
-          self.assertIsNone(runtime.executions.get(thread, execution.run_id))
-        async with open_runtime(
-          self.config, agent_factory=deterministic_agent
-        ) as reopened:
-          self.assertEqual(
-            await reopened.runs.list_run_events(thread, execution.run_id), facts
-          )
+        with patch("app.composition.create_lead_agent", new=deterministic_agent):
+          async with open_runtime(self.config) as runtime:
+            thread = await runtime.threads.create_thread()
+            with (
+              patch.object(Stream, "publish", publish),
+              self.assertLogs("app.run_events"),
+            ):
+              execution = await runtime.runs.start_run(thread, "add")
+              row = await runtime.runs.wait_run(execution)
+            self.assertEqual(row["status"], "completed")
+            facts = await runtime.runs.list_run_events(thread, execution.run_id)
+            self.assertEqual(len(facts), 6)
+            events = [event async for event in execution.stream.subscribe()]
+            self.assertTrue(
+              any(e.data == {"code": "event_publication_failed"} for e in events)
+            )
+            self.assertFalse(any(e.event == "error" for e in events))
+            self.assertIsNone(runtime.executions.get(thread, execution.run_id))
+        with patch("app.composition.create_lead_agent", new=deterministic_agent):
+          async with open_runtime(self.config) as reopened:
+            self.assertEqual(
+              await reopened.runs.list_run_events(thread, execution.run_id), facts
+            )
 
   async def test_entire_observation_channel_failure_still_settles(self):
     # Only durable publication is broken; ephemeral Graph streaming still works.
@@ -106,33 +105,41 @@ class RunEventTests(unittest.IsolatedAsyncioTestCase):
         raise OSError("observer disconnected")
       return original(stream, event, data)
 
-    async with open_runtime(self.config, agent_factory=deterministic_agent) as runtime:
-      thread = await runtime.threads.create_thread()
-      with patch.object(Stream, "publish", publish), self.assertLogs("app.run_events"):
-        execution = await runtime.runs.start_run(thread, "add")
+    with patch("app.composition.create_lead_agent", new=deterministic_agent):
+      async with open_runtime(self.config) as runtime:
+        thread = await runtime.threads.create_thread()
+        with (
+          patch.object(Stream, "publish", publish),
+          self.assertLogs("app.run_events"),
+        ):
+          execution = await runtime.runs.start_run(thread, "add")
+          self.assertEqual(
+            (await runtime.runs.wait_run(execution))["status"], "completed"
+          )
+        self.assertIsNone(runtime.executions.get(thread, execution.run_id))
         self.assertEqual(
-          (await runtime.runs.wait_run(execution))["status"], "completed"
+          len(await runtime.runs.list_run_events(thread, execution.run_id)), 6
         )
-      self.assertIsNone(runtime.executions.get(thread, execution.run_id))
-      self.assertEqual(
-        len(await runtime.runs.list_run_events(thread, execution.run_id)), 6
-      )
 
   async def test_message_write_failure_does_not_publish_candidate_message(self):
-    async with open_runtime(self.config, agent_factory=deterministic_agent) as runtime:
-      thread = await runtime.threads.create_thread()
-      with patch.object(
-        runtime.chat_store, "append_committed_event", side_effect=OSError("disk failed")
-      ):
-        execution = await runtime.runs.start_run(thread, "add")
-        row = await runtime.runs.wait_run(execution)
-      self.assertEqual(row["status"], "error")
-      facts = await runtime.runs.list_run_events(thread, execution.run_id)
-      self.assertEqual(
-        [f["event_type"] for f in facts], ["run_running", "human_message", "run_error"]
-      )
-      events = [e async for e in execution.stream.subscribe()]
-      self.assertEqual([e.data for e in events if e.event == "durable_event"], facts)
+    with patch("app.composition.create_lead_agent", new=deterministic_agent):
+      async with open_runtime(self.config) as runtime:
+        thread = await runtime.threads.create_thread()
+        with patch.object(
+          runtime.chat_store,
+          "append_committed_event",
+          side_effect=OSError("disk failed"),
+        ):
+          execution = await runtime.runs.start_run(thread, "add")
+          row = await runtime.runs.wait_run(execution)
+        self.assertEqual(row["status"], "error")
+        facts = await runtime.runs.list_run_events(thread, execution.run_id)
+        self.assertEqual(
+          [f["event_type"] for f in facts],
+          ["run_running", "human_message", "run_error"],
+        )
+        events = [e async for e in execution.stream.subscribe()]
+        self.assertEqual([e.data for e in events if e.event == "durable_event"], facts)
 
   async def test_failed_settlement_and_failed_notification_preserve_storage_error(self):
     original = Stream.publish
@@ -142,26 +149,27 @@ class RunEventTests(unittest.IsolatedAsyncioTestCase):
         raise RuntimeError("notification unavailable")
       return original(stream, event, data)
 
-    async with open_runtime(self.config, agent_factory=deterministic_agent) as runtime:
-      thread = await runtime.threads.create_thread()
-      with (
-        patch.object(
-          runtime.chat_store, "settle_execution", side_effect=OSError("disk failed")
-        ),
-        patch.object(Stream, "publish", publish),
-        self.assertLogs("app", level="ERROR"),
-      ):
-        execution = await runtime.runs.start_run(thread, "add")
-        with self.assertRaisesRegex(OSError, "disk failed"):
-          await runtime.runs.wait_run(execution)
-      self.assertEqual(
-        (await runtime.runs.read_run(thread, execution.run_id))["status"], "running"
-      )
-      events = [event async for event in execution.stream.subscribe()]
-      self.assertFalse(any(e.event in ("status", "error") for e in events))
-      facts = await runtime.runs.list_run_events(thread, execution.run_id)
-      self.assertEqual([e.data for e in events if e.event == "durable_event"], facts)
-      self.assertIsNone(runtime.executions.get(thread, execution.run_id))
+    with patch("app.composition.create_lead_agent", new=deterministic_agent):
+      async with open_runtime(self.config) as runtime:
+        thread = await runtime.threads.create_thread()
+        with (
+          patch.object(
+            runtime.chat_store, "settle_execution", side_effect=OSError("disk failed")
+          ),
+          patch.object(Stream, "publish", publish),
+          self.assertLogs("app", level="ERROR"),
+        ):
+          execution = await runtime.runs.start_run(thread, "add")
+          with self.assertRaisesRegex(OSError, "disk failed"):
+            await runtime.runs.wait_run(execution)
+        self.assertEqual(
+          (await runtime.runs.read_run(thread, execution.run_id))["status"], "running"
+        )
+        events = [event async for event in execution.stream.subscribe()]
+        self.assertFalse(any(e.event in ("status", "error") for e in events))
+        facts = await runtime.runs.list_run_events(thread, execution.run_id)
+        self.assertEqual([e.data for e in events if e.event == "durable_event"], facts)
+        self.assertIsNone(runtime.executions.get(thread, execution.run_id))
 
   async def test_message_replay_keeps_identity_and_conflict_is_not_broadcast(self):
     from langchain_core.messages import HumanMessage
@@ -169,38 +177,39 @@ class RunEventTests(unittest.IsolatedAsyncioTestCase):
 
     from app.run_state import MessageConflict
 
-    async with open_runtime(self.config, agent_factory=deterministic_agent) as runtime:
-      thread = await runtime.threads.create_thread()
-      await runtime.chat_store.create_run(
-        thread_id=thread,
-        run_id="run",
-        entry_message=HumanMessage(id="human", content="hello"),
-      )
-      execution = RunExecution(run_id="run", thread_id=thread)
-      runtime.executions.install(execution)
-      ingestor = RunEventIngestor(runtime.chat_store, runtime.executions)
-      kwargs = dict(
-        thread_id=thread,
-        run_id="run",
-        event_type="ai_message",
-        category="message",
-        event_key="ai:answer",
-        content={
-          "type": "ai",
-          "message_id": "answer",
-          "content": "ok",
-          "tool_calls": [],
-        },
-      )
-      first, second = await asyncio.gather(
-        ingestor.append_event(**kwargs), ingestor.append_event(**kwargs)
-      )
-      self.assertEqual(first, second)
-      with self.assertRaises(MessageConflict):
-        await ingestor.append_event(
-          **{**kwargs, "content": {**kwargs["content"], "content": "different"}}
+    with patch("app.composition.create_lead_agent", new=deterministic_agent):
+      async with open_runtime(self.config) as runtime:
+        thread = await runtime.threads.create_thread()
+        await runtime.chat_store.create_run(
+          thread_id=thread,
+          run_id="run",
+          entry_message=HumanMessage(id="human", content="hello"),
         )
-      execution.stream.close()
-      events = [e async for e in execution.stream.subscribe()]
-      self.assertEqual(len(events), 1)
-      self.assertEqual(len(await runtime.runs.list_run_events(thread, "run")), 3)
+        execution = RunExecution(run_id="run", thread_id=thread)
+        runtime.executions.install(execution)
+        ingestor = RunEventIngestor(runtime.chat_store, runtime.executions)
+        kwargs = dict(
+          thread_id=thread,
+          run_id="run",
+          event_type="ai_message",
+          category="message",
+          event_key="ai:answer",
+          content={
+            "type": "ai",
+            "message_id": "answer",
+            "content": "ok",
+            "tool_calls": [],
+          },
+        )
+        first, second = await asyncio.gather(
+          ingestor.append_event(**kwargs), ingestor.append_event(**kwargs)
+        )
+        self.assertEqual(first, second)
+        with self.assertRaises(MessageConflict):
+          await ingestor.append_event(
+            **{**kwargs, "content": {**kwargs["content"], "content": "different"}}
+          )
+        execution.stream.close()
+        events = [e async for e in execution.stream.subscribe()]
+        self.assertEqual(len(events), 1)
+        self.assertEqual(len(await runtime.runs.list_run_events(thread, "run")), 3)

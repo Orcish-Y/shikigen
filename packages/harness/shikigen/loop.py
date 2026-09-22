@@ -5,14 +5,16 @@ from collections.abc import AsyncIterable, Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 from langchain_core.messages import HumanMessage
+from langgraph.stream import CheckpointsTransformer
+from langgraph.types import Command
 
 from shikigen.execution import (
   ExecutionOutcome,
-  ExecutionPause,
   ExecutionReason,
   RunExecution,
 )
 from shikigen.graph_events import GraphEventAdapter
+from shikigen.graph_pause import GraphPauseCollector
 from shikigen.runtime_context import AgentRunContext
 from shikigen.stream import MessageData, ToolCallData
 
@@ -23,14 +25,15 @@ if TYPE_CHECKING:
 
 async def execute_agent_loop(
   agent,  # 编译好的 agent graph
-  new_message: HumanMessage,
+  new_message: HumanMessage | Command,
   *,
+  checkpoint: dict | None = None,
   execution: RunExecution,
   token_tracker: TokenTracker | None = None,
   ingest_delta: Callable[[MessageData], Awaitable[None]] | None = None,
   ingest_message: Callable[[dict[str, Any]], Awaitable[int]] | None = None,
 ) -> ExecutionOutcome:
-  """使用新消息执行 agent，由 checkpointer 恢复此前的完整状态。
+  """使用新消息启动，或携带 Command 与准确 checkpoint 恢复 agent。
 
   顺序消费原始 messages 与根图 values，完整消息经注入接口接入。
   返回执行结果，不发布产品终态、不关闭 Stream；外部 Task 取消继续传播。
@@ -40,10 +43,13 @@ async def execute_agent_loop(
   if execution.abort_event.is_set():
     return ExecutionOutcome(ExecutionReason.ABORTED)
 
+  pauses = GraphPauseCollector(execution.thread_id)
+
   async def consume_event_stream(event_stream: AsyncIterable[object]) -> None:
     adapter = GraphEventAdapter()
     tool_calls: dict[str, dict[str, Any]] = {}
     async for event in event_stream:
+      pauses.observe(event)
       delta = adapter.delta(event)
       if delta is not None:
         if ingest_delta is not None and not delta["done"]:
@@ -92,6 +98,12 @@ async def execute_agent_loop(
       await asyncio.gather(consume_task, abort_task, return_exceptions=True)
 
   config: dict = {"configurable": {"thread_id": execution.thread_id}}
+  if isinstance(new_message, Command):
+    config = pauses.coordinate(checkpoint)
+    if config["configurable"]["checkpoint_ns"]:
+      raise ValueError("Resume requires a root checkpoint")
+  elif checkpoint is not None:
+    raise ValueError("Only resume accepts an exact checkpoint")
 
   # 将 token_tracker 挂到 LangChain callback 链上
   if token_tracker is not None:
@@ -99,34 +111,24 @@ async def execute_agent_loop(
 
   try:
     async with await agent.astream_events(
-      {"messages": [new_message]},
+      new_message if isinstance(new_message, Command) else {"messages": [new_message]},
       config=config,
       context=AgentRunContext(
         thread_id=execution.thread_id,
         run_id=execution.run_id,
       ),
       version="v3",
+      transformers=[CheckpointsTransformer],
     ) as event_stream:
-      # todo. 这里发布了什么？？
+      # todo. 这里发布了什么？？，为什么之后 metadata，没有状态？
       execution.stream.publish("metadata", {"run_id": execution.run_id})
       outcome = await wait_for_stream_outcome(event_stream)
 
     if outcome is ExecutionReason.COMPLETED and getattr(agent, "checkpointer", None):
-      snapshot = await agent.aget_state(config, subgraphs=True)
-      if snapshot.next or snapshot.interrupts:
-        return ExecutionOutcome(
-          ExecutionReason.INTERRUPTED,
-          pause=ExecutionPause(
-            checkpoint=snapshot.config,
-            interrupts=tuple(
-              {"id": item.id, "value": item.value} for item in snapshot.interrupts
-            ),
-          ),
-        )
+      pause = await pauses.read_pause(agent)
+      if pause is not None:
+        return ExecutionOutcome(ExecutionReason.INTERRUPTED, pause=pause)
 
-    if outcome is ExecutionReason.COMPLETED and token_tracker is not None:
-      # usage 必须在 terminal event 之前发布。
-      execution.stream.publish("usage", token_tracker.summary())
   except Exception as error:
     return ExecutionOutcome(ExecutionReason.FAILED, error=error)
   else:
@@ -166,6 +168,8 @@ async def run_agent_loop(
     assert outcome.error is not None
     record.finish(RunStatus.ERROR, error=outcome.error)
     raise outcome.error
+  if token_tracker is not None:
+    record.stream.publish("usage", token_tracker.summary())
   record.finish(
     RunStatus.COMPLETED
     if outcome.reason is ExecutionReason.COMPLETED

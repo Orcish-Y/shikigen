@@ -3,6 +3,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from langchain.agents import create_agent
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
@@ -32,7 +33,7 @@ from app.run_events import RunEventIngestor
 from app.run_state import MessageConflict
 
 
-async def two_round_agent(*, config, middlewares, checkpointer):
+async def two_round_agent(*, config, middlewares, checkpointer, tool_registry):
   responses = []
   for round_id in (1, 2):
     responses.extend(
@@ -147,58 +148,61 @@ class MessageContractTests(unittest.IsolatedAsyncioTestCase):
       database=DatabaseConfig(path=str(self.path)),
       checkpointer={"type": "sqlite", "path": str(self.path)},
     )
-    async with open_runtime(config, agent_factory=two_round_agent) as runtime:
-      thread = await runtime.threads.create_thread()
-      histories = []
-      for round_id in (1, 2):
-        execution = await runtime.runs.start_run(thread, f"round {round_id}")
-        self.assertEqual(
-          (await runtime.runs.wait_run(execution))["status"], "completed"
-        )
-        facts = await runtime.runs.list_run_messages(thread, execution.run_id)
-        self.assertEqual(len(facts), 4)
-        self.assertTrue(all(f["run_id"] == execution.run_id for f in facts))
-        histories.append(facts)
-        events = [e async for e in execution.stream.subscribe()]
-        encoder = RunSseEncoder("thread", "first")
-        for event in events:
-          if frame := encoder.encode(event):
-            SSE_EVENT.validate_python(parse_sse(frame))
-        previews = [
-          e.data for e in events if e.event == "message" and not e.data["done"]
-        ]
-        self.assertTrue(previews)
-        answer = next(
-          f for f in facts if f["content"]["message_id"] == f"answer-{round_id}"
-        )
-        self.assertEqual({p["seq"] for p in previews}, {answer["seq"]})
-        complete_index = next(
-          i
-          for i, e in enumerate(events)
-          if e.event == "durable_event" and e.data["seq"] == answer["seq"]
-        )
-        self.assertTrue(
-          all(
-            i < complete_index
-            for i, e in enumerate(events)
-            if e.event == "message" and not e.data["done"]
+    with patch("app.composition.create_lead_agent", new=two_round_agent):
+      async with open_runtime(config) as runtime:
+        thread = await runtime.threads.create_thread()
+        histories = []
+        for round_id in (1, 2):
+          execution = await runtime.runs.start_run(thread, f"round {round_id}")
+          self.assertEqual(
+            (await runtime.runs.wait_run(execution))["status"], "completed"
           )
+          facts = await runtime.runs.list_run_messages(thread, execution.run_id)
+          self.assertEqual(len(facts), 4)
+          self.assertTrue(all(f["run_id"] == execution.run_id for f in facts))
+          histories.append(facts)
+          events = [e async for e in execution.stream.subscribe()]
+          encoder = RunSseEncoder("thread", "first")
+          for event in events:
+            if frame := encoder.encode(event):
+              SSE_EVENT.validate_python(parse_sse(frame))
+          previews = [
+            e.data for e in events if e.event == "message" and not e.data["done"]
+          ]
+          self.assertTrue(previews)
+          answer = next(
+            f for f in facts if f["content"]["message_id"] == f"answer-{round_id}"
+          )
+          self.assertEqual({p["seq"] for p in previews}, {answer["seq"]})
+          complete_index = next(
+            i
+            for i, e in enumerate(events)
+            if e.event == "durable_event" and e.data["seq"] == answer["seq"]
+          )
+          self.assertTrue(
+            all(
+              i < complete_index
+              for i, e in enumerate(events)
+              if e.event == "message" and not e.data["done"]
+            )
+          )
+          self.assertEqual({p["message_id"] for p in previews}, {f"answer-{round_id}"})
+          tools = [
+            e.data["content"]
+            for e in events
+            if e.event == "durable_event"
+            and e.data["category"] == "message"
+            and e.data["content"]["type"] == "tool"
+          ]
+          self.assertEqual(len(tools), 1)
+          self.assertEqual(tools[0]["message_id"], f"tool-result:call-{round_id}")
+        self.assertTrue(
+          {f["seq"] for f in histories[0]}.isdisjoint(f["seq"] for f in histories[1])
         )
-        self.assertEqual({p["message_id"] for p in previews}, {f"answer-{round_id}"})
-        tools = [
-          e.data["content"]
-          for e in events
-          if e.event == "durable_event"
-          and e.data["category"] == "message"
-          and e.data["content"]["type"] == "tool"
-        ]
-        self.assertEqual(len(tools), 1)
-        self.assertEqual(tools[0]["message_id"], f"tool-result:call-{round_id}")
-      self.assertTrue(
-        {f["seq"] for f in histories[0]}.isdisjoint(f["seq"] for f in histories[1])
-      )
-      snapshot = await runtime.agent.aget_state({"configurable": {"thread_id": thread}})
-      self.assertEqual(len(snapshot.values["messages"]), 8)
+        snapshot = await runtime.agent.aget_state(
+          {"configurable": {"thread_id": thread}}
+        )
+        self.assertEqual(len(snapshot.values["messages"]), 8)
 
   async def test_same_run_checkpoint_resume_replay_returns_existing_fact(self):
     async def node(state):

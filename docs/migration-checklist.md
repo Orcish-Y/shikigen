@@ -612,16 +612,47 @@ interrupted 的完整 checkpoint 事实。测试使用临时数据库和确定�
 
 **为什么：**消费者离开后，暂停请求仍应存在；恢复需要定位产生这次暂停的 checkpoint。
 
-**接口：**`HumanInTheLoopMiddleware`、`CheckpointsTransformer`、`aget_state(..., subgraphs=True)`、`interrupt_run()`。这些接口来自 copy 已使用的方案，实施时以项目安装版本和确定性 Graph 验证具体事件形状。
+**接口：**`HumanInTheLoopMiddleware`、`CheckpointsTransformer`、`aget_state(..., subgraphs=True)`；当前项目通过 `ChatStore.settle_execution(INTERRUPTED)` 完成暂停事务，对应 copy 的 `interrupt_run()`，不额外增加同义入口。
 
-- [ ] 先为少量明确工具配置 approve/reject，并校验策略引用的工具存在。
-- [ ] 观察根 checkpoint，保存准确 namespace 和 checkpoint_id，不用“当前最新”替代暂停时坐标。
-- [ ] 汇总父图与子图的全部待响应 Interrupt，保留稳定 ID。
-- [ ] 同一事务保存 required 事实和 interrupted 状态。
-- [ ] interrupted 占用 Thread 的非终态名额，但不要求保留运行中的 Task。
-- [ ] 暂停后的 GET 重建能完整展示待审批内容。
+- [x] 先为少量明确工具配置 approve/reject，并校验策略引用的工具存在。
+- [x] 观察根 checkpoint，保存准确 namespace 和 checkpoint_id，不用“当前最新”替代暂停时坐标。
+- [x] 汇总父图与子图的全部待响应 Interrupt，保留稳定 ID。
+- [x] 同一事务保存 required 事实和 interrupted 状态。
+- [x] interrupted 占用 Thread 的非终态名额，但不要求保留运行中的 Task。
+- [x] 暂停后的 GET 重建能完整展示待审批内容。
 
 **验收：**审批前工具未执行；刷新后 pending 内容相同；多个 Interrupt 全部可见；暂停不会错误发布 completed。
+
+#### 2026-09-22：7A 已完成
+
+- **策略装配：**`app/approval.py` 定义主 Agent 的 `write_file`、`bash` 审批策略，
+  只提供 approve/reject。`open_runtime()` 固定使用项目的 `create_lead_agent()`，
+  先构建实际工具注册表，校验策略引用的工具存在，再注入 middleware。
+  当前 `task` 工具自行创建的子 Agent 不自动继承这份 middleware；本次父子图验收
+  指 Graph 中已经产生的嵌套 Interrupt 的收集，不代表所有委派工具都已接入审批。
+- **准确坐标：**Loop 在 v3 调用中启用 `CheckpointsTransformer`；harness 的
+  `GraphPauseCollector` 只记录根 checkpoint 事件，随后携带明确的 thread_id、
+  checkpoint_ns、checkpoint_id 调用 `aget_state(..., subgraphs=True)`。
+  不回退到最新 checkpoint；坐标不完整、归属错误或子图未展开时显式失败。
+- **完整请求：**递归收集父图、子图 task 的 Interrupt，保存稳定 `id`、所属
+  `namespace` 和完整 JSON `value`；HITL 的 value 包含 action_requests 与
+  review_configs（工具名、参数、描述、允许动作等）。子图向父任务转发的同一
+  Interrupt 只保存一次，并检查 ID 集合一致。
+- **原子事实：**同一事务写 `approval_required`（category=approval）、
+  `run_interrupted` 和 Run 状态。只有事务提交后才发布两条事实及 interrupted
+  通知；重复结算返回原事实。普通事件追加接口禁止绕过事务写审批事实。
+  暂停的 completed_at 为空，继续占用 Thread 非终态名额，执行 Task 和订阅可回收。
+- **查询契约：**SSE 仍使用 metadata/delta/event/error 四种帧；审批通过
+  `event` 帧的 `category=approval`、`event_type=required` 输出，payload 包含
+  status、checkpoint、interrupts。生命周期仅携带状态，不再重复放置审批内容。
+  `list_run_events()`、`observe_run()` 和既有 GET 流都可从数据库重建 pending 内容，
+  不需要 Graph 或执行句柄。event_version 不升级，没有旧库兼容或迁移代码。
+- **验收：**真实 HITL 在审批前未执行工具；一份 Interrupt 包含两个工具动作；
+  父图、子图的两个 Interrupt 全部可见；更新 checkpoint 后仍可读取原暂停坐标；
+  数据库重开后两次 HTTP 重建一致；写入失败原子回滚；重复结算不增加事实；
+  暂停不发布 completed。全量 **189 项测试通过**，Ruff lint／格式和 diff 检查通过。
+
+本步只实现暂停与查询；响应提交、同 Run 恢复属于 7B，取消与使用量属于 7C／7D。
 
 ### 7B：接受响应并恢复同一个 Run
 
@@ -629,17 +660,67 @@ interrupted 的完整 checkpoint 事实。测试使用临时数据库和确定�
 
 **为什么：**“用户响应已接受”与“恢复调用已开始”存在故障间隔，必须能分别解释。
 
-**接口：**`accept_approval_decisions()`、`resume_product_run()`、`Command(resume=...)`。
+**接口：**`ChatStore.accept_approval_decisions()`、`RunService.resume_run()`、`Command(resume=...)`。
 
-- [ ] 请求中的 Interrupt ID 集合必须与当前 pending 集合准确匹配。
-- [ ] 验证每项 response 的数量、类型与允许动作；后续需要 edit/respond 时再扩展策略。
-- [ ] 同一事务保存 resolved 事实和 running 转换，返回本次恢复所需坐标与输入。
-- [ ] 事务成功后才启动 resume，保持原 run_id。
-- [ ] 前一个暂停 invocation 的资源和用量收尾完成后，再向 `ExecutionRegistry` 安装新的 `RunExecution`。
-- [ ] 重复响应或旧审批返回明确冲突，不悄悄创建第二次 resume。
-- [ ] 审批冲突后，消费者通过读取现状收敛；不能推断“请求失败，所以服务器一定没接受”。
+- [x] 请求中的 Interrupt ID 集合必须与当前 pending 集合准确匹配。
+- [x] 验证每项 response 的数量、类型与允许动作；后续需要 edit/respond 时再扩展策略。
+- [x] 同一事务保存 resolved 事实和 running 转换，返回本次恢复所需坐标与输入。
+- [x] 事务成功后才启动 resume，保持原 run_id。
+- [x] 前一个暂停 invocation 的整个执行 Task（含现有收尾）完成后，再向 `ExecutionRegistry` 安装新的 `RunExecution`。
+- [x] 重复响应或旧审批返回明确冲突，不悄悄创建第二次 resume。
+- [x] 审批冲突后，消费者通过读取现状收敛；不能推断“请求失败，所以服务器一定没接受”。
 
 **验收：**并发响应只接受一次；同 Run 连续两次暂停均可恢复；第二次暂停不接受第一次的旧 ID；历史不重复归属；工具调用次数符合该确定性场景预期。
+
+#### 2026-09-22：7B 已完成
+
+- **共享入口：**`runtime.runs.resume_run(thread_id, run_id, responses)` 返回新的
+  `RunExecution`，沿用原 run_id。创建／恢复操作通过同一 Thread 锁串行协调，
+  并由应用生命周期持有；调用方断开不会取消已接受的操作。先等待旧 Task 收尾，
+  再安装新执行资源。累计用量仍由 7D 实现，本步没有声称暂停用量已持久化。
+- **校验：**responses 的键必须准确覆盖当前全部 Interrupt ID；每个 decisions
+  数组按 action_requests 顺序逐项对应，数量、类型与 review_configs 允许动作
+  都须匹配。同一个工具的多次调用按不同动作处理。只接受 approve/reject，
+  reject 可带 message；不接受 edit/respond 或额外字段。
+  接受前按保存的准确 checkpoint 展开 Graph 状态并核对全部 Interrupt；
+  checkpoint 不可读取或与持久请求不一致时，不消费审批。
+- **原子接受：**`BEGIN IMMEDIATE` 内再次检查 interrupted 和当前 pending，
+  一次提交 `approval_resolved`、`run_running` 和 Run 状态，返回 checkpoint、
+  resume 输入及两条已提交事实。竞争者或旧 ID 得到明确冲突，事务失败全部回滚。
+  resolved payload 保存 status、checkpoint 和 responses，SSE 使用
+  `event` / `category=approval` / `event_type=resolved`。
+- **执行与结算：**提交后才把 `Command(resume={interrupt_id: response})` 与保存的
+  checkpoint 交给原 Loop。内部结算键包含本次 run_running 的 seq，允许同一 Run
+  多次暂停；应用执行路径携带该 seq，拒绝旧 invocation 迟到结算新的执行。
+  不新增公开 Invocation ID，不升级 event_version，不增加历史库兼容。
+- **观察：**新 invocation 缓存从本次 resolved 的 seq 开始；既有 GET 流读取此前
+  持久前缀，再交付当前缓存和 live 事件。消息重放继续复用原事实，不重新归属或发布。
+- **失败窗口：**接受后启动 Task 失败会保留 resolved，并尝试提交
+  `error/resume_start_failed`。若进程在接受与启动之间退出，已提交事实仍可查询，
+  running 无本地执行时 GET 返回 503；启动扫描与 invocation_lost 收敛属于第 8 步。
+  请求出错或连接断开不能据此认定服务器未接受，调用者应读取既有 Run 流。
+- **验证：**全量 **198 项测试通过**。覆盖同 Run 两次暂停、并发响应只接受一次、
+  旧 ID 冲突、同名工具多项审批、reject 不执行工具、父子图全部响应、事务回滚、
+  多连接竞争、等待旧执行清理、请求取消后继续恢复、启动失败保留响应，以及活跃
+  恢复流无重复。阻断 HTTP 导入的独立进程关闭并重开 SQLite 后仍能恢复同一个 Run。
+  Ruff lint／格式检查与 `git diff --check` 通过。
+
+**HTTP：**`POST /api/threads/{thread_id}/runs/{run_id}/approval-decisions`。
+请求示例（ID 和 decisions 数量以当前 required 事实为准）：
+
+```json
+{
+  "responses": {
+    "<interrupt_id>": {
+      "decisions": [{"type": "approve"}, {"type": "reject", "message": "不要执行"}]
+    }
+  }
+}
+```
+
+成功返回本次恢复的 SSE；归属不存在为 404，重复／旧审批为 409，响应格式或动作不合法为
+422，checkpoint 无法验证为可重试 503。409 的 detail.stream 指向已有 Run 的只读流，
+可全量重建当前事实。7C 的后续实现见下节；7D 使用量及第 8 步启动协调仍待完成。
 
 ### 7C：让取消与审批、正常完成有一致规则
 
@@ -649,14 +730,52 @@ interrupted 的完整 checkpoint 事实。测试使用临时数据库和确定�
 
 **接口：**`cancel_run()`、`RunExecution.request_cancel()`，以及与其他生命周期一致的已提交事件发布入口。
 
-- [ ] 对 pending/running/interrupted 定义可取消规则，终态取消明确返回冲突或已有结果。
-- [ ] 取消 interrupted 时，在同一事务写 invalidated 和 cancelled。
-- [ ] 取消赢得状态竞争后，迟到的 complete 不得覆盖它。
-- [ ] 让现有观察者也能获知持久取消结果。建议走统一发布流程，并保证终态不会被正在退出的执行流提前关闭而遗漏。
-- [ ] 已没有活跃 `RunExecution` 的暂停 Run，仍能通过存储完成取消。
-- [ ] 取消与恢复请求使用一致的 Thread 执行协调规则。
+- [x] 明确当前没有 pending 状态；running/interrupted 可取消，终态取消返回已有结果。
+- [x] 取消 interrupted 时，在同一事务写 invalidated 和 cancelled。
+- [x] 取消赢得状态竞争后，迟到的 complete 不得覆盖它。
+- [x] 让现有观察者也能获知持久取消结果。建议走统一发布流程，并保证终态不会被正在退出的执行流提前关闭而遗漏。
+- [x] 已没有活跃 `RunExecution` 的暂停 Run，仍能通过存储完成取消。
+- [x] 取消与恢复请求使用一致的 Thread 执行协调规则。
 
 **验收：**取消先赢、审批先赢后取消、正常完成先赢三种场景各有确定结果；其他观察者能得到取消事实，或按明确协议重建后得到事实。
+
+#### 2026-09-22：7C 已完成
+
+**入口：**`RunService.cancel_run(thread_id, run_id)`，HTTP 对应
+`POST /api/threads/{thread_id}/runs/{run_id}/cancel`，不需要请求体。
+成功返回 `200 {"data": RunSnapshot}`；归属不匹配或不存在返回 404。
+取消 completed/error/cancelled 不新增事实，返回已有终态；调用方必须读取返回的 status。
+
+**事务规则：**`ChatStore.cancel_run()` 使用 `BEGIN IMMEDIATE` 串行检查状态。
+取消 running 写 cancelled；取消 interrupted 同时写 `approval_invalidated` 与
+`run_cancelled`，设置 completed_at。失效载荷包含准确 checkpoint、interrupt_ids、
+`status=invalidated` 和 `reason=run_cancelled`。任一写入失败整体回滚。
+SSE 新增 `category=approval / event_type=invalidated`；event_version 不升级。
+
+| 竞争结果 | 持久结果 |
+| --- | --- |
+| 取消先提交，随后提交审批 | cancelled，审批返回 409，不恢复 Graph |
+| 审批先提交，随后取消 | resolved → running → cancelled，请求停止恢复后的执行 |
+| 正常完成先提交 | completed，取消返回已有结果 |
+| 取消先提交，随后执行报告完成／失败／暂停 | 保留 cancelled，不新增相反终态或待审批请求 |
+
+**执行协调：**取消与 start/resume 共用 Thread 操作锁，接受后由应用生命周期持有，
+请求断连不撤销操作。存在本地执行时，取消与执行结算共用 settlement_lock，覆盖提交、
+发布和正常关闭；提交成功后先发布事实，再调用 `RunExecution.request_cancel()`。
+统一发布入口按持久事件 id 去重，迟到结算不会重复发送取消事实。
+取消返回表示持久取消已接受，不表示本地 Task 或外部工具副作用已经停止。
+同 Thread 的新 Run 等旧 Task 收尾后才启动，避免并发操作同一 checkpoint。
+
+**观察规则：**正在运行的流收到取消事实后仍可等待执行清理至 EOF；已经关闭的暂停流
+不会重新打开。客户端在取消响应后、暂停 EOF 后或观察失败时，重新调用既有 GET stream
+全量重建，获取 invalidated/cancelled。取消无本地句柄的 Run 仍可只靠数据库完成。
+不提供跨进程广播或远程执行停止；本地执行协调仍限单进程，启动恢复属于第 8 步。
+
+**验证：**新增确定性取消测试覆盖暂停取消、幂等、迟到完成、审批先接受后取消、
+完成提交后延迟发布、取消事务回滚、双数据库连接竞争、请求断开后继续提交、
+观察流去重、旧执行清理和 HTTP 归属校验；无 HTTP 独立进程也验证暂停取消与查询。
+全量 206 项测试通过；收紧结算事实校验后，8 项取消测试和 10 项存储契约测试复核通过，
+Ruff 与 diff 检查通过。7D 的后续实现见下节。
 
 ### 7D：明确用量累计与完成通知时序
 
@@ -664,23 +783,64 @@ interrupted 的完整 checkpoint 事实。测试使用临时数据库和确定�
 
 **为什么：**暂停前后属于同一用户任务，用量需要累加；同时不能把供应商尚未报告的数据当成准确计费事实。
 
-**接口：**现有 `TokenTracker.summary()`、建议的 `accumulate_run_usage()` 或与执行结算合并的存储操作。
+**接口：**`TokenTracker.summary()` → `ChatStore.settle_execution(usage=..., invocation_seq=...)`；通过 `RunService.read_run()` / `wait_run()` 读取累计结果，GET 内容流首帧 metadata 携带相同快照。
 
-- [ ] 先检查本项目 callbacks 的传播，验证普通模型、Goal evaluator 和子 Agent 的统计范围，避免漏计或重复。
-- [ ] 选择明确的时序：建议自然完成／暂停时先结算已知用量再发布完成／暂停通知；取消用量可能稍后收尾，查询语义需说明。
-- [ ] 防止同一次正常收尾在多条 finally／错误路径中累计两遍。
-- [ ] 如果结算允许自动重试，使用内部结算键做幂等；它无需成为新的公开 Invocation 实体。
-- [ ] 用量存储失败不得悄悄被描述为统计完整，记录明确的可诊断状态或日志。
-- [ ] 不将进程崩溃前尚未报告的用量补成伪造的零消耗。
+- [x] 先检查本项目 callbacks 的传播，验证普通模型、Goal evaluator 和子 Agent 的统计范围，避免漏计或重复。
+- [x] 选择明确的时序：建议自然完成／暂停时先结算已知用量再发布完成／暂停通知；取消用量可能稍后收尾，查询语义需说明。
+- [x] 防止同一次正常收尾在多条 finally／错误路径中累计两遍。
+- [x] 如果结算允许自动重试，使用内部结算键做幂等；它无需成为新的公开 Invocation 实体。
+- [x] 用量存储失败不得悄悄被描述为统计完整，记录明确的可诊断状态或日志。
+- [x] 不将进程崩溃前尚未报告的用量补成伪造的零消耗。
 
 **验收：**两次 invocation 用量相加；一次结算重复提交不重复累计（若支持重试）；完成通知与查询时序符合约定；取消保留已知用量。
 
-- [ ] `resume_run()`、`cancel_run()` 等操作位于共享运行模块；HTTP 路由只转换请求和错误，不自行提交事务或启动恢复 Task。
-- [ ] 不启动 FastAPI，直接调用同一运行接口完成暂停、读取审批、恢复同 Run、取消与用量查询；与 HTTP 入口具有一致的持久结果。
+- [x] `resume_run()`、`cancel_run()` 等操作位于共享运行模块；HTTP 路由只转换请求和错误，不自行提交事务或启动恢复 Task。
+- [x] 不启动 FastAPI，直接调用同一运行接口完成暂停、读取审批、恢复同 Run、取消与用量查询；与 HTTP 入口具有一致的持久结果。
 
 **阶段完成条件：**一个 Run 可以执行、暂停、刷新、审批、恢复、再次暂停并结束；取消竞争与统计语义都经过确定性场景验证；无 HTTP 入口具备同样的运行能力。
 
 参考：[copy 审批策略](../../shikigen-agent-copy/server/config.py)、[copy 生命周期事务](../../shikigen-agent-copy/server/persistence/run_persistence.py)、[copy 产品流测试](../../shikigen-agent-copy/tests/test_product_run_sse.py)。
+
+#### 2026-09-22：7D 已完成
+
+用量归属保持在应用层：harness Loop 只执行 Graph 和收集回调；每次
+`start_run_execution()` 创建独立 tracker，Graph 退出并完成清理后读取其 summary。
+`RunStore.settle_execution()` 在同一事务中提交本次用量和完成／暂停／错误事实，
+应用随后发布累计 usage（SSE 表现为 metadata.usage）及生命周期通知。
+自然完成、暂停和错误通知到达时，读取 Run 已能得到本次累计值。
+
+- 新增 `run_usage` 表，按 `(thread_id, run_id, invocation_seq)` 保存结算快照；
+  invocation_seq 使用已有 `run_running` 事实序号，不增加公开 Invocation 实体。
+  Run 查询汇总总 input/output/tokens、calls 和 by_model。
+- 同键同内容重复结算不重复累计，同键不同内容报冲突；旧 invocation 不能结算
+  恢复后的新执行。用量与状态事务共同回滚，不自动重试。
+- `RunSnapshot.usage` 在尚无结算记录时为 null；`usage_pending` 表示至少一次
+  已接受执行尚未保存用量。resume 后它重新为 true，之前已结算的累计值仍保留。
+- 取消响应和通知仍先于本地 Graph 清理；此时 usage 可能尚未包含本次执行，
+  usage_pending 为 true。清理结束后补交已知用量，保持 cancelled 不被覆盖，
+  活跃流可收到更新后的 usage；`wait_run()` 等待该收尾，之后查询可读取结果。
+  已关闭的流不重新打开，无本地句柄的取消也不伪造用量结算。
+- usage_pending 为 false **只表示所有 invocation 的已知用量已保存**，不保证
+  供应商计费数据完整。tracker 的 calls 是收到完成回调的调用数；没有用量报告的
+  调用不贡献 token，未结束的模型调用也可能尚未进入 calls。零表示已知统计为零，
+  不是证明实际没有消耗。进程崩溃／强制停止留下未结算标记，不自动补零。
+- 事务失败会发布 `stream_failed(run_persistence_failed)`，任务抛出异常，日志含
+  thread_id、run_id 和异常堆栈；不会发布未经提交的 usage 或成功终态。
+  崩溃前仅在内存里的统计不会恢复，启动扫描仍属于第 8 步。
+
+回调范围通过真实 LangChain / LangGraph 的确定性模型验证：主 Agent 两次模型调用、
+`task` 子 Agent 一次、Goal evaluator 一次，共计四次且不重复。
+Goal 的 `TAG_NOSTREAM` 只控制流输出，不屏蔽用量 callback；子 Agent 和 evaluator
+继承执行上下文中的 callbacks，因此不额外挂第二个 tracker，也不遍历消息再累计。
+按模型分组沿用供应商回调中的 model_name；未给模型名的调用仍进入总量。
+
+验证覆盖暂停／恢复累计、通知后立即查询、按模型汇总、重复结算、冲突回滚、
+取消后补交、错误保留已知用量、存储失败诊断、强制停止保持未知、GET metadata。
+阻断 FastAPI 导入的独立进程同时验证执行、暂停、同 Run 恢复、取消与持久用量查询。
+没有添加历史库迁移、schema marker 或提升 event_version。
+
+本步新增 9 项用量测试；完整回归 **215 项测试通过**，Ruff、格式检查与
+`git diff --check` 通过。
 
 ## 十一、第 8 步：启动恢复与崩溃验证
 
@@ -759,7 +919,7 @@ review 顺序沿用现有偏好：先看做得好的，再看需要修的，最�
 - [x] 第 4D 步完成：最小 Python 入口与启动说明齐备，阻断 FastAPI 导入的独立进程可完成执行、持久化、重开查询与资源回收。
 - [x] 第 5 步完成：消息身份、归属与严格事件契约已实现。
 - [ ] 第 6 步完成：重连只重建和观察，不重复执行任务。
-- [ ] 第 7 步完成：审批、取消、重复恢复和用量有一致语义。
+- [x] 第 7 步完成：审批、取消、重复恢复和用量有一致语义。
 - [ ] 第 8 步完成：重启恢复规则与崩溃矩阵经过验证。
 - [ ] 第 6—8 步新增的重建、取消、同 Run 审批恢复和启动恢复均可不经 HTTP 调用，没有重新引入路由编排。
 - [ ] 现有功能回归通过，已失效的旧应用执行路径完成清理。

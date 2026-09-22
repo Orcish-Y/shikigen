@@ -54,6 +54,47 @@ Thread 内持久事实决定唯一归属，重放保留原 Run，同身份内容
 明确返回 400。观察退出只释放自己的订阅，重连不触发 Graph。
 详见 [6B 完成记录](migration-checklist.md#2026-09-216b-已完成)。下方比较表保留原调查时点。
 
+2026-09-22 7A 更新：默认主 Agent 已为 `write_file`、`bash` 接入 approve/reject 审批。
+Loop 从根 checkpoint 事件锁定准确坐标，展开父图／子图的全部 Interrupt；
+`settle_execution()` 同一事务保存 approval required 事实和 interrupted 状态，提交后发布。
+既有 GET 流可在无执行句柄时重建完整请求；暂停继续阻止同 Thread 的新 Run。
+SSE 审批帧为 `event`、`category=approval`、`event_type=required`，event_version 不升级。
+当前 task 子 Agent 不自动继承主 Agent 审批策略；已产生的嵌套 Interrupt 可完整收集。
+该记录对应暂停与查询；7B 的后续实现见下条，7C 取消、7D 使用量尚未完成。
+详见 [7A 完成记录](migration-checklist.md#2026-09-227a-已完成)。
+
+2026-09-22 7B 更新：共享 `RunService.resume_run()` 与
+`POST /api/threads/{thread_id}/runs/{run_id}/approval-decisions` 已接通。
+按当前全部 Interrupt ID 和动作顺序验证 approve/reject，核对准确 checkpoint；
+事务内保存 resolved 与 running，提交后通过 `Command(resume=...)` 恢复原 run_id。
+等待旧执行 Task 收尾后才安装新资源；每次执行按自己的 running 事实 seq 结算，
+支持连续暂停，重复／旧响应返回冲突。新流从本次 resolved 起缓存，GET 重建拼接此前
+历史与当前执行，消息不重复归属。SSE 新增 `approval/resolved`，event_version 不升级。
+全量 198 项测试通过，包含并发响应、父子图恢复、同名工具多项审批及关闭重开 SQLite
+后在阻断 HTTP 导入的独立进程恢复。取消、累计用量与启动扫描仍属 7C／7D／第 8 步。
+详见 [7B 完成记录](migration-checklist.md#2026-09-227b-已完成)。
+
+2026-09-22 7C 更新：共享 `RunService.cancel_run()` 与
+`POST /api/threads/{thread_id}/runs/{run_id}/cancel` 已接通。
+running/interrupted 可取消，终态返回已有结果；暂停取消原子写入审批 invalidated 与
+cancelled。数据库第一次有效提交决定取消／完成竞争结果，迟到结算不能覆盖取消。
+本地结算、取消发布与关闭串行，统一发布按事实去重；提交后才请求停止执行。
+取消、恢复和创建共用 Thread 协调，新 Run 等旧执行清理；无本地句柄也能取消。
+已关闭的暂停流通过既有 GET 全量重建取消事实。取消不承诺撤销已发生的工具副作用。
+7D 后续实现见下条；第 8 步启动协调仍待完成。
+详见 [7C 完成记录](migration-checklist.md#2026-09-227c-已完成)。
+
+
+2026-09-22 7D 更新：每次 invocation 独立 tracker，已知用量与执行状态在
+`settle_execution()` 的同一事务中提交，再发布累计 usage 和完成／暂停／错误通知。
+`run_usage` 以已有 running 序号作内部幂等键，重复提交不重复累计。
+Run 查询与 GET metadata 暴露累计 usage、usage_pending；未结算为未知，不能补成零。
+取消仍先提交状态，用量可能在 Graph 清理结束后补齐；`wait_run()` 等待收尾。
+真实 Graph 验证主模型、Goal evaluator、子 Agent 的 callbacks 继承且无重复统计。
+第 7 步完成，第 8 步启动协调仍待完成。
+详见 [7D 完成记录](migration-checklist.md#2026-09-227d-已完成)。
+
+
 ## 1. 比较范围与结论
 
 | 简称 | 工作目录 | 当前分支 | HEAD |
@@ -328,7 +369,7 @@ copy 还区分持久的 Run lifecycle error 与连接／协议 error，并把稳
 
 **为什么：**审批前后是多次执行，但用户仍在完成同一个任务，用量不应在恢复时归零。
 
-**接口：**`accumulate_run_usage(thread_id, run_id, invocation_usage)`。copy 在事务内合并总量和 by_model，执行 finally 调用它；当前只在正常完成时发送 usage，没有对应持久化字段。
+**接口：**copy 使用 `accumulate_run_usage(thread_id, run_id, invocation_usage)`，执行 finally 调用；本项目 7D 使用 `settle_execution(usage=..., invocation_seq=...)`，与状态共同提交。`read_run()` 返回累计 usage 与 usage_pending，GET metadata 同样暴露该快照。
 
 **验收：**初次执行和 resume 的统计相加；错误／取消仍保存已经收到的供应商用量；读取既有 Run 可以得到累计值。
 

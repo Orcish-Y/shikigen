@@ -11,8 +11,69 @@ class Lifecycle(StrictModel):
   status: Literal["running", "completed", "cancelled", "error", "interrupted"]
   message: str | None = None
   error_code: str | None = None
-  checkpoint: dict[str, JsonValue] | None = None
-  interrupts: list[dict[str, JsonValue]] | None = None
+
+
+class CheckpointCoordinate(StrictModel):
+  thread_id: Identity
+  checkpoint_ns: str
+  checkpoint_id: Identity
+
+
+class CheckpointConfig(StrictModel):
+  configurable: CheckpointCoordinate
+
+
+class PendingInterrupt(StrictModel):
+  id: Identity
+  namespace: str
+  value: JsonValue
+
+
+class ApprovalRequired(StrictModel):
+  status: Literal["required"] = "required"
+  checkpoint: CheckpointConfig
+  interrupts: Annotated[list[PendingInterrupt], Field(min_length=1)]
+
+  @model_validator(mode="after")
+  def unique_interrupts(self):
+    ids = [item.id for item in self.interrupts]
+    if len(set(ids)) != len(ids):
+      raise ValueError("Interrupt IDs must be unique")
+    if self.checkpoint.configurable.checkpoint_ns:
+      raise ValueError("Approval requires a root checkpoint")
+    return self
+
+
+class ApproveDecision(StrictModel):
+  type: Literal["approve"]
+
+
+class RejectDecision(StrictModel):
+  type: Literal["reject"]
+  message: str | None = None
+
+
+class InterruptResponse(StrictModel):
+  decisions: Annotated[
+    list[Annotated[ApproveDecision | RejectDecision, Field(discriminator="type")]],
+    Field(min_length=1),
+  ]
+
+
+class ApprovalSubmission(StrictModel):
+  responses: Annotated[dict[Identity, InterruptResponse], Field(min_length=1)]
+
+
+class ApprovalResolved(ApprovalSubmission):
+  status: Literal["resolved"] = "resolved"
+  checkpoint: CheckpointConfig
+
+
+class ApprovalInvalidated(StrictModel):
+  status: Literal["invalidated"] = "invalidated"
+  checkpoint: CheckpointConfig
+  interrupt_ids: Annotated[list[Identity], Field(min_length=1)]
+  reason: Literal["run_cancelled"] = "run_cancelled"
 
 
 class DurableEvent(StrictModel):
@@ -21,15 +82,25 @@ class DurableEvent(StrictModel):
   run_id: Identity
   seq: Annotated[int, Field(gt=0)]
   event_type: str
-  category: Literal["message", "lifecycle"]
+  category: Literal["message", "lifecycle", "approval"]
   event_key: Identity
-  content: CompleteMessage | Lifecycle
+  content: (
+    CompleteMessage
+    | Lifecycle
+    | ApprovalRequired
+    | ApprovalResolved
+    | ApprovalInvalidated
+  )
   metadata: dict[str, JsonValue]
   created_at: str
 
   @model_validator(mode="after")
   def matching_kind(self):
-    if isinstance(self.content, Lifecycle):
+    if isinstance(
+      self.content, (ApprovalRequired, ApprovalResolved, ApprovalInvalidated)
+    ):
+      expected = ("approval", f"approval_{self.content.status}")
+    elif isinstance(self.content, Lifecycle):
       expected = ("lifecycle", f"run_{self.content.status}")
     else:
       expected = ("message", f"{self.content.type}_message")

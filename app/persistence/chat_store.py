@@ -7,7 +7,9 @@ from typing import Any
 
 import aiosqlite
 from langchain_core.messages import HumanMessage
+from shikigen.event_contract import ApprovalSubmission
 from shikigen.execution import ExecutionOutcome
+from shikigen.stream import UsageData
 
 from app.persistence.database import Database
 from app.persistence.event_store import EventStore
@@ -15,6 +17,7 @@ from app.persistence.run_store import RunStore
 from app.persistence.schema import setup_schema
 from app.persistence.thread_store import ThreadStore
 from app.run_state import (
+  AcceptedApproval,
   CommittedEvent,
   CommittedRunState,
   EventWriteResult,
@@ -111,6 +114,8 @@ class ChatStore:
     run_id: str,
     outcome: ExecutionOutcome,
     error_code: str | None = None,
+    invocation_seq: int | None = None,
+    usage: UsageData | None = None,
   ) -> CommittedRunState:
     """只有 running 能结算；已有终态或暂停事实原样返回，禁止覆盖。"""
     return await self._runs.settle_execution(
@@ -118,6 +123,23 @@ class ChatStore:
       run_id=run_id,
       outcome=outcome,
       error_code=error_code,
+      invocation_seq=invocation_seq,
+      usage=usage,
+      fact_writer=self._insert_fact,
+    )
+
+  async def cancel_run(self, *, thread_id: str, run_id: str) -> RunWriteResult:
+    return await self._runs.cancel_run(
+      thread_id=thread_id, run_id=run_id, fact_writer=self._insert_fact
+    )
+
+  async def accept_approval_decisions(
+    self, *, thread_id: str, run_id: str, submission: ApprovalSubmission
+  ) -> AcceptedApproval:
+    return await self._runs.accept_approval_decisions(
+      thread_id=thread_id,
+      run_id=run_id,
+      submission=submission,
       fact_writer=self._insert_fact,
     )
 

@@ -1,6 +1,6 @@
 """HTTP 与普通 Python 入口共享的资源装配。"""
 
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -10,7 +10,10 @@ from shikigen.agent import create_lead_agent
 from shikigen.app_config import AppConfig, load_app_config
 from shikigen.checkpoint import make_checkpointer
 from shikigen.execution import ExecutionRegistry
+from shikigen.tools import create_builtin_registry
+from shikigen.tools.mcp_loader import load_mcp_tools
 
+from app.approval import build_approval_middleware
 from app.lifecycle import ApplicationLifecycle
 from app.persistence.chat_store import ChatStore, open_chat_store
 from app.run_events import RunEventIngestor
@@ -52,21 +55,21 @@ def assemble_runtime(
 @asynccontextmanager
 async def open_runtime(
   config: AppConfig | None = None,
-  *,
-  agent_factory: Callable[..., Awaitable[Any]] | None = None,
 ) -> AsyncIterator[Runtime]:
-  """注入的工厂接收 config、middlewares 和 checkpointer，与默认工厂一致。"""
+  """使用项目 Agent 工厂装配工具、审批和 Runtime，并管理资源生命周期。"""
   app_config = config if config is not None else load_app_config()
-  factory = agent_factory if agent_factory is not None else create_lead_agent
   async with (
     open_chat_store(Path(app_config.database.path).expanduser()) as store,
     make_checkpointer(app_config) as checkpointer,
   ):
     executions = ExecutionRegistry()
     ingestor = RunEventIngestor(store, executions)
-    agent = await factory(
+    registry = create_builtin_registry()
+    registry.register_many(await load_mcp_tools(app_config.mcp))
+    agent = await create_lead_agent(
       config=app_config,
-      middlewares=[],
+      tool_registry=registry,
+      middlewares=[build_approval_middleware(registry.names)],
       checkpointer=checkpointer,
     )
     runtime = assemble_runtime(

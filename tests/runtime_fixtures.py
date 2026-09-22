@@ -18,7 +18,7 @@ def add(a: int, b: int) -> int:
   return a + b
 
 
-async def deterministic_agent(*, config, middlewares, checkpointer):
+async def deterministic_agent(*, config, middlewares, checkpointer, tool_registry):
   model = ToolModel(
     responses=[
       AIMessage(
