@@ -41,6 +41,8 @@ class RunExecution:
   thread_id: str
   stream: Stream = field(default_factory=Stream)
   abort_event: asyncio.Event = field(default_factory=asyncio.Event)
+  # 本次 invocation 缓存覆盖的首个持久序号；不是客户端续传游标。
+  replay_start_seq: int = 0
   _task: asyncio.Task[None] | None = field(default=None, init=False, repr=False)
 
   @property

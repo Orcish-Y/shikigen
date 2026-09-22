@@ -47,7 +47,12 @@ Thread 内持久事实决定唯一归属，重放保留原 Run，同身份内容
 所有持久事实通过事务内 Thread 分配器取号；预留空洞允许存在，最大 seq 不代表提交水位。
 后续入口调整：Loop 顺序消费原始 Graph 事件，GraphEventAdapter 转换根图完整消息；
 已移除持久化 middleware 与 wait_preview。存储继续负责跨 Run 归属，已有事实不重复发布。
-第 6B 步的只读重建与实时跟随尚未实现。下方比较表保留原调查时点。
+2026-09-21 6B 更新：已增加只读 `GET /api/threads/{thread_id}/runs/{run_id}/stream`，
+调用共享 `RunService.observe_run()`。活跃执行先同步订阅，再读取 invocation 起点之前的
+持久前缀，随后交付该 invocation 的缓存和实时事件；不以查询时最大 seq 切分。
+终态／暂停从数据库重建；running 无本地执行返回可重试 503；查询参数和 Last-Event-ID
+明确返回 400。观察退出只释放自己的订阅，重连不触发 Graph。
+详见 [6B 完成记录](migration-checklist.md#2026-09-216b-已完成)。下方比较表保留原调查时点。
 
 ## 1. 比较范围与结论
 
@@ -219,7 +224,7 @@ copy 的具体拼接方式是：同步注册订阅，读取持久历史中不超
 
 **验收：**重连不调用 Graph；数据库读取期间产生的事件不遗漏；终态 Run 不依赖内存也能重建；重复重建结果相同。
 
-这是**全量重建协议**。copy 明确拒绝 `cursor` 和 `Last-Event-ID`，不能描述为已经实现断点增量续传。当前项目已切换 SSE；全量重建仍属于第 6 步。
+这是**全量重建协议**。copy 明确拒绝 `cursor` 和 `Last-Event-ID`，不能描述为已经实现断点增量续传。当前项目已切换 SSE；第 6B 步已实现全量重建，具体接口与验收见上方更新记录。
 
 来源：[copy 历史与 live 拼接](../../shikigen-agent-copy/server/routes/runs.py:327)、[既有 Run 流](../../shikigen-agent-copy/server/routes/runs.py:373)、[当前 SSE encoder](../app/run_contract.py)。
 

@@ -100,3 +100,7 @@ class CommittedRunState:
     if status is RunStatus.RUNNING:
       raise ValueError("Execution settlement must finish or interrupt the invocation")
     object.__setattr__(self, "status", status)
+
+
+class ObservationUnavailable(RunError):
+  """Run 仍在运行但无法定位本地执行；观察者可以重试。"""

@@ -12,11 +12,17 @@ from runtime_fixtures import deterministic_agent
 from shikigen.app_config import AppConfig, McpConfig, ModelConfig
 from shikigen.execution import RunExecution
 from sse_fixtures import parse_sse, parse_sse_frames
+from starlette.requests import ClientDisconnect
 from test_loop import BlockingAgent, MessageAgent
 
 from app.composition import assemble_runtime, open_runtime
 from app.persistence import ChatStore
-from app.routes.run import ChatRequest, stream_chat, stream_run_events
+from app.routes.run import (
+  ChatRequest,
+  ObservationResponse,
+  stream_chat,
+  stream_run_events,
+)
 from app.run_state import StorageConflict
 from app.server import app as server_app
 
@@ -117,6 +123,68 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
       ).status_code,
       404,
     )
+
+  async def test_get_existing_stream_rebuilds_and_rejects_cursors(self):
+    thread = await self.runtime.threads.create_thread()
+    execution = await self.runtime.runs.start_run(thread, "hello")
+    await self.runtime.runs.wait_run(execution)
+    path = f"/api/threads/{thread}/runs/{execution.run_id}/stream"
+    with patch.object(
+      self.runtime.runs, "start_run", side_effect=AssertionError("read only")
+    ):
+      first = await self.client.get(path)
+      second = await self.client.get(path)
+    self.assertEqual(first.status_code, 200)
+    self.assertEqual(first.text, second.text)
+    frames = parse_sse_frames(first.text)
+    self.assertEqual(frames[0]["data"]["status"], "completed")
+    self.assertEqual(frames[-1]["data"]["payload"]["status"], "completed")
+    for suffix, headers in (
+      ("?cursor=1", {}),
+      ("?after_seq=1", {}),
+      ("", {"Last-Event-ID": "1"}),
+    ):
+      self.assertEqual(
+        (await self.client.get(path + suffix, headers=headers)).status_code, 400
+      )
+    self.assertEqual(
+      (await self.client.get(path.replace(thread, "missing"))).status_code, 404
+    )
+
+  async def test_running_without_local_execution_returns_retryable_503(self):
+    from langchain_core.messages import HumanMessage
+
+    thread = await self.runtime.threads.create_thread()
+    await self.store.create_run(
+      thread_id=thread,
+      run_id="orphan",
+      entry_message=HumanMessage(id="h", content="hi"),
+    )
+    response = await self.client.get(f"/api/threads/{thread}/runs/orphan/stream")
+    self.assertEqual(response.status_code, 503)
+    self.assertEqual(response.headers["retry-after"], "1")
+    self.assertEqual(
+      (await self.runtime.runs.read_run(thread, "orphan"))["status"], "running"
+    )
+
+  async def test_get_response_send_failure_releases_unstarted_observation(self):
+    thread = await self.runtime.threads.create_thread()
+    self.runtime.runs.agent = BlockingAgent()
+    execution = await self.runtime.runs.start_run(thread, "hello")
+    observation = await self.runtime.runs.observe_run(thread, execution.run_id)
+    response = ObservationResponse(observation)
+
+    async def fail_send(message):
+      raise OSError("disconnected before body")
+
+    with self.assertRaises(ClientDisconnect):
+      await response(
+        {"type": "http", "asgi": {"spec_version": "2.4"}},
+        AsyncMock(),
+        fail_send,
+      )
+    self.assertEqual(len(execution.stream._subscribers), 0)
+    self.assertFalse(execution.abort_event.is_set())
 
   async def test_busy_thread_returns_conflict(self):
     thread = await self.runtime.threads.create_thread()

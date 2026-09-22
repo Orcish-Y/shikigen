@@ -47,7 +47,11 @@ def start_run_execution(
   ingest_message: Callable[[dict[str, Any]], Awaitable[int]] | None = None,
 ) -> RunExecution:
   """为已持久创建的 Run 启动一次执行；不依赖 HTTP 消费者回收资源。"""
-  execution = RunExecution(run_id=run_id, thread_id=thread_id)
+  execution = RunExecution(
+    run_id=run_id,
+    thread_id=thread_id,
+    replay_start_seq=min((event["seq"] for event in initial_events), default=0),
+  )
   registry.install(execution)
 
   async def execute() -> None:

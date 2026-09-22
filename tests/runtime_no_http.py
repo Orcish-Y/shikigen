@@ -37,6 +37,9 @@ async def main():
     execution = await runtime.runs.start_run(thread, "1 + 2")
     subscription = execution.stream.subscribe()
     await subscription.aclose()
+    observation = await runtime.runs.observe_run(thread, execution.run_id)
+    async for _ in observation:
+      pass
     result = await runtime.runs.wait_run(execution)
     assert result["status"] == "completed", result
     messages = await runtime.runs.list_run_messages(thread, execution.run_id)
@@ -44,6 +47,9 @@ async def main():
     assert messages[-1]["content"]["content"] == "3"
     assert runtime.executions.get(thread, execution.run_id) is None
   async with open_runtime(config, agent_factory=deterministic_agent) as runtime:
+    observation = await runtime.runs.observe_run(thread, execution.run_id)
+    facts = [event.data async for event in observation]
+    assert facts == await runtime.runs.list_run_events(thread, execution.run_id)
     assert await runtime.runs.read_run(thread, execution.run_id) == result
     assert await runtime.runs.list_run_messages(thread, execution.run_id) == messages
   assert not any(

@@ -18,9 +18,11 @@ from app.lifecycle import ApplicationLifecycle
 from app.persistence import ChatStore
 from app.run_events import RunEventIngestor
 from app.run_execution import start_run_execution
+from app.run_observation import RunObservation
 from app.run_state import (
   CommittedEvent,
   ExecutionStopped,
+  ObservationUnavailable,
   RunNotFound,
   RunSnapshot,
   RunStatus,
@@ -122,3 +124,34 @@ class RunService:
 
   async def list_run_events(self, thread_id: str, run_id: str) -> list[CommittedEvent]:
     return await self._store.list_run_events(thread_id, run_id)
+
+  async def observe_run(self, thread_id: str, run_id: str) -> RunObservation:
+    """全量重建并跟随已有执行；返回后调用者负责 aclose。
+
+    数据库只交付 invocation 起点之前的事实，不能把查询时 MAX(seq)
+    当作提交水位；本次 invocation 由完整缓存和实时订阅交付。
+
+    Raises:
+      RunNotFound: 指定 Thread 或 Run 不存在。
+      ObservationUnavailable: Run 仍在运行但本地无活跃执行对象，可稍后重试。
+    """
+    run = await self.read_run(thread_id, run_id)
+    execution = None
+    # todo. 这里后面看看能不能优化一下
+    if run["status"] == "running":
+      execution = self._executions.get(thread_id, run_id)
+      if execution is None:
+        # 首次读取之后执行可能已经完成并从注册表移除。
+        run = await self.read_run(thread_id, run_id)
+        if run["status"] == "running":
+          raise ObservationUnavailable("Local execution unavailable; retry observation")
+    subscription = execution.stream.subscribe() if execution is not None else None
+    try:
+      history = await self._store.list_run_events(thread_id, run_id)
+      if execution is not None:
+        history = [e for e in history if e["seq"] < execution.replay_start_seq]
+      return RunObservation(run, history, subscription)
+    except BaseException:
+      if subscription is not None:
+        await subscription.aclose()
+      raise

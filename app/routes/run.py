@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ValidationError
 from shikigen.execution import RunExecution
+from starlette.types import Receive, Scope, Send
 
 from app.run_contract import (
   MetadataData,
@@ -12,7 +13,13 @@ from app.run_contract import (
   encode_sse,
   observation_error,
 )
-from app.run_state import RunNotFound, StorageConflict, ThreadNotFound
+from app.run_observation import RunObservation
+from app.run_state import (
+  ObservationUnavailable,
+  RunNotFound,
+  StorageConflict,
+  ThreadNotFound,
+)
 from app.runtime import Runtime
 
 router = APIRouter(prefix="/api/threads/{thread_id}")
@@ -111,3 +118,80 @@ async def stream_chat(
       detail=str(error),
     ) from error
   return _sse_response(stream_run_events(execution))
+
+
+async def stream_observation(observation: RunObservation) -> AsyncGenerator[str, None]:
+  """将 RunObservation 事件流编码为 SSE 格式，并在退出时回收观察资源。"""
+  run = observation.run
+  encoder = RunSseEncoder(run["thread_id"], run["id"])
+  try:
+    yield encode_sse(
+      MetadataEnvelope(
+        data=MetadataData.model_validate(
+          {
+            "thread_id": run["thread_id"],
+            "run_id": run["id"],
+            "status": run["status"],
+          }
+        )
+      )
+    )
+    async for event in observation:
+      if event.event == "metadata":
+        continue
+      try:
+        frame = encoder.encode(event)
+      except ValidationError:
+        yield observation_error("invalid_event")
+        return
+      if frame is not None:
+        yield frame
+  finally:
+    await observation.aclose()
+
+
+class ObservationResponse(StreamingResponse):
+  """RunObservation 专用的 SSE 流响应。
+
+  确保无论在发送前中断还是迭代中异常，均能可靠释放底层订阅。
+  """
+
+  def __init__(self, observation: RunObservation) -> None:
+    self.observation = observation
+    super().__init__(
+      stream_observation(observation),
+      media_type="text/event-stream",
+      headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+  async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+    try:
+      await super().__call__(scope, receive, send)
+    finally:
+      await self.observation.aclose()
+
+
+@router.get("/runs/{run_id}/stream", summary="只读重建并跟随既有 Run")
+async def observe_run(
+  thread_id: str, run_id: str, request: Request
+) -> StreamingResponse:
+  """全量重建指定 Run 的事件流；若仍在运行则实时跟随。
+
+  不支持 Last-Event-ID 或游标参数。若目标 Run 正在运行但在当前节点无法定位执行体，
+  将返回 503 状态码并提示客户端重试。
+  """
+  # 全量重建，不提供 Last-Event-ID 续传语义。
+  if request.query_params or "last-event-id" in request.headers:
+    raise HTTPException(
+      status_code=400, detail="Stream cursors and query parameters are not supported"
+    )
+  runtime: Runtime = request.app.state.runtime
+  try:
+    observation = await runtime.runs.observe_run(thread_id, run_id)
+  except RunNotFound as error:
+    raise HTTPException(status_code=404, detail=str(error)) from error
+  except ObservationUnavailable as error:
+    raise HTTPException(
+      status_code=503, detail=str(error), headers={"Retry-After": "1"}
+    ) from error
+  return ObservationResponse(observation)
