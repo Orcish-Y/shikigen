@@ -97,6 +97,19 @@ class RunStore:
       (thread_id, run_id, invocation_seq, json.dumps(usage)),
     )
 
+  async def list_nonterminal_runs(self) -> list[RunSnapshot]:
+    async with self._db.lock:
+      cursor = await self._db.connection.execute(
+        "SELECT id, thread_id FROM runs WHERE status IN ('running', 'interrupted') "
+        "ORDER BY created_at, id"
+      )
+      result = []
+      for row in await cursor.fetchall():
+        run = await self.read_run(row["id"], row["thread_id"])
+        assert run is not None
+        result.append(run)
+      return result
+
   async def get_run(self, run_id: str, thread_id: str) -> RunSnapshot | None:
     # 同一连接的读也必须等写事务结束，不能把尚未提交的状态暴露出去。
     async with self._db.lock:
@@ -137,7 +150,7 @@ class RunStore:
       "SELECT usage_json FROM run_usage WHERE run_id = ? AND thread_id = ?",
       (run_id, thread_id),
     )
-    rows = await cursor.fetchall()
+    rows = list(await cursor.fetchall())
     total: UsageData | None = None
     if rows:
       total = {

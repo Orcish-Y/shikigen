@@ -95,6 +95,7 @@ async def open_runtime(
       ingestor=ingestor,
     )
     try:
+      await runtime.runs.recovery.reconcile_all()
       yield runtime
     finally:
       await runtime.lifecycle.shutdown()

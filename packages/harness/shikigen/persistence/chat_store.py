@@ -109,6 +109,9 @@ class ChatStore:
         await self._connection.rollback()
         raise
 
+  async def list_nonterminal_runs(self) -> list[RunSnapshot]:
+    return await self._runs.list_nonterminal_runs()
+
   async def get_run(self, run_id: str, thread_id: str) -> RunSnapshot | None:
     # 同一连接的读也必须等写事务结束，不能把尚未提交的状态暴露出去。
     return await self._runs.get_run(

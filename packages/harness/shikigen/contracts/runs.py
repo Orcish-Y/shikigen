@@ -124,3 +124,7 @@ class CommittedRunState:
 
 class ObservationUnavailable(RunError):
   """Run 仍在运行但无法定位本地执行；观察者可以重试。"""
+
+
+class RecoveryUnavailable(ObservationUnavailable, InvalidRunState):
+  """恢复依赖暂时不可用，原持久状态保持不变，可以重试。"""

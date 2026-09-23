@@ -16,6 +16,7 @@
     "astream",
     "checkpointer",
     "Ingestor",
+    "nonterminal",
     "shikigen"
   ]
 }

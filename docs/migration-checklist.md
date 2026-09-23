@@ -844,48 +844,89 @@ Goal 的 `TAG_NOSTREAM` 只控制流输出，不屏蔽用量 callback；子 Agen
 
 ## 十一、第 8 步：启动恢复与崩溃验证
 
-### 先限定恢复目标
+### 2026-09-23 验收记录：已完成
 
-**做什么：**恢复可查询、可继续审批交互的产品状态，识别丢失的执行。
+恢复协调器已放入 `packages/harness/shikigen/runtime/recovery.py`，由
+`open_runtime()` 在交付 Runtime、允许调用方启动 Run 前执行。HTTP lifespan 和
+`python -m shikigen.runtime` 共用这个入口；启动扫描不依赖 FastAPI。装配失败或扫描等待期间
+取消上下文会正常关闭存储与 checkpointer。
+
+- `ChatStore.list_nonterminal_runs()` 列举 running/interrupted。终态不修改；仍在本进程
+  `ExecutionRegistry` 中的 running 保持原状；没有本地执行的 running 原子写入
+  `run_error` 与 `error_code=invocation_lost`，不重放 Graph。
+- interrupted 通过审批事实中的 Thread、根 namespace、Interrupt 列表和准确 checkpoint
+  校验。匹配则保留；已成功读取但内容不匹配写入 `approval_state_corrupt`。Checkpoint、
+  数据库暂时不可读时保持原持久事实，启动扫描记录原因码并延迟重试；逐个检查 Run，
+  暂时故障不会阻止其他 Run 收敛。取消启动任务可以退出重试。
+- `read_run()` 和 `resume_run()` 在 Thread 锁内再次校验暂停事实。临时不可用返回
+  可重试错误；永久矛盾提交错误事实。只读查询在 Runtime 关闭后仍可查持久状态。
+- 原子错误收敛再次检查扫描时读到的状态，避免覆盖并发完成／取消；已有终态和已有错误
+  事实保持不变。日志写 Thread/Run ID 与稳定原因码；对外错误不带内部异常文本。
+- 新增真实 SQLite checkpointer 与产品库的多进程崩溃矩阵，子进程先阻断 FastAPI 和 `app`
+  导入，在明确事务／恢复／工具同步点调用 `os._exit()`。覆盖 Run 创建事务回滚、Run 已提交而
+  Task 未启动、暂停事实、审批事务回滚、审批已接受但 resume 未启动、resume 执行中带有工具
+  副作用、完成提交但尚未发布、checkpoint 缺失。重开并执行两次恢复扫描，验证状态／事实幂等，
+  入口 HumanMessage 不重复，工具副作用不会因启动扫描而重复。
+- 异步测试覆盖正在运行的本地 handle、lost invocation、有效／损坏暂停、checkpoint 暂时不可读、
+  扫描暂时失败并恢复、取消重试、损坏写入回滚及 Runtime 资源关闭。
+
+**验收边界：**进程已接收但未启动的 Run 和已接受审批但未启动 resume 都成为
+`invocation_lost`。resume 已开始后再次崩溃时，若尚未提交新的暂停或终态，持久 Run 仍为
+running，同样按 `invocation_lost` 处理；只有持久状态为 interrupted 时才校验暂停 checkpoint，
+匹配则保留，永久不一致则标记 `approval_state_corrupt`。当前执行不做自动重放，
+因而不会由恢复扫描再次执行可能已经产生外部副作用的工具。若 checkpoint 数据库不可读，状态
+保持原状并等待存储恢复。多 worker 仍不支持；无本地 handle 被解释为执行丢失的前提是单进程
+执行归属。工具副作用和 SQLite 产品事实之间没有跨系统事务保证。
+
+**验证：**`tests.test_recovery` 恢复与进程崩溃场景通过；完整回归 **223 项测试通过**。
+受影响 Python 文件的 Ruff 检查与格式检查、`ty check app packages/harness`、
+`git diff --check` 均通过。未调用外部模型或真实服务。
+
+#### 2026-09-23：恢复异常分类复核
+
+审批事件或 checkpoint 的 JSON 解码失败属于已读数据损坏，收敛为
+`approval_state_corrupt`，不会进入启动重试。原始损坏事实保留，恢复仅追加错误事实并更新
+Run 状态；这不代表损坏的历史内容已修复，历史事件读取仍可能报告解码错误。
+启动扫描继续处理其他 Run，重复扫描不追加第二份恢复错误。
+
+重试限于存储 I/O 故障及 SQLite 锁、I/O、无法打开、空间不足、只读等错误码。
+SQL／表结构错误以及未知程序异常原样传播，使启动明确失败；内部日志保留堆栈和
+Thread/Run 标识，可重试错误的公开响应仍不暴露内部异常文本。
+回归测试覆盖损坏审批 JSON、checkpoint JSON 解码失败、未知异常不重试及内部堆栈。
+复核后完整回归 **227 项测试通过**；类型检查、修改文件的 Ruff 与格式检查、
+`git diff --check` 均通过。
+
+### 实现接口与规则
+
+**做什么：**恢复可查询、可继续审批交互的产品状态，并识别丢失的执行。
 
 **为什么：**进程重启后内存中的 `RunExecution` 消失，但数据库仍可能是 running 或 interrupted。
 
-**接口：**`RunRecoveryCoordinator.reconcile_all()`、`reconcile_run()`、`list_nonterminal_runs()`、准确坐标的 checkpoint 查询。
+**接口：**`RunRecoveryCoordinator.reconcile_all()`、`reconcile_run()`、
+`ChatStore.list_nonterminal_runs()`、`RunTransitions.fail_recovery()`；暂停校验沿用
+`GraphPauseCollector` 的准确 checkpoint 坐标。
 
-第一版按单进程执行归属设计。running 没有本地 `RunExecution` 时收敛为 invocation_lost，不自动重放工具。未来自动续跑需要另行解决执行所有权、恢复意图和副作用幂等。
-
-### 实现任务
-
-- [ ] 恢复扫描放入共享 runtime 启动流程；HTTP 接收请求或独立入口允许发起 Run 前均完成扫描，不只在 FastAPI lifespan 内执行。
-- [ ] 已有终态只读，不被扫描重写。
-- [ ] 丢失本地执行的 pending/running 转为明确错误事实。
-- [ ] interrupted 的准确 checkpoint 与持久审批匹配时继续保留。
-- [ ] 审批事实与 checkpoint 永久不一致时记录 approval_state_corrupt。
-- [ ] 存储暂时不可用时保留原状态，进入可观察的重试流程。
-- [ ] 启动重试允许进程取消退出，不静默无限阻塞。
-- [ ] 日志包含 thread_id/run_id、稳定原因码，公开响应不直接暴露内部堆栈。
-- [ ] 读取／响应审批时执行必要的防御性校验，避免只在启动时查一次。
-- [ ] 将“恢复失败”和“恢复后自动执行”区分清楚；本阶段不承诺后者。
-- [ ] 崩溃矩阵以独立 Python 进程直接打开 runtime 验证；不启动 FastAPI，也能校验暂停事实并识别丢失执行。
+第一版按单进程执行归属设计。running 没有本地 `RunExecution` 时收敛为 invocation_lost，
+不自动重放工具。未来自动续跑需要另行解决执行所有权、恢复意图和副作用幂等。
 
 ### 崩溃验收矩阵
 
-| 退出位置 | 重启后的预期 |
-| --- | --- |
-| 创建事务未提交 | 不存在半个 Run |
-| Run 已提交但 Task 尚未启动 | 识别执行丢失，不重复创建入口消息 |
-| 正常完成已提交、尚未发布 | 历史读取获得 completed |
-| 审批事务尚未提交 | 仍是完整 pending 状态 |
-| 审批已接受、resume 尚未启动 | 保留 resolved 事实，按执行丢失处理，不要求用户重新批准旧 Interrupt |
-| resume 已开始后退出 | 不擅自再次运行可能已有副作用的工具 |
-| interrupted 的 checkpoint 临时不可读 | 保留暂停事实，等待依赖恢复 |
-| interrupted 的事实永久损坏 | 记录稳定错误，其他可恢复 Run 继续检查 |
+| 退出位置 | 重启后的预期 | 验证 |
+| --- | --- | --- |
+| 创建事务未提交 | 不存在半个 Run | 已验证 |
+| Run 已提交但 Task 尚未启动 | invocation_lost，不重复创建入口消息 | 已验证 |
+| 正常完成已提交、尚未发布 | 历史读取获得 completed | 已验证 |
+| 审批事务尚未提交 | 仍是完整 interrupted/pending 审批状态 | 已验证 |
+| 审批已接受、resume 尚未启动 | resolved 保留，按 invocation_lost 处理 | 已验证 |
+| resume 已开始后退出 | 启动扫描不重放工具／外部副作用 | 已验证 |
+| interrupted 的 checkpoint 临时不可读 | 保留暂停事实，等待依赖恢复 | 已验证 |
+| interrupted 的事实永久损坏 | 原子记录 approval_state_corrupt；继续检查其他 Run | 已验证 |
 
-进程崩溃测试使用临时存储和明确的同步点触发退出，不依赖固定 sleep 猜测时机。验证持久事实，而不只检查进程退出码。
+**完成条件：**恢复规则和崩溃矩阵均有验证；单进程假设及尚未支持的自动续跑已写明。
 
-**完成条件：**所有状态在重启后都有明确规则，故障矩阵经过验证；文档清楚写明单进程假设以及尚未支持的自动续跑。
-
-参考：[copy 恢复协调器](../../shikigen-agent-copy/server/recovery.py)、[copy 启动编排](../../shikigen-agent-copy/server/composition.py)、[copy 崩溃测试](../../shikigen-agent-copy/tests/test_recovery.py)。
+参考：[copy 恢复协调器](../../shikigen-agent-copy/server/recovery.py)、
+[copy 启动编排](../../shikigen-agent-copy/server/composition.py)、
+[copy 崩溃测试](../../shikigen-agent-copy/tests/test_recovery.py)。
 
 ## 十二、每一项完成后如何 review
 
@@ -920,13 +961,12 @@ review 顺序沿用现有偏好：先看做得好的，再看需要修的，最�
 - [x] 第 5 步完成：消息身份、归属与严格事件契约已实现。
 - [ ] 第 6 步完成：重连只重建和观察，不重复执行任务。
 - [x] 第 7 步完成：审批、取消、重复恢复和用量有一致语义。
-- [ ] 第 8 步完成：重启恢复规则与崩溃矩阵经过验证。
+- [x] 第 8 步完成：重启恢复规则与崩溃矩阵经过验证。
 - [ ] 第 6—8 步新增的重建、取消、同 Run 审批恢复和启动恢复均可不经 HTTP 调用，没有重新引入路由编排。
 - [ ] 现有功能回归通过，已失效的旧应用执行路径完成清理。
 - [ ] 数据与协议切换说明完整，未验证项明确记录。
 
-第 1—5 步已验收完成。下一步是第 6 步：完整重建与实时跟随；
-实际数据库使用新版前需先删除旧库并从当前 schema 新建。
+第 1—5、7、8 步已验收完成；第 6 步仍待完成。实际数据库使用新版前需先删除旧库并从当前 schema 新建。
 
 ### 2026-09-18：完整消息采集入口调整
 

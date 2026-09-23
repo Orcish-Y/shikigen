@@ -44,9 +44,9 @@ from shikigen.core.execution import (
   ExecutionRegistry,
   RunExecution,
 )
-from shikigen.core.graph_pause import GraphPauseCollector
 from shikigen.persistence import ChatStore
 from shikigen.runtime.lifecycle import ApplicationLifecycle
+from shikigen.runtime.recovery import RunRecoveryCoordinator
 from shikigen.runtime.run_events import RunEventIngestor
 from shikigen.runtime.run_execution import start_run_execution
 from shikigen.runtime.run_observation import RunObservation
@@ -247,6 +247,40 @@ class RunTransitions:
         target, error, error_code, (*events, event), usage=total_usage
       )
 
+  async def fail_recovery(
+    self, expected: RunSnapshot, error_code: str, message: str
+  ) -> RunSnapshot:
+    """恢复失败与错误事实共同提交；检查扫描后的状态没有被其他操作改变。"""
+    thread_id, run_id = expected["thread_id"], expected["id"]
+    async with self._store.transaction() as tx:
+      run = await tx.runs.read_run(run_id, thread_id)
+      if run is None:
+        raise RunNotFound("Run not found")
+      if run != expected or RunStatus(run["status"]).terminal:
+        return run
+      await RunEventIngestor.write_in_transaction(
+        tx,
+        thread_id,
+        run_id,
+        "run_error",
+        "lifecycle",
+        f"recovery:{run_id}:{error_code}",
+        {"status": "error", "message": message, "error_code": error_code},
+      )
+      await tx.runs.update_state(
+        run_id,
+        thread_id,
+        status=RunStatus.ERROR,
+        terminal=True,
+        error=message,
+        error_code=error_code,
+        expected_status=run["status"],
+      )
+      await tx.runs.touch_thread(thread_id)
+      updated = await tx.runs.read_run(run_id, thread_id)
+      assert updated is not None
+      return updated
+
   async def cancel_run(
     self,
     *,
@@ -392,6 +426,9 @@ class RunService:
     self._executions = executions
     self._lifecycle = lifecycle
     self._transitions = RunTransitions(store)
+    self.recovery = RunRecoveryCoordinator(
+      agent=agent, store=store, executions=executions, transitions=self._transitions
+    )
     self._ingestor = (
       ingestor if ingestor is not None else RunEventIngestor(store, executions)
     )
@@ -410,7 +447,7 @@ class RunService:
     async def start() -> RunExecution:
       # 持久取消先释放产品槽位，但旧 Graph 必须退出后才能使用同一 checkpoint。
       for previous in self._executions.for_thread(thread_id):
-        run = await self.read_run(thread_id, previous.run_id)
+        run = await self._read_run(thread_id, previous.run_id)
         if RunStatus(run["status"]).terminal and previous.task is not None:
           await asyncio.shield(asyncio.gather(previous.task, return_exceptions=True))
       run_id = uuid.uuid4().hex
@@ -461,12 +498,15 @@ class RunService:
     submission = ApprovalSubmission.model_validate({"responses": responses})
 
     async def resume() -> RunExecution:
-      run = await self.read_run(thread_id, run_id)
+      run = await self._read_run(thread_id, run_id)
       if run["status"] != "interrupted":
         raise ApprovalConflict("Run is not waiting for approval; read current facts")
       previous = self._executions.get(thread_id, run_id)
       if previous is not None:
         await self.wait_run(previous)
+      checked = await self.recovery.reconcile_run(thread_id, run_id)
+      if checked["status"] != "interrupted":
+        raise InvalidRunState("Approval state is corrupt; read current facts")
       history = await self._store.list_run_events(thread_id, run_id)
       # 这里存疑：是否需要判断最新的数据是不是当前待判断的 interrupt？
       # 找最后一个 approval 好像没什么用吧。
@@ -477,17 +517,6 @@ class RunService:
         raise ApprovalConflict("Pending approval changed; read current facts")
       required = ApprovalRequired.model_validate(pending["content"])
       validate_responses(required, submission)
-      collector = GraphPauseCollector(thread_id)
-      collector.checkpoint = required.checkpoint.model_dump(mode="json")
-      try:
-        pause = await collector.read_pause(self.agent)
-      except Exception as error:
-        raise InvalidRunState(
-          "Approval checkpoint cannot be verified; retry later"
-        ) from error
-      expected = {item.id: item.model_dump(mode="json") for item in required.interrupts}
-      if pause is None or {item["id"]: item for item in pause.interrupts} != expected:
-        raise InvalidRunState("Checkpoint Interrupts do not match pending approval")
       accepted = await self._transitions.accept_approval_decisions(
         thread_id=thread_id, run_id=run_id, submission=submission
       )
@@ -556,13 +585,24 @@ class RunService:
           "Local execution stopped without a committed result"
         ) from None
       raise
-    row = await self.read_run(execution.thread_id, execution.run_id)
+    row = await self._read_run(execution.thread_id, execution.run_id)
     status = RunStatus(row["status"])
     if not status.terminal and status is not RunStatus.INTERRUPTED:
       raise ExecutionStopped("Execution ended without a committed result")
     return row
 
   async def read_run(self, thread_id: str, run_id: str) -> RunSnapshot:
+    async def read() -> RunSnapshot:
+      run = await self._read_run(thread_id, run_id)
+      if run["status"] == "interrupted":
+        return await self.recovery.reconcile_run(thread_id, run_id)
+      return run
+
+    lock = self._thread_locks.setdefault(thread_id, asyncio.Lock())
+    async with lock:
+      return await read()
+
+  async def _read_run(self, thread_id: str, run_id: str) -> RunSnapshot:
     row = await self._store.get_run(run_id, thread_id)
     if row is None:
       raise RunNotFound("Run not found")

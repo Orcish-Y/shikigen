@@ -139,10 +139,11 @@ class ApprovalPauseTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(events[-1].data, {"status": "interrupted"})
     self.assertFalse(any(e.data == {"status": "completed"} for e in events))
 
-    # 新连接、空执行注册表、无 Graph，仍能恢复全部审批内容。
+    # 新连接和空执行注册表通过准确 checkpoint 校验后恢复审批内容。
+    # Graph/checkpointer 仍归原 Runtime 所有；这不会重启已结束的执行。
     reopened = await ChatStore.open(self.path)
     self.addAsyncCleanup(reopened.close)
-    restored = self.runtime(None, reopened)
+    restored = self.runtime(agent, reopened)
     with patch.object(app.state, "runtime", restored, create=True):
       async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"

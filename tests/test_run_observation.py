@@ -209,7 +209,17 @@ class ObservationTests(unittest.IsolatedAsyncioTestCase):
         reopened = await ChatStore.open(self.path)
         try:
           with patch.object(self.runtime.runs, "_store", reopened):
-            observation = await self.runtime.runs.observe_run(thread, reason.value)
+            if reason is ExecutionReason.INTERRUPTED:
+              # 此测试检查历史投影；暂停 checkpoint 校验由真实 Graph 恢复测试覆盖。
+              async def already_verified(thread_id, run_id, reopened=reopened):
+                return await reopened.get_run(run_id, thread_id)
+
+              with patch.object(
+                self.runtime.runs.recovery, "reconcile_run", new=already_verified
+              ):
+                observation = await self.runtime.runs.observe_run(thread, reason.value)
+            else:
+              observation = await self.runtime.runs.observe_run(thread, reason.value)
             facts = [e.data async for e in observation]
           self.assertEqual(facts[-1]["content"]["status"], observation.run["status"])
         finally:

@@ -95,6 +95,22 @@ Run 查询与 GET metadata 暴露累计 usage、usage_pending；未结算为未�
 详见 [7D 完成记录](migration-checklist.md#2026-09-227d-已完成)。
 
 
+2026-09-23 第 8 步更新：`RunRecoveryCoordinator` 移入
+`packages/harness/shikigen/runtime/recovery.py`，`open_runtime()` 在 Runtime 对外可用前
+扫描所有非终态 Run。running 没有本进程执行句柄时，原子记为 `invocation_lost`；interrupted
+使用审批事实中的 checkpoint 精确读取 Graph 状态，只有读取后确认不匹配才记为
+`approval_state_corrupt`。数据库／checkpoint 暂时不可用保留原状态并可取消地重试。
+`read_run()` 和 `resume_run()` 也在 Thread 锁内校验暂停事实。没有自动重跑 Graph，也不声称
+能撤销工具副作用。新增独立 Python 子进程崩溃矩阵验证创建事务、Task 启动、审批接受、恢复执行、
+完成提交／发布和损坏 checkpoint；恢复重复扫描不会复制入口消息或再次执行工具。第 8 步已完成，
+仍按单进程归属运行；多 worker 与副作用跨系统原子性不在本步范围。
+复核修正：审批事件／checkpoint JSON 解码损坏收敛为 `approval_state_corrupt`；
+仅存储 I/O 与明确的 SQLite 可恢复故障重试，未知程序异常或 SQL／表结构错误直接传播，
+内部日志保留堆栈。resume 中途崩溃且尚未提交新的暂停／终态时，仍按 running 的
+`invocation_lost` 规则处理，不由旧暂停 checkpoint 推断为 interrupted。
+详见 [第 8 步验收记录](migration-checklist.md#2026-09-23-验收记录已完成)。
+
+
 ## 1. 比较范围与结论
 
 | 简称 | 工作目录 | 当前分支 | HEAD |

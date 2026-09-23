@@ -1,22 +1,19 @@
-# Mission: AI Agent Harness 工程师
+# Mission: 构建并运营自己的长时运行 Agent 系统
 
 ## Why
-从 Web 前端转行 AI Agent 工程师。目标是能独立设计、实现和演进一个 AI Agent Harness 与执行 Loop，最终搭建属于自己的长时运行 Agent 系统。以 deer-flow（LangGraph-based production agent system）作为可运行的研究样本。
+从 Web 前端转行 AI Agent 工程师——**已达成**。经过 18 个学习记录、227 个测试的实践，已能独立设计、实现和演进 AI Agent Harness（shikigen：harness/app 分层、checkpoint、MCP、goal 续跑、human-in-the-loop）。当前目标是让 shikigen 成为真正可用的长时运行 Agent 系统。
 
 ## Success looks like
-- 能解释 deer-flow 的核心架构决策及其原因
-- 能从零搭建一个具有 Tool 系统、Middleware 链、流式输出、checkpoint 恢复的 Agent Harness
-- 能独立为 harness 添加新能力（新工具类型、新 middleware、子 Agent 委派）
-- 生产出自己的长时运行 Agent 系统（不只是 demo）
+- Shikigen 有 Web UI，能像 deer-flow 一样通过浏览器对话
+- 系统能长时运行：重启不丢对话、崩溃可恢复、run 可观测
+- 用户能配置 MCP servers 和 tools 而不改代码
+- 有人（自己或他人）真正用它完成工作
 
 ## Constraints
-- 已掌握的：JavaScript/TypeScript（精通）、Python 基础语法、粗略读过 DeepAgents 文档
-- 学习方式：需求驱动——你给我需求，我自己实现，然后你 review
-- 时间：可长期高强度投入
-- 母语：中文
-- 模型：目前使用 deepseek-v4 系列
+- 已掌握：JS/TS（精通）、Python（熟练）、LangChain/LangGraph 核心协议（middleware、checkpoint、streaming、MCP）
+- 学习方式：自己写代码，我提需求和 review
+- 时间：长期高强度投入
 
 ## Out of scope
 - LLM 训练/fine-tuning
-- 前端 UI 开发（已有专业技能）
-- LangGraph 源码内部实现细节（会用即可）
+- LangGraph 框架源码贡献（现在只是使用方）
