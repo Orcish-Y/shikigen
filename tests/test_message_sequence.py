@@ -14,10 +14,9 @@ from shikigen.execution import (
   RunExecution,
 )
 from shikigen.messages import message_content
-
-from app.persistence import ChatStore
-from app.run_events import RunEventIngestor
-from app.run_state import MessageConflict
+from shikigen.persistence import ChatStore
+from shikigen.runtime.run_events import RunEventIngestor
+from shikigen.runtime.run_state import MessageConflict
 
 
 class MessageSequenceTests(unittest.IsolatedAsyncioTestCase):
@@ -54,7 +53,7 @@ class MessageSequenceTests(unittest.IsolatedAsyncioTestCase):
           run_id="run",
         )
       self.assertEqual(reserve.await_count, 1)
-    with self.assertLogs("app.run_events", level="WARNING"):
+    with self.assertLogs("shikigen.runtime.run_events", level="WARNING"):
       seq = await self.ingestor.ingest_message(
         thread_id="thread",
         run_id="run",

@@ -10,6 +10,7 @@ from weakref import WeakValueDictionary
 
 from langchain_core.messages import HumanMessage
 from langgraph.types import Command
+
 from shikigen.event_contract import (
   ApprovalRequired,
   ApprovalSubmission,
@@ -22,15 +23,13 @@ from shikigen.execution import (
   RunExecution,
 )
 from shikigen.graph_pause import GraphPauseCollector
-from shikigen.utils.text_safety import replace_surrogates
-
-from app.approval import validate_responses
-from app.lifecycle import ApplicationLifecycle
-from app.persistence import ChatStore
-from app.run_events import RunEventIngestor
-from app.run_execution import start_run_execution
-from app.run_observation import RunObservation
-from app.run_state import (
+from shikigen.persistence import ChatStore
+from shikigen.runtime.approval import validate_responses
+from shikigen.runtime.lifecycle import ApplicationLifecycle
+from shikigen.runtime.run_events import RunEventIngestor
+from shikigen.runtime.run_execution import start_run_execution
+from shikigen.runtime.run_observation import RunObservation
+from shikigen.runtime.run_state import (
   ApprovalConflict,
   CommittedEvent,
   CommittedRunState,
@@ -41,6 +40,7 @@ from app.run_state import (
   RunSnapshot,
   RunStatus,
 )
+from shikigen.utils.text_safety import replace_surrogates
 
 
 class RunService:
@@ -61,6 +61,16 @@ class RunService:
     self._ingestor = (
       ingestor if ingestor is not None else RunEventIngestor(store, executions)
     )
+
+  async def _accept[T](
+    self, thread_id: str, operation: Callable[[], Coroutine[Any, Any, T]]
+  ) -> T:
+    async def coordinated() -> T:
+      lock = self._thread_locks.setdefault(thread_id, asyncio.Lock())
+      async with lock:
+        return await operation()
+
+    return await self._lifecycle.accept(coordinated())
 
   async def start_run(self, thread_id: str, message: str) -> RunExecution:
     async def start() -> RunExecution:
@@ -105,16 +115,6 @@ class RunService:
 
     return await self._accept(thread_id, start)
 
-  async def _accept[T](
-    self, thread_id: str, operation: Callable[[], Coroutine[Any, Any, T]]
-  ) -> T:
-    async def coordinated() -> T:
-      lock = self._thread_locks.setdefault(thread_id, asyncio.Lock())
-      async with lock:
-        return await operation()
-
-    return await self._lifecycle.accept(coordinated())
-
   async def resume_run(
     self,
     thread_id: str,
@@ -135,7 +135,8 @@ class RunService:
       if previous is not None:
         await self.wait_run(previous)
       history = await self._store.list_run_events(thread_id, run_id)
-      # 这里存疑，是不是需要判断最新的那个数据是不是当前待判断的interrupt。找最后一个 approval 好像没什么用吧
+      # 这里存疑：是否需要判断最新的数据是不是当前待判断的 interrupt？
+      # 找最后一个 approval 好像没什么用吧。
       pending = next(
         (e for e in reversed(history) if e["category"] == "approval"), None
       )

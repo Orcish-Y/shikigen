@@ -13,12 +13,11 @@ from runtime_fixtures import ToolModel
 from shikigen.app_config import AppConfig, McpConfig, ModelConfig
 from shikigen.execution import ExecutionOutcome, ExecutionReason
 from shikigen.middleware.goal_middleware import GoalEvaluator, GoalMiddleware
+from shikigen.persistence import ChatStore
+from shikigen.runtime.approval import build_approval_middleware
+from shikigen.runtime.composition import assemble_runtime
+from shikigen.runtime.run_state import InvalidRunState
 from shikigen.tools import ToolRegistry, build_task_tool
-
-from app.approval import build_approval_middleware
-from app.composition import assemble_runtime
-from app.persistence import ChatStore
-from app.run_state import InvalidRunState
 
 
 def reply(text="done", **kwargs):
@@ -195,7 +194,7 @@ class RunUsageTests(unittest.IsolatedAsyncioTestCase):
       return ExecutionOutcome(ExecutionReason.ABORTED)
 
     runtime = self.runtime(None)
-    with patch("app.run_execution.execute_agent_loop", side_effect=loop):
+    with patch("shikigen.runtime.run_execution.execute_agent_loop", side_effect=loop):
       execution = await runtime.runs.start_run("t", "work")
       await entered.wait()
       cancelled = await runtime.runs.cancel_run("t", execution.run_id)
@@ -220,7 +219,7 @@ class RunUsageTests(unittest.IsolatedAsyncioTestCase):
       )
 
     runtime = self.runtime(None)
-    with patch("app.run_execution.execute_agent_loop", side_effect=loop):
+    with patch("shikigen.runtime.run_execution.execute_agent_loop", side_effect=loop):
       execution = await runtime.runs.start_run("t", "work")
       result = await runtime.runs.wait_run(execution)
     self.assertEqual(result["status"], "error")
@@ -249,7 +248,7 @@ class RunUsageTests(unittest.IsolatedAsyncioTestCase):
     with patch.object(
       self.store, "settle_execution", side_effect=OSError("disk failed")
     ):
-      with self.assertLogs("app.run_execution", level="ERROR") as logs:
+      with self.assertLogs("shikigen.runtime.run_execution", level="ERROR") as logs:
         execution = await runtime.runs.start_run("t", "work")
         with self.assertRaises(OSError):
           await runtime.runs.wait_run(execution)
@@ -271,7 +270,7 @@ class RunUsageTests(unittest.IsolatedAsyncioTestCase):
       await asyncio.Event().wait()
 
     runtime = self.runtime(None)
-    with patch("app.run_execution.execute_agent_loop", side_effect=loop):
+    with patch("shikigen.runtime.run_execution.execute_agent_loop", side_effect=loop):
       execution = await runtime.runs.start_run("t", "work")
       await entered.wait()
       await runtime.executions.shutdown()

@@ -21,16 +21,16 @@ from shikigen.execution import (
 )
 from shikigen.graph_events import GraphEventAdapter
 from shikigen.messages import message_content, normalize_message
+from shikigen.persistence import ChatStore
+from shikigen.runtime.composition import open_runtime
+from shikigen.runtime.run_events import RunEventIngestor
+from shikigen.runtime.run_state import MessageConflict
 from shikigen.runtime_context import AgentRunContext
 from shikigen.stream import StreamEvent
 from sse_fixtures import parse_sse
 
-from app.composition import open_runtime
-from app.persistence import ChatStore
 from app.routes.run import stream_run_events
 from app.run_contract import SSE_EVENT, RunSseEncoder
-from app.run_events import RunEventIngestor
-from app.run_state import MessageConflict
 
 
 async def two_round_agent(*, config, middlewares, checkpointer, tool_registry):
@@ -148,7 +148,7 @@ class MessageContractTests(unittest.IsolatedAsyncioTestCase):
       database=DatabaseConfig(path=str(self.path)),
       checkpointer={"type": "sqlite", "path": str(self.path)},
     )
-    with patch("app.composition.create_lead_agent", new=two_round_agent):
+    with patch("shikigen.runtime.composition.create_lead_agent", new=two_round_agent):
       async with open_runtime(config) as runtime:
         thread = await runtime.threads.create_thread()
         histories = []

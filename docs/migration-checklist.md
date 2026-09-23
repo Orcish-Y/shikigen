@@ -28,18 +28,18 @@ v2 模型、版本切换和对应兼容代码已删除。下面早先关于 4B �
 | --- | --- | --- |
 | `packages/harness/shikigen/` 当前执行层 | 创建 Agent、执行 Graph、广播事件，在消息形成与执行边界驱动 journal 和 checkpoint 保存 | Agent 工厂、执行入口、订阅与取消接口、注入的 MessageJournal / checkpointer |
 | `app/` 的独立 Run 运行模块 | 接受不同入口的 Run 操作，保留本地执行资源，连接执行与持久化 | 创建、执行、等待、查询、观察、取消、恢复一个 Run |
-| `app/runtime.py` | 保存运行配置与已装配依赖的引用，不实现业务方法 | `Runtime` 数据容器，包含 config、存储、执行资源与服务引用 |
-| `app/services/` | Thread 创建与查询、产品 Run 的业务编排 | `runtime.threads` 与 `runtime.runs` 中的业务接口 |
-| `app/lifecycle.py` | 保留已接收的后台操作，协调停止接收与资源回收 | `ApplicationLifecycle.accept()`、`shutdown()` |
+| `packages/harness/shikigen/runtime/composition.py` | 定义 Runtime 容器，装配依赖并管理资源上下文 | `Runtime` 数据容器，包含 config、存储、执行资源与服务引用 |
+| `packages/harness/shikigen/runtime/` | Thread 创建与查询、产品 Run 的业务编排 | `runtime.threads` 与 `runtime.runs` 中的业务接口 |
+| `packages/harness/shikigen/runtime/lifecycle.py` | 保留已接收的后台操作，协调停止接收与资源回收 | `ApplicationLifecycle.accept()`、`shutdown()` |
 | 协议无关的装配模块 | 打开存储与 checkpointer、创建 Agent 和运行对象，统一启动与关闭 | `open_runtime(config=...)` 异步上下文管理器（建议名称） |
-| `app/persistence/` 当前存储实现 | 校验产品状态转换、原子写入完整消息和事件、历史查询；保存时机由执行层或 Run runtime 驱动 | 语义明确的事务操作与可注入存储接口 |
+| `packages/harness/shikigen/persistence/` 当前存储实现 | 校验产品状态转换、原子写入完整消息和事件、历史查询；保存时机由执行层或 Run runtime 驱动 | 语义明确的事务操作与可注入存储接口 |
 | 应用层事件适配模块 | 将框架消息、checkpoint 转成产品需要的数据 | 转换完整消息、增量与暂停状态 |
 | HTTP 路由和编码模块 | 校验请求、鉴权、映射错误、编码 SSE，调用共享运行模块 | 请求模型、读取结果、流响应 |
 | 无 HTTP 的 Python 入口 | 进入共享装配上下文，发起 Run 并等待所需执行与收尾 | 与 HTTP 相同的运行接口，不复制事务或 Task 编排 |
 
 职责按“协议适配层 → 独立 Run runtime → 单次 Agent 执行”划分。执行层通过注入的 journal/checkpointer 接口驱动完整消息和执行状态保存；Run runtime 负责 Run 生命周期与持久化编排；具体存储实现负责事务、约束和读写，装配入口负责后端配置及打开关闭。通用 harness 不直接导入 `app`、FastAPI 或具体产品数据库，不等于它不参与持久化。
 
-上述目录是当前组织方式。可复用的 Run 调度、取消、恢复和 RunStore 接口可以纳入 harness/runtime，用户归属等产品语义由产品层承担；harness 不限于单次 Graph 执行。此处 Run runtime 指运行服务与编排能力，不特指 `app/runtime.py` 的数据容器。新的模块文件名可以自行决定，下面出现的新增接口名是设计建议，不要求与 copy 一字不差。依据：[持久化职责调查](agent-persistence-ownership-research.md)、[运行边界对照](agent-runtime-boundary-comparison.md)。
+上述目录是当前组织方式。可复用的 Run 调度、取消、恢复和 RunStore 接口可以纳入 harness/runtime，用户归属等产品语义由产品层承担；harness 不限于单次 Graph 执行。此处 Run runtime 指运行服务与编排能力，不特指 `packages/harness/shikigen/runtime/composition.py` 的数据容器。新的模块文件名可以自行决定，下面出现的新增接口名是设计建议，不要求与 copy 一字不差。依据：[持久化职责调查](agent-persistence-ownership-research.md)、[运行边界对照](agent-runtime-boundary-comparison.md)。
 
 独立运行、装配、存储和内部事件模块也不导入 FastAPI、`app.server` 或 routes，不接收 Request、app.state 或 StreamingResponse。HTTP lifespan 只进入和退出共享装配上下文；普通 Python 调用方直接管理同一上下文。模块可以先留在 `app/`，无需为了脱离 HTTP 全部移入 `agent.py`。本目标保持单进程执行归属，进程退出后的自动续跑仍是后续议题。
 
@@ -216,7 +216,7 @@ v2 模型、版本切换和对应兼容代码已删除。下面早先关于 4B �
   返回 completed/aborted/failed/interrupted 执行结果，不发布产品终态、不关闭 Stream；
   使用 checkpointer 时在 Graph 退出后读取状态，保留暂停的 checkpoint 坐标与中断信息。
   外部 Task 取消继续传播，不自动解释为用户取消。
-- 已接通 [RunExecution 应用编排](../app/run_execution.py)：
+- 已接通 [RunExecution 应用编排](../packages/harness/shikigen/runtime/run_execution.py)：
   `start_run_execution()` 接收已持久创建的 Run 身份，创建并返回 `RunExecution`，
   通过 `ExecutionRegistry` 注册和回收；其 Task 包含执行及提交收尾；
   通过 `RunSettlement.settle_execution()` 获取已提交状态后发布终态。
@@ -225,21 +225,21 @@ v2 模型、版本切换和对应兼容代码已删除。下面早先关于 4B �
 - 已新增 [资源与编排测试](../tests/test_execution.py)：
   用可控提交替身验证订阅隔离、提交前无终态、失败不发布成功、持久取消优先、
   shutdown 清理和旧执行不能误删新执行。这组测试使用存储替身。
-- 已实现共享应用服务：[ThreadService](../app/services/thread.py) 提供 `create_thread()`
-  和会话查询；[RunService](../app/services/run.py) 提供 `start_run()`、
+- 已实现共享应用服务：[ThreadService](../packages/harness/shikigen/runtime/threads.py) 提供 `create_thread()`
+  和会话查询；[RunService](../packages/harness/shikigen/runtime/runs.py) 提供 `start_run()`、
   `wait_run(execution)`、`read_run(thread_id, run_id)` 及 Run 消息／事件查询。
-  [Runtime](../app/runtime.py) 仅保存运行配置和依赖引用，不再包含业务或关闭方法；
+  [Runtime](../packages/harness/shikigen/runtime/composition.py) 仅保存运行配置和依赖引用，不再包含业务或关闭方法；
   调用方使用 `runtime.threads.create_thread()`、`runtime.runs.start_run()` 等入口。
   `start_run()` 返回本次执行句柄；`wait_run()` 等 Task 与提交收尾后读取持久状态，
   存储异常直接传播，等待者取消通过 shield 与执行隔离。句柄在资源索引移除后仍可等待。
   只持有 ID 或重开进程的调用者使用 `read_run()`。订阅沿用 `execution.stream.subscribe()`。
-  已接收的创建操作由 [ApplicationLifecycle](../app/lifecycle.py) 保留，
+  已接收的创建操作由 [ApplicationLifecycle](../packages/harness/shikigen/runtime/lifecycle.py) 保留，
   调用者取消不会在“创建已提交、Task 未启动”之间留下孤儿。
-- 已实现 [open_runtime](../app/composition.py)，统一打开产品存储、checkpointer 与 Agent；
+- 已实现 [open_runtime](../packages/harness/shikigen/runtime/composition.py)，统一打开产品存储、checkpointer 与 Agent；
   由 `assemble_runtime()` 组装配置、依赖与应用服务；退出时先调用
   `runtime.lifecycle.shutdown()` 回收创建与执行 Task，再关闭存储，
   初始化失败也释放已打开的依赖。
-  [HTTP lifespan](../app/server.py) 和 [普通 Python 入口](../app/run.py) 使用同一上下文，
+  [HTTP lifespan](../app/server.py) 和 [普通 Python 入口](../packages/harness/shikigen/runtime/__main__.py) 使用同一上下文，
   路由调用共享运行接口，已删除路由内的 Task 创建及 `run_and_persist_status()`。
 - 为完成切换，提前完成第 4 步所需的最小真实存储操作：
   `ChatStore.create_run()` 一次事务保存 running Run、生命周期事实及入口消息；
@@ -273,7 +273,7 @@ pending 状态；interrupted → running、审批决策校验及同 Run resume �
 shutdown 的强制停止不伪造 cancelled，
 留下的 running 状态由第 8 步启动恢复处理；当前不提供崩溃自动续跑。
 
-最小独立入口：`.venv/bin/python -m app.run --config config.json '你好'`。
+最小独立入口：`.venv/bin/python -m shikigen.runtime --config config.json '你好'`。
 配置文件决定产品数据库与 checkpoint 路径，相对路径以启动目录为准；
 可传 `--thread-id` 沿用 Thread。入口打印身份、等待收尾后打印持久结果与消息。
 该命令使用配置中的真实模型与工具；离线验收使用上述确定性测试工厂。
@@ -334,7 +334,7 @@ shutdown 的强制停止不伪造 cancelled，
 
 ### 2026-09-15 4A 验收记录：已完成（仅支持新库）
 
-实现见 [ChatStore](../app/persistence/chat_store.py)、[状态与返回模型](../app/run_state.py)；
+实现见 [ChatStore](../packages/harness/shikigen/persistence/chat_store.py)、[状态与返回模型](../packages/harness/shikigen/runtime/run_state.py)；
 新增 [存储契约测试](../tests/test_storage_contracts.py)，并补充 HTTP 身份冲突映射测试。
 创建返回 `RunWriteResult`，消息／事件业务写入返回 `EventWriteResult`，
 结算返回携带完整 lifecycle 事件的 `CommittedRunState`；重试保留原事实身份、序号和时间。
@@ -404,7 +404,7 @@ shutdown 的强制停止不伪造 cancelled，
 
 **做什么：**接通创建事务、执行侧完整消息保存、执行结算与事实广播。
 **为什么：**观察者接收数据库已经提交的事实，广播故障不会反过来改变业务结果。
-**用什么 API：**应用层 [RunEventIngestor](../app/run_events.py) 实现 Middleware 的
+**用什么 API：**应用层 [RunEventIngestor](../packages/harness/shikigen/runtime/run_events.py) 实现 Middleware 的
 `MessageJournal.append_event()`，委托 `ChatStore.append_committed_event()` 写入；
 创建与结算继续使用 4A 事务，三条路径统一调用 `RunEventIngestor.publish()`。
 `open_runtime()` 注入 ingestor 和共享执行注册表，harness 不导入应用存储。
@@ -468,7 +468,7 @@ interrupted 的完整 checkpoint 事实。测试使用临时数据库和确定�
 
 **完成条件：**第 3、4 步已共同接通 HTTP 与无 HTTP 入口的普通问答和工具调用，使用同一运行模块；独立进程真实存储验收通过；单一持久状态来源成立；旧数据库处理边界已明确为删除后重建。
 
-参考：[当前 ChatStore](../app/persistence/chat_store.py)、[当前路由编排](../app/routes/run.py)、[copy RunPersistence](../../shikigen-agent-copy/server/persistence/run_persistence.py)。
+参考：[当前 ChatStore](../packages/harness/shikigen/persistence/chat_store.py)、[当前路由编排](../app/routes/run.py)、[copy RunPersistence](../../shikigen-agent-copy/server/persistence/run_persistence.py)。
 
 ## 八、第 5 步：消息身份、归属与契约
 
@@ -585,7 +585,7 @@ interrupted 的完整 checkpoint 事实。测试使用临时数据库和确定�
 - 新增 `GET /api/threads/{thread_id}/runs/{run_id}/stream`，只读观察既有 Run。
   不调用 `start_run()` 或 Graph；Run 不存在或不属于指定 Thread 返回 404。
 - 共享入口为 `await runtime.runs.observe_run(thread_id, run_id)`，返回
-  [RunObservation](../app/run_observation.py)，可直接异步迭代内部事件；
+  [RunObservation](../packages/harness/shikigen/runtime/run_observation.py)，可直接异步迭代内部事件；
   调用方在 `finally` 中 `await observation.aclose()`，即使尚未开始迭代也能释放订阅。
 - 活跃执行先同步订阅，再异步读历史。`RunExecution.replay_start_seq` 在安装执行前
   固定为本次初始事实的首个 seq；此前事实取自数据库，本次事实与预览取自完整缓存和实时队列。
@@ -625,7 +625,7 @@ interrupted 的完整 checkpoint 事实。测试使用临时数据库和确定�
 
 #### 2026-09-22：7A 已完成
 
-- **策略装配：**`app/approval.py` 定义主 Agent 的 `write_file`、`bash` 审批策略，
+- **策略装配：**`packages/harness/shikigen/runtime/approval.py` 定义主 Agent 的 `write_file`、`bash` 审批策略，
   只提供 approve/reject。`open_runtime()` 固定使用项目的 `create_lead_agent()`，
   先构建实际工具注册表，校验策略引用的工具存在，再注入 middleware。
   当前 `task` 工具自行创建的子 Agent 不自动继承这份 middleware；本次父子图验收

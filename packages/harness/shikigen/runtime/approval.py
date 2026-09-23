@@ -1,13 +1,17 @@
-"""应用的工具审批策略；通用 harness 不决定哪些工具需要人工许可。"""
+"""默认运行环境的工具审批策略与审批响应校验。"""
 
 from typing import Any
 
 from langchain.agents.middleware import AgentState, HumanInTheLoopMiddleware
 from langchain.agents.middleware.human_in_the_loop import InterruptOnConfig
-from shikigen.event_contract import ApprovalRequired, ApprovalSubmission
-from shikigen.runtime_context import AgentRunContext
 
-from app.run_state import ApprovalConflict, InvalidApprovalResponse, InvalidRunState
+from shikigen.event_contract import ApprovalRequired, ApprovalSubmission
+from shikigen.runtime.run_state import (
+  ApprovalConflict,
+  InvalidApprovalResponse,
+  InvalidRunState,
+)
+from shikigen.runtime_context import AgentRunContext
 
 APPROVAL_POLICY: dict[str, bool | InterruptOnConfig] = {
   "write_file": {"allowed_decisions": ["approve", "reject"]},

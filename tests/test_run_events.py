@@ -7,10 +7,9 @@ from unittest.mock import patch
 
 from runtime_fixtures import deterministic_agent
 from shikigen.app_config import AppConfig, DatabaseConfig, McpConfig, ModelConfig
+from shikigen.runtime.composition import open_runtime
+from shikigen.runtime.run_events import RunEventIngestor
 from shikigen.stream import Stream
-
-from app.composition import open_runtime
-from app.run_events import RunEventIngestor
 
 
 class RunEventTests(unittest.IsolatedAsyncioTestCase):
@@ -39,7 +38,9 @@ class RunEventTests(unittest.IsolatedAsyncioTestCase):
         observed.append(data)
       return original(stream, event, data)
 
-    with patch("app.composition.create_lead_agent", new=deterministic_agent):
+    with patch(
+      "shikigen.runtime.composition.create_lead_agent", new=deterministic_agent
+    ):
       async with open_runtime(self.config) as runtime:
         thread = await runtime.threads.create_thread()
         with patch.object(Stream, "publish", publish):
@@ -72,12 +73,14 @@ class RunEventTests(unittest.IsolatedAsyncioTestCase):
             raise OSError("broadcast unavailable")
           return original(stream, event, data)
 
-        with patch("app.composition.create_lead_agent", new=deterministic_agent):
+        with patch(
+          "shikigen.runtime.composition.create_lead_agent", new=deterministic_agent
+        ):
           async with open_runtime(self.config) as runtime:
             thread = await runtime.threads.create_thread()
             with (
               patch.object(Stream, "publish", publish),
-              self.assertLogs("app.run_events"),
+              self.assertLogs("shikigen.runtime.run_events"),
             ):
               execution = await runtime.runs.start_run(thread, "add")
               row = await runtime.runs.wait_run(execution)
@@ -90,7 +93,9 @@ class RunEventTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertFalse(any(e.event == "error" for e in events))
             self.assertIsNone(runtime.executions.get(thread, execution.run_id))
-        with patch("app.composition.create_lead_agent", new=deterministic_agent):
+        with patch(
+          "shikigen.runtime.composition.create_lead_agent", new=deterministic_agent
+        ):
           async with open_runtime(self.config) as reopened:
             self.assertEqual(
               await reopened.runs.list_run_events(thread, execution.run_id), facts
@@ -105,12 +110,14 @@ class RunEventTests(unittest.IsolatedAsyncioTestCase):
         raise OSError("observer disconnected")
       return original(stream, event, data)
 
-    with patch("app.composition.create_lead_agent", new=deterministic_agent):
+    with patch(
+      "shikigen.runtime.composition.create_lead_agent", new=deterministic_agent
+    ):
       async with open_runtime(self.config) as runtime:
         thread = await runtime.threads.create_thread()
         with (
           patch.object(Stream, "publish", publish),
-          self.assertLogs("app.run_events"),
+          self.assertLogs("shikigen.runtime.run_events"),
         ):
           execution = await runtime.runs.start_run(thread, "add")
           self.assertEqual(
@@ -122,7 +129,9 @@ class RunEventTests(unittest.IsolatedAsyncioTestCase):
         )
 
   async def test_message_write_failure_does_not_publish_candidate_message(self):
-    with patch("app.composition.create_lead_agent", new=deterministic_agent):
+    with patch(
+      "shikigen.runtime.composition.create_lead_agent", new=deterministic_agent
+    ):
       async with open_runtime(self.config) as runtime:
         thread = await runtime.threads.create_thread()
         with patch.object(
@@ -149,7 +158,9 @@ class RunEventTests(unittest.IsolatedAsyncioTestCase):
         raise RuntimeError("notification unavailable")
       return original(stream, event, data)
 
-    with patch("app.composition.create_lead_agent", new=deterministic_agent):
+    with patch(
+      "shikigen.runtime.composition.create_lead_agent", new=deterministic_agent
+    ):
       async with open_runtime(self.config) as runtime:
         thread = await runtime.threads.create_thread()
         with (
@@ -157,7 +168,7 @@ class RunEventTests(unittest.IsolatedAsyncioTestCase):
             runtime.chat_store, "settle_execution", side_effect=OSError("disk failed")
           ),
           patch.object(Stream, "publish", publish),
-          self.assertLogs("app", level="ERROR"),
+          self.assertLogs("shikigen.runtime", level="ERROR"),
         ):
           execution = await runtime.runs.start_run(thread, "add")
           with self.assertRaisesRegex(OSError, "disk failed"):
@@ -174,10 +185,11 @@ class RunEventTests(unittest.IsolatedAsyncioTestCase):
   async def test_message_replay_keeps_identity_and_conflict_is_not_broadcast(self):
     from langchain_core.messages import HumanMessage
     from shikigen.execution import RunExecution
+    from shikigen.runtime.run_state import MessageConflict
 
-    from app.run_state import MessageConflict
-
-    with patch("app.composition.create_lead_agent", new=deterministic_agent):
+    with patch(
+      "shikigen.runtime.composition.create_lead_agent", new=deterministic_agent
+    ):
       async with open_runtime(self.config) as runtime:
         thread = await runtime.threads.create_thread()
         await runtime.chat_store.create_run(

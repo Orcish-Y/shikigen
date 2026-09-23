@@ -74,7 +74,7 @@ Agent memory 与 conversation history 跨 SDK connection 保留；可以通过 `
 当前项目已经存在两条持久化路径：
 
 - [checkpoint/provider.py](/home/orcish/code/shikigen-agent/packages/harness/shikigen/checkpoint/provider.py:13) 提供 checkpointer，agent 工厂接收它，用于 graph 执行状态。
-- [app/persistence/chat_store.py](/home/orcish/code/shikigen-agent/app/persistence/chat_store.py:63) 保存产品的 threads、runs、run_events。
+- [packages/harness/shikigen/persistence/chat_store.py](/home/orcish/code/shikigen-agent/packages/harness/shikigen/persistence/chat_store.py:63) 保存产品的 threads、runs、run_events。
 - [ChatPersistenceMiddleware](/home/orcish/code/shikigen-agent/packages/harness/shikigen/middleware/chat_persistence_middleware.py:59) 在消息形成的生命周期边界写 journal，依赖本文件中的 `MessageJournal` Protocol，不导入 app 的具体 ChatStore。
 - [app/server.py](/home/orcish/code/shikigen-agent/app/server.py:19) 的 lifespan 创建并注入上述组件。
 

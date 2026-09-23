@@ -1,4 +1,4 @@
 docs/branch-comparison-and-migration.md
 docs/migration-checklist.md
 
-现在完成 ### 6B：增加只读的既有 Run 内容流
+完成 ### 7D：明确用量累计与完成通知时序

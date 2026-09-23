@@ -4,14 +4,13 @@ import unittest
 from langchain_core.messages import HumanMessage
 from shikigen.execution import ExecutionReason, ExecutionRegistry, RunExecution
 from shikigen.loop import execute_agent_loop
+from shikigen.runtime.run_execution import CommittedRunState, start_run_execution
 from test_loop import (
   BlockingAgent,
   FailingAgent,
   LateFailingAgent,
   MessageAgent,
 )
-
-from app.run_execution import CommittedRunState, start_run_execution
 
 
 class ControlledSettlement:
@@ -122,7 +121,7 @@ class ExecutionTests(unittest.IsolatedAsyncioTestCase):
     settlement = ControlledSettlement(fail=True)
     execution = self.start(settlement)
     settlement.allow_commit.set()
-    with self.assertLogs("app.run_execution", level="ERROR"):
+    with self.assertLogs("shikigen.runtime.run_execution", level="ERROR"):
       with self.assertRaisesRegex(OSError, "storage unavailable"):
         await asyncio.wait_for(execution.task, 2)
     events = await self.events(execution)

@@ -6,10 +6,10 @@ import httpx
 import test_approval_resume as approval_tests
 from shikigen.event_contract import ApprovalSubmission
 from shikigen.execution import ExecutionOutcome, ExecutionReason
+from shikigen.persistence import ChatStore
+from shikigen.runtime.run_state import ApprovalConflict
 
-from app.persistence import ChatStore
 from app.run_contract import RunSseEncoder
-from app.run_state import ApprovalConflict
 from app.server import app
 
 
@@ -78,7 +78,7 @@ class RunCancelTests(unittest.IsolatedAsyncioTestCase):
       # 模拟取消请求到达时 Graph 已经自然完成，仍不得覆盖 cancelled。
       return ExecutionOutcome(ExecutionReason.COMPLETED)
 
-    with patch("app.run_execution.execute_agent_loop", side_effect=loop):
+    with patch("shikigen.runtime.run_execution.execute_agent_loop", side_effect=loop):
       execution = await self.runtime.runs.resume_run(
         self.thread, self.run_id, await self.responses()
       )
@@ -110,7 +110,9 @@ class RunCancelTests(unittest.IsolatedAsyncioTestCase):
     async def complete(*args, **kwargs):
       return ExecutionOutcome(ExecutionReason.COMPLETED)
 
-    with patch("app.run_execution.execute_agent_loop", side_effect=complete):
+    with patch(
+      "shikigen.runtime.run_execution.execute_agent_loop", side_effect=complete
+    ):
       execution = await self.runtime.runs.resume_run(
         self.thread, self.run_id, await self.responses()
       )
@@ -201,7 +203,7 @@ class RunCancelTests(unittest.IsolatedAsyncioTestCase):
       return committed
 
     with (
-      patch("app.run_execution.execute_agent_loop", side_effect=complete),
+      patch("shikigen.runtime.run_execution.execute_agent_loop", side_effect=complete),
       patch.object(self.store, "settle_execution", side_effect=delayed),
     ):
       execution = await self.runtime.runs.resume_run(

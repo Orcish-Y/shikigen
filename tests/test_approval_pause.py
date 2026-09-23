@@ -15,12 +15,12 @@ from runtime_fixtures import ToolModel
 from shikigen.app_config import AppConfig, DatabaseConfig, McpConfig, ModelConfig
 from shikigen.execution import ExecutionOutcome, ExecutionPause, ExecutionReason
 from shikigen.graph_pause import GraphPauseCollector
+from shikigen.persistence import ChatStore
+from shikigen.runtime.approval import build_approval_middleware
+from shikigen.runtime.composition import assemble_runtime, open_runtime
+from shikigen.runtime.run_state import ThreadBusy
 from sse_fixtures import parse_sse_frames
 
-from app.approval import build_approval_middleware
-from app.composition import assemble_runtime, open_runtime
-from app.persistence import ChatStore
-from app.run_state import ThreadBusy
 from app.server import app
 
 
@@ -242,9 +242,12 @@ class ApprovalPauseTests(unittest.IsolatedAsyncioTestCase):
       model=ModelConfig(), mcp=McpConfig(), database=DatabaseConfig(path=str(self.path))
     )
     with (
-      patch("app.composition.load_mcp_tools", new=AsyncMock(return_value=[])),
       patch(
-        "app.composition.create_lead_agent", new=AsyncMock(return_value=object())
+        "shikigen.runtime.composition.load_mcp_tools", new=AsyncMock(return_value=[])
+      ),
+      patch(
+        "shikigen.runtime.composition.create_lead_agent",
+        new=AsyncMock(return_value=object()),
       ) as factory,
     ):
       async with open_runtime(config):

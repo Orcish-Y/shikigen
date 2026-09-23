@@ -1,12 +1,11 @@
-"""最小无 HTTP 入口：python -m app.run --config config.json '你好'。"""
+"""最小无 HTTP 入口：python -m shikigen.runtime --config config.json '你好'。"""
 
 import argparse
 import asyncio
 import json
 
 from shikigen.app_config import load_app_config
-
-from app.composition import open_runtime
+from shikigen.runtime import open_runtime
 
 
 async def main() -> None:

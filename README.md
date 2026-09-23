@@ -6,8 +6,9 @@
 - `app/`：应用层，包含 FastAPI 服务器，依赖 `shikigen`。
 - `app/routes/thread.py`：会话列表、创建会话、会话历史消息。
 - `app/routes/run.py`：发起流式运行、查询运行消息；SSE 事件编码位于 `app/run_contract.py`。
-- `app/persistence/`：会话与运行数据库、SQLite checkpoint 连接管理。
-- `app/runtime.py`：HTTP 请求共享的应用运行时。
+- `packages/harness/shikigen/persistence/`：会话、运行与事件的 SQLite 持久化。
+- `packages/harness/shikigen/checkpoint/`：Graph checkpoint 与连接管理。
+- `packages/harness/shikigen/runtime/`：共享运行环境，包含装配、生命周期、会话与 Run 管理；对外入口为 `Runtime`、`open_runtime()`、`assemble_runtime()`。
 - `tests/`：测试。
 
 根项目通过 uv workspace 依赖 `shikigen-harness`；`uv sync` 会以 editable 模式安装框架包。
@@ -18,6 +19,20 @@
 ```bash
 uv run python -m unittest discover -s tests
 ```
+
+## 独立运行 Agent
+
+安装 harness 后，无需启动 FastAPI 即可运行并持久化一次对话：
+
+```bash
+uv run python -m shikigen.runtime --config config.json '你好'
+```
+
+沿用会话可传入 `--thread-id`。此命令需要配置中模型和 MCP 对应的环境变量；
+若使用 `.env`，可在 `uv run` 后添加 `--env-file .env`。
+Python 调用方通过 `from shikigen.runtime import open_runtime` 打开异步上下文，
+使用 `runtime.threads` 和 `runtime.runs` 操作会话与运行；退出上下文时回收后台任务和存储连接。
+旧的 `app.run` CLI 入口已迁移至 `shikigen.runtime`。
 
 ## 启动 Web 服务器
 

@@ -3,9 +3,9 @@
 import uuid
 from typing import Any
 
-from app.lifecycle import ApplicationLifecycle
-from app.persistence import ChatStore
-from app.run_state import CommittedEvent, ThreadNotFound
+from shikigen.persistence import ChatStore
+from shikigen.runtime.lifecycle import ApplicationLifecycle
+from shikigen.runtime.run_state import CommittedEvent, ThreadNotFound
 
 
 class ThreadService:

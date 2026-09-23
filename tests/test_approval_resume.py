@@ -15,14 +15,18 @@ from runtime_fixtures import ToolModel
 from shikigen.app_config import AppConfig, McpConfig, ModelConfig
 from shikigen.event_contract import ApprovalSubmission
 from shikigen.execution import ExecutionOutcome, ExecutionReason
+from shikigen.persistence import ChatStore
+from shikigen.runtime.approval import build_approval_middleware
+from shikigen.runtime.composition import assemble_runtime
+from shikigen.runtime.run_state import (
+  ApprovalConflict,
+  InvalidApprovalResponse,
+  InvalidRunState,
+)
 from sse_fixtures import parse_sse_frames
 from test_approval_pause import nested_graph
 
-from app.approval import build_approval_middleware
-from app.composition import assemble_runtime
-from app.persistence import ChatStore
 from app.run_contract import SSE_EVENT
-from app.run_state import ApprovalConflict, InvalidApprovalResponse, InvalidRunState
 from app.server import app
 
 
@@ -267,7 +271,8 @@ class ApprovalResumeTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_start_failure_preserves_resolved_fact(self):
     with patch(
-      "app.services.run.start_run_execution", side_effect=RuntimeError("cannot start")
+      "shikigen.runtime.runs.start_run_execution",
+      side_effect=RuntimeError("cannot start"),
     ):
       with self.assertRaisesRegex(RuntimeError, "cannot start"):
         await self.runtime.runs.resume_run(
@@ -355,8 +360,7 @@ class ApprovalResumeTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_disallowed_decision_does_not_consume_pending(self):
     from shikigen.event_contract import ApprovalRequired
-
-    from app.approval import validate_responses
+    from shikigen.runtime.approval import validate_responses
 
     required = ApprovalRequired.model_validate((await self.facts())[-2]["content"])
     # 自定义策略可只允许批准；模型字段允许 reject 不代表该动作允许拒绝。

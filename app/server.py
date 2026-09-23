@@ -2,8 +2,8 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from shikigen.runtime import open_runtime
 
-from app.composition import open_runtime
 from app.routes import run, thread
 
 

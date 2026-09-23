@@ -4,8 +4,7 @@ from pathlib import Path
 
 from langchain_core.messages import HumanMessage
 from shikigen.execution import ExecutionOutcome, ExecutionReason
-
-from app.persistence import ChatStore
+from shikigen.persistence import ChatStore
 
 
 class ChatStoreTests(unittest.IsolatedAsyncioTestCase):

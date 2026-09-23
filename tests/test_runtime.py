@@ -10,11 +10,15 @@ from langchain_core.messages import HumanMessage
 from runtime_fixtures import deterministic_agent
 from shikigen.app_config import AppConfig, DatabaseConfig, McpConfig, ModelConfig
 from shikigen.execution import ExecutionOutcome, ExecutionReason
+from shikigen.persistence import ChatStore
+from shikigen.runtime.composition import assemble_runtime, open_runtime
+from shikigen.runtime.run_state import (
+  ExecutionStopped,
+  RunNotFound,
+  ThreadBusy,
+  ThreadNotFound,
+)
 from test_loop import BlockingAgent, FailingAgent, MessageAgent
-
-from app.composition import assemble_runtime, open_runtime
-from app.persistence import ChatStore
-from app.run_state import ExecutionStopped, RunNotFound, ThreadBusy, ThreadNotFound
 
 
 class RuntimeTests(unittest.IsolatedAsyncioTestCase):
@@ -111,7 +115,7 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
   async def test_settlement_failure_is_reported_to_waiter_and_observer(self):
     with (
       patch.object(self.store, "settle_execution", side_effect=OSError("disk failed")),
-      self.assertLogs("app.run_execution", level="ERROR"),
+      self.assertLogs("shikigen.runtime.run_execution", level="ERROR"),
     ):
       execution = await self.runtime.runs.start_run(self.thread_id, "hello")
       with self.assertRaisesRegex(OSError, "disk failed"):
@@ -286,6 +290,7 @@ class CompositionTests(unittest.IsolatedAsyncioTestCase):
       sys.executable,
       str(Path(__file__).with_name("runtime_no_http.py")),
       str(self.path),
+      cwd=self.path.parent,
       stdout=asyncio.subprocess.PIPE,
       stderr=asyncio.subprocess.PIPE,
     )
@@ -299,7 +304,9 @@ class CompositionTests(unittest.IsolatedAsyncioTestCase):
     self.assertIn(b"NO_HTTP_RUNTIME_OK", stdout)
 
   async def test_real_graph_tool_messages_and_reopened_runtime(self):
-    with patch("app.composition.create_lead_agent", new=deterministic_agent):
+    with patch(
+      "shikigen.runtime.composition.create_lead_agent", new=deterministic_agent
+    ):
       async with open_runtime(self.config) as runtime:
         thread_id = await runtime.threads.create_thread()
         execution = await runtime.runs.start_run(thread_id, "1 + 2")
@@ -319,7 +326,9 @@ class CompositionTests(unittest.IsolatedAsyncioTestCase):
             for e in events
           )
         )
-    with patch("app.composition.create_lead_agent", new=deterministic_agent):
+    with patch(
+      "shikigen.runtime.composition.create_lead_agent", new=deterministic_agent
+    ):
       async with open_runtime(self.config) as runtime:
         self.assertEqual(await runtime.runs.read_run(thread_id, execution.run_id), row)
         self.assertEqual(
@@ -331,7 +340,7 @@ class CompositionTests(unittest.IsolatedAsyncioTestCase):
       kwargs["middlewares"] = [HumanInTheLoopMiddleware(interrupt_on={"add": True})]
       return await deterministic_agent(**kwargs)
 
-    with patch("app.composition.create_lead_agent", new=factory):
+    with patch("shikigen.runtime.composition.create_lead_agent", new=factory):
       async with open_runtime(self.config) as runtime:
         thread_id = await runtime.threads.create_thread()
         execution = await runtime.runs.start_run(thread_id, "1 + 2")
@@ -365,9 +374,11 @@ class CompositionTests(unittest.IsolatedAsyncioTestCase):
       captured["store"] = store
       return store
 
-    with patch("app.persistence.chat_store.ChatStore.open", side_effect=capture_store):
+    with patch(
+      "shikigen.persistence.chat_store.ChatStore.open", side_effect=capture_store
+    ):
       with self.assertRaisesRegex(ValueError, "factory failed"):
-        with patch("app.composition.create_lead_agent", new=fail):
+        with patch("shikigen.runtime.composition.create_lead_agent", new=fail):
           async with open_runtime(self.config):
             self.fail("Unexpected runtime")
     with self.assertRaises(ValueError):
@@ -406,7 +417,7 @@ class CompositionTests(unittest.IsolatedAsyncioTestCase):
           return Agent()
 
         try:
-          with patch("app.composition.create_lead_agent", new=factory):
+          with patch("shikigen.runtime.composition.create_lead_agent", new=factory):
             async with open_runtime(self.config) as runtime:
               captured["store"] = runtime.chat_store
               thread_id = await runtime.threads.create_thread()

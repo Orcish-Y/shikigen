@@ -9,9 +9,8 @@ from unittest.mock import patch
 
 from langchain_core.messages import HumanMessage
 from shikigen.execution import ExecutionOutcome, ExecutionPause, ExecutionReason
-
-from app.persistence import ChatStore
-from app.run_state import (
+from shikigen.persistence import ChatStore
+from shikigen.runtime.run_state import (
   MessageConflict,
   RunNotFound,
   StorageConflict,

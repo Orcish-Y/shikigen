@@ -2,24 +2,38 @@
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
+
 from shikigen.agent import create_lead_agent
 from shikigen.app_config import AppConfig, load_app_config
 from shikigen.checkpoint import make_checkpointer
 from shikigen.execution import ExecutionRegistry
+from shikigen.persistence.chat_store import ChatStore, open_chat_store
+from shikigen.runtime.approval import build_approval_middleware
+from shikigen.runtime.lifecycle import ApplicationLifecycle
+from shikigen.runtime.run_events import RunEventIngestor
+from shikigen.runtime.runs import RunService
+from shikigen.runtime.threads import ThreadService
 from shikigen.tools import create_builtin_registry
 from shikigen.tools.mcp_loader import load_mcp_tools
 
-from app.approval import build_approval_middleware
-from app.lifecycle import ApplicationLifecycle
-from app.persistence.chat_store import ChatStore, open_chat_store
-from app.run_events import RunEventIngestor
-from app.runtime import Runtime
-from app.services.run import RunService
-from app.services.thread import ThreadService
+
+@dataclass(frozen=True, slots=True)
+class Runtime:
+  """运行配置与已装配依赖；业务操作和生命周期由对应模块负责。"""
+
+  config: AppConfig
+  agent: Any
+  checkpointer: BaseCheckpointSaver | None
+  chat_store: ChatStore
+  executions: ExecutionRegistry
+  lifecycle: ApplicationLifecycle
+  threads: ThreadService
+  runs: RunService
 
 
 def assemble_runtime(

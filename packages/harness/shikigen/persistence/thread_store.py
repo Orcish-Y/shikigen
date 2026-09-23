@@ -4,7 +4,7 @@ from typing import Any
 
 import aiosqlite
 
-from app.persistence.database import Database, _now, integrity_error
+from shikigen.persistence.database import Database, _now, integrity_error
 
 
 class ThreadStore:

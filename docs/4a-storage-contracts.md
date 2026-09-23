@@ -24,7 +24,7 @@
 | 数据约束、原子写入和查询 | 存储实现 | 当前 ChatStore 负责状态转换条件、归属、重复检查和 SQLite 事务 |
 | 存储配置与连接生命周期 | 共享装配入口 | `open_runtime()` 打开、注入和关闭后端，HTTP 与 Python 入口复用 |
 
-执行层可以通过注入接口主动保存消息和 checkpoint；“不导入应用存储”仅指不直接依赖 `app.persistence.ChatStore` 等具体产品实现。完整事实提交后再发布，逐 token 预览不因此成为已保存历史。当前入口消息归创建事务所有，执行侧识别该事实，避免重复创建。
+执行层可以通过注入接口主动保存消息和 checkpoint；“不导入应用存储”仅指不直接依赖 `shikigen.persistence.ChatStore` 等具体产品实现。完整事实提交后再发布，逐 token 预览不因此成为已保存历史。当前入口消息归创建事务所有，执行侧识别该事实，避免重复创建。
 
 当前 Run 编排与 ChatStore 放在 `app/` 是阶段性组织方式。可复用的 Run 调度、取消、恢复及 RunStore 接口可以纳入 harness/runtime；用户归属等产品语义由产品层承担。不能把 harness 永久限定为只执行一次 Graph，也不要求为分层立刻移动文件。
 
@@ -32,7 +32,7 @@
 
 ## 2. 当前数据字段
 
-源码：[ChatStore](../app/persistence/chat_store.py)、[RunStatus](../app/run_state.py)。
+源码：[ChatStore](../packages/harness/shikigen/persistence/chat_store.py)、[RunStatus](../packages/harness/shikigen/runtime/run_state.py)。
 
 ### 2.1 Thread 与 Run
 
@@ -145,7 +145,7 @@
 
 ## 4. 返回模型与数据库边界
 
-模型定义在 [app/run_state.py](../app/run_state.py)：
+模型定义在 [packages/harness/shikigen/runtime/run_state.py](../packages/harness/shikigen/runtime/run_state.py)：
 
 - `RunSnapshot`：身份、归属、状态、错误码／信息和时间字段。
 - `CommittedEvent`：事件身份、归属、序号、类型、分类、key、内容、元数据和写入时间。

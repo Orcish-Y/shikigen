@@ -11,19 +11,19 @@ from fastapi import FastAPI, Request
 from runtime_fixtures import deterministic_agent
 from shikigen.app_config import AppConfig, McpConfig, ModelConfig
 from shikigen.execution import RunExecution
+from shikigen.persistence import ChatStore
+from shikigen.runtime.composition import assemble_runtime, open_runtime
+from shikigen.runtime.run_state import StorageConflict
 from sse_fixtures import parse_sse, parse_sse_frames
 from starlette.requests import ClientDisconnect
 from test_loop import BlockingAgent, MessageAgent
 
-from app.composition import assemble_runtime, open_runtime
-from app.persistence import ChatStore
 from app.routes.run import (
   ChatRequest,
   ObservationResponse,
   stream_chat,
   stream_run_events,
 )
-from app.run_state import StorageConflict
 from app.server import app as server_app
 
 
@@ -260,7 +260,7 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
     thread = await self.runtime.threads.create_thread()
     with (
       patch.object(self.store, "settle_execution", side_effect=OSError("disk failed")),
-      self.assertLogs("app.run_execution", level="ERROR"),
+      self.assertLogs("shikigen.runtime.run_execution", level="ERROR"),
     ):
       response = await self.client.post(
         f"/api/threads/{thread}/stream", json={"message": "hello"}
@@ -278,7 +278,9 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
       database={"path": str(Path(self.directory.name) / "real.db")},
       checkpointer={"type": "memory"},
     )
-    with patch("app.composition.create_lead_agent", new=deterministic_agent):
+    with patch(
+      "shikigen.runtime.composition.create_lead_agent", new=deterministic_agent
+    ):
       async with open_runtime(config) as runtime:
         with patch.object(server_app.state, "runtime", runtime):
           thread = (await self.client.post("/api/threads")).json()["thread_id"]

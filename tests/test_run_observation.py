@@ -7,12 +7,11 @@ from unittest.mock import patch
 from langchain_core.messages import HumanMessage
 from shikigen.app_config import AppConfig, McpConfig, ModelConfig
 from shikigen.execution import ExecutionOutcome, ExecutionReason, RunExecution
+from shikigen.persistence import ChatStore
+from shikigen.runtime.composition import assemble_runtime
+from shikigen.runtime.run_events import RunEventIngestor
+from shikigen.runtime.run_state import ObservationUnavailable, RunNotFound
 from test_loop import MessageAgent
-
-from app.composition import assemble_runtime
-from app.persistence import ChatStore
-from app.run_events import RunEventIngestor
-from app.run_state import ObservationUnavailable, RunNotFound
 
 
 class ObservationTests(unittest.IsolatedAsyncioTestCase):

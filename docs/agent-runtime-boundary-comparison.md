@@ -55,7 +55,7 @@ CLI 和 gateway 共用 SQLite SessionDB。正常 transcript 由 Agent 保存；�
 
 结合本轮本地核查，目前不是整个核心都写在 server：harness 已有执行 loop、RunExecution/Registry、checkpoint 和依赖 MessageJournal 的 middleware；`server.py` 的 lifespan 装配职责也合理。主要需要继续分离的是 HTTP route 中创建 run、创建持久记录、启动后台执行和收尾等工作。[server.py](/home/orcish/code/shikigen-agent/app/server.py)、[run 路由](/home/orcish/code/shikigen-agent/app/routes/run.py:198)
 
-已有 `app/run_execution.py` 是不依赖 FastAPI 的独立编排骨架，说明项目已经朝这个方向迁移。文件留在 `app/` 不等于与 HTTP 耦合；是否进入 harness 包应取决于是否准备作为共享 runtime API，而不是目录观感。[run_execution.py](/home/orcish/code/shikigen-agent/app/run_execution.py)
+独立执行编排现已迁入 `packages/harness/shikigen/runtime/run_execution.py`，并通过 `shikigen.runtime` 提供共享运行入口。此前文件留在 `app/` 也不等于与 HTTP 耦合；此次迁移进一步使完整运行能力随 harness 包分发。[run_execution.py](/home/orcish/code/shikigen-agent/packages/harness/shikigen/runtime/run_execution.py)
 
 | 做什么（What） | 为什么（Why） | 接口方向（How，建议而非现有承诺） |
 | --- | --- | --- |
@@ -67,7 +67,7 @@ CLI 和 gateway 共用 SQLite SessionDB。正常 transcript 由 Agent 保存；�
 
 这项拆分的验收问题是：**不启动 FastAPI，能否通过同一个 run 服务完成启动、取消、终态持久化和事件订阅？** 如果可以，核心边界基本成立；不必强求存储文件全部在 harness 目录。
 
-还有一项比移动文件更重要的收尾语义：本轮本地核查发现 HTTP 旧路径先发布内存终态/关流，再由外层完成数据库收尾；新的 `RunSettlement` 骨架采取先提交再发布。迁移时应统一该语义，避免客户端观察到的完成状态早于持久记录。此处是静态调用链判断，未执行故障注入；真正跨 checkpoint、journal 与 run 表的一致性仍需单独定义。[旧路由收尾](/home/orcish/code/shikigen-agent/app/routes/run.py:147)、[新编排骨架](/home/orcish/code/shikigen-agent/app/run_execution.py)
+还有一项比移动文件更重要的收尾语义：本轮本地核查发现 HTTP 旧路径先发布内存终态/关流，再由外层完成数据库收尾；新的 `RunSettlement` 骨架采取先提交再发布。迁移时应统一该语义，避免客户端观察到的完成状态早于持久记录。此处是静态调用链判断，未执行故障注入；真正跨 checkpoint、journal 与 run 表的一致性仍需单独定义。[旧路由收尾](/home/orcish/code/shikigen-agent/app/routes/run.py:147)、[新编排骨架](/home/orcish/code/shikigen-agent/packages/harness/shikigen/runtime/run_execution.py)
 
 ## 取舍
 

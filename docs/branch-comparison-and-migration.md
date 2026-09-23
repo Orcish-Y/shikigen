@@ -23,15 +23,15 @@ Thread、Run、消息或 checkpoint。4B 当前只表示“放弃历史库并从
 入口、字段映射、审计副本或回滚流程。
 
 2026-09-16 4C 更新：创建、完整消息和执行结算已接入统一的
-[RunEventIngestor](../app/run_events.py) 事实发布入口。Middleware 经注入接口提交消息，
+[RunEventIngestor](../packages/harness/shikigen/runtime/run_events.py) 事实发布入口。Middleware 经注入接口提交消息，
 运行编排提交生命周期，均广播存储返回的完整 `durable_event`；harness 不导入应用存储。
 事务失败与提交后广播失败分别处理，后者记录观察错误并允许查询补读，不改变已提交状态。
 保留现有终态事件投影；此步不提供跨进程可靠投递或自动补发。
 详细语义和验证见 [4C 验收记录](migration-checklist.md#2026-09-16-4c-验收记录已完成)。
 
-同日职责调整：`app/runtime.py` 只保留 `Runtime` 配置／依赖容器；
-Thread 操作位于 `app/services/thread.py`，Run 操作位于 `app/services/run.py`，
-后台操作的接收与关闭位于 `app/lifecycle.py`。HTTP 和普通 Python 入口通过
+职责调整：`packages/harness/shikigen/runtime/composition.py` 集中定义 `Runtime` 配置／依赖容器与装配入口；
+Thread 操作位于 `packages/harness/shikigen/runtime/threads.py`，Run 操作位于 `packages/harness/shikigen/runtime/runs.py`，
+后台操作的接收与关闭位于 `packages/harness/shikigen/runtime/lifecycle.py`。HTTP 和普通 Python 入口通过
 `runtime.threads`、`runtime.runs` 访问服务，装配与存储释放仍由 `composition.py` 负责。
 
 2026-09-17 第 5 步更新：已集中完整消息转换与严格事件契约，保留 middleware 写入路径。
@@ -123,7 +123,7 @@ Run 查询与 GET metadata 暴露累计 usage、usage_pending；未结算为未�
 - **运行清理已有明确职责。** Loop 使用 TaskGroup、取消信号竞争和 finally 收尾；`RunManager.detach()` 允许消费者断连后继续执行，待任务和持久化完成再回收。
 - **已存在产品消息记录、幂等键和 Thread 内序号。** copy 的优势是进一步完善规则，不是首次引入这些能力。
 
-来源：[workspace 配置](../pyproject.toml)、[包配置](../packages/harness/pyproject.toml)、[当前 Graph 事件转换](../packages/harness/shikigen/graph_events.py)、[RunManager](../packages/harness/shikigen/run_manager.py)、[ChatStore](../app/persistence/chat_store.py)。
+来源：[workspace 配置](../pyproject.toml)、[包配置](../packages/harness/pyproject.toml)、[当前 Graph 事件转换](../packages/harness/shikigen/graph_events.py)、[RunManager](../packages/harness/shikigen/run_manager.py)、[ChatStore](../packages/harness/shikigen/persistence/chat_store.py)。
 
 ### 2.2 总体差异表
 
@@ -170,7 +170,7 @@ Run 查询与 GET metadata 暴露累计 usage、usage_pending；未结算为未�
 
 两边 NOTES 的阶段 4 勾选状态都落后于这些实现，判断进度应以源码和测试为准。
 
-来源：[当前 GoalMiddleware](../packages/harness/shikigen/middleware/goal_middleware.py)、[copy GoalMiddleware](../../shikigen-agent-copy/middleware/goal_middleware.py)、[当前 task 工具](../packages/harness/shikigen/tools/task_tool.py)、[copy task 工具](../../shikigen-agent-copy/tools/task_tool.py)、[当前工具错误中间件](../packages/harness/shikigen/middleware/tool_error_handling_middleware.py)、[当前 SQLite provider](../app/persistence/sqlite_provider.py)、[copy SQLite provider](../../shikigen-agent-copy/server/persistence/sqlite_checkpointer.py)。
+来源：[当前 GoalMiddleware](../packages/harness/shikigen/middleware/goal_middleware.py)、[copy GoalMiddleware](../../shikigen-agent-copy/middleware/goal_middleware.py)、[当前 task 工具](../packages/harness/shikigen/tools/task_tool.py)、[copy task 工具](../../shikigen-agent-copy/tools/task_tool.py)、[当前工具错误中间件](../packages/harness/shikigen/middleware/tool_error_handling_middleware.py)、[当前 SQLite provider](../packages/harness/shikigen/persistence/sqlite_provider.py)、[copy SQLite provider](../../shikigen-agent-copy/server/persistence/sqlite_checkpointer.py)。
 
 ## 3. 值得迁移的设计：做什么、为什么、用什么接口
 
@@ -216,7 +216,7 @@ Run 查询与 GET metadata 暴露累计 usage、usage_pending；未结算为未�
 
 限制：数据库可以保证排他，不等于执行资源已跨进程协调。HTTP 层还必须把数据库冲突转换成明确响应，copy 在新建 Run 路径上尚有缺口，见第 4 节。
 
-来源：[当前写入和状态更新](../app/persistence/chat_store.py:180)、[copy schema](../../shikigen-agent-copy/server/persistence/run_persistence.py:109)、[copy 幂等写入](../../shikigen-agent-copy/server/persistence/run_persistence.py:713)。
+来源：[当前写入和状态更新](../packages/harness/shikigen/persistence/chat_store.py:180)、[copy schema](../../shikigen-agent-copy/server/persistence/run_persistence.py:109)、[copy 幂等写入](../../shikigen-agent-copy/server/persistence/run_persistence.py:713)。
 
 ### 3.4 统一框架事件转换与产品消息身份
 
@@ -411,9 +411,9 @@ copy 的默认值不随启动目录变化，但安装成包后会指向源码安
 
 **迁移落点：**实施清单第 3 步确定共享运行接口，第 4 步接入真实事务存储、共享装配与最小 Python 入口，同时切换 HTTP；第 6—8 步将重建、审批／取消和启动恢复接入同一运行模块。这是本次迁移范围，不列为未来独立优化项。
 
-2026-09-15：上述基础独立运行链路已实现。`app/run_execution.py` 中的
+2026-09-15：上述基础独立运行链路已实现。`packages/harness/shikigen/runtime/run_execution.py` 中的
 `start_run_execution()` 由 `RunService.start_run()` 在创建事务提交后调用；
-`open_runtime()` 统一装配，HTTP 与 `python -m app.run` 复用同一实现。
+`open_runtime()` 统一装配，HTTP 与 `python -m shikigen.runtime` 复用同一实现。
 `wait_run(execution)` 返回已提交状态，暂停时返回 interrupted；仅持有 ID 时使用
 `read_run(thread_id, run_id)`。这次推进同时完成第 4 步的最小存储接入，
 不代表 schema 迁移、统一事件契约、重建、审批恢复或启动恢复已完成。

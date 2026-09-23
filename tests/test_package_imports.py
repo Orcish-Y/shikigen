@@ -28,6 +28,8 @@ class PackageImportTests(unittest.TestCase):
           "-c",
           "import shikigen; import shikigen.tools; "
           "import shikigen.graph_events; "
+          "from shikigen.persistence import ChatStore; "
+          "from shikigen.runtime import Runtime, open_runtime, assemble_runtime; "
           "import shikigen.utils.text_safety",
         ],
         cwd=directory,
