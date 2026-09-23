@@ -10,10 +10,11 @@ import httpx
 from fastapi import FastAPI, Request
 from runtime_fixtures import deterministic_agent
 from shikigen.app_config import AppConfig, McpConfig, ModelConfig
-from shikigen.execution import RunExecution
+from shikigen.contracts.runs import StorageConflict
+from shikigen.core.execution import RunExecution
 from shikigen.persistence import ChatStore
 from shikigen.runtime.composition import assemble_runtime, open_runtime
-from shikigen.runtime.run_state import StorageConflict
+from shikigen.runtime.runs import RunTransitions
 from sse_fixtures import parse_sse, parse_sse_frames
 from starlette.requests import ClientDisconnect
 from test_loop import BlockingAgent, MessageAgent
@@ -155,7 +156,7 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
     from langchain_core.messages import HumanMessage
 
     thread = await self.runtime.threads.create_thread()
-    await self.store.create_run(
+    await RunTransitions(self.store).create_run(
       thread_id=thread,
       run_id="orphan",
       entry_message=HumanMessage(id="h", content="hi"),
@@ -214,14 +215,16 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
     for cancel_consumer in (False, True):
       with self.subTest(cancel_consumer=cancel_consumer):
         entered, release, received = asyncio.Event(), asyncio.Event(), asyncio.Event()
-        original = self.store.settle_execution
+        original = self.runtime.runs._transitions.settle_execution
 
         async def settle(entered=entered, release=release, original=original, **kwargs):
           entered.set()
           await release.wait()
           return await original(**kwargs)
 
-        with patch.object(self.store, "settle_execution", side_effect=settle):
+        with patch.object(
+          self.runtime.runs._transitions, "settle_execution", side_effect=settle
+        ):
           thread = await self.runtime.threads.create_thread()
           response = await stream_chat(
             thread,
@@ -259,7 +262,11 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
   async def test_storage_failure_has_no_success_terminal(self):
     thread = await self.runtime.threads.create_thread()
     with (
-      patch.object(self.store, "settle_execution", side_effect=OSError("disk failed")),
+      patch.object(
+        self.runtime.runs._transitions,
+        "settle_execution",
+        side_effect=OSError("disk failed"),
+      ),
       self.assertLogs("shikigen.runtime.run_execution", level="ERROR"),
     ):
       response = await self.client.post(

@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 import aiosqlite
 
-from shikigen.runtime.run_state import StorageConflict, ThreadBusy
+from shikigen.contracts.runs import StorageConflict, ThreadBusy
 
 
 class Database:

@@ -2,8 +2,8 @@ import asyncio
 import unittest
 
 from langchain_core.messages import HumanMessage
-from shikigen.execution import ExecutionReason, ExecutionRegistry, RunExecution
-from shikigen.loop import execute_agent_loop
+from shikigen.core.execution import ExecutionReason, ExecutionRegistry, RunExecution
+from shikigen.core.loop import execute_agent_loop
 from shikigen.runtime.run_execution import CommittedRunState, start_run_execution
 from test_loop import (
   BlockingAgent,

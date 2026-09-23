@@ -3,7 +3,7 @@
 from collections.abc import Mapping
 from typing import Any
 
-from shikigen.execution import ExecutionPause
+from shikigen.core.execution import ExecutionPause
 
 
 class GraphPauseCollector:

@@ -4,7 +4,7 @@ import asyncio
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-from shikigen.stream import Stream
+from shikigen.core.stream import Stream
 
 
 class ExecutionReason(StrEnum):

@@ -6,11 +6,16 @@ from unittest.mock import patch
 
 from langchain_core.messages import HumanMessage
 from shikigen.app_config import AppConfig, McpConfig, ModelConfig
-from shikigen.execution import ExecutionOutcome, ExecutionReason, RunExecution
+from shikigen.contracts.runs import ObservationUnavailable, RunNotFound
+from shikigen.core.execution import (
+  ExecutionOutcome,
+  ExecutionReason,
+  RunExecution,
+)
 from shikigen.persistence import ChatStore
 from shikigen.runtime.composition import assemble_runtime
 from shikigen.runtime.run_events import RunEventIngestor
-from shikigen.runtime.run_state import ObservationUnavailable, RunNotFound
+from shikigen.runtime.runs import RunTransitions
 from test_loop import MessageAgent
 
 
@@ -30,7 +35,7 @@ class ObservationTests(unittest.IsolatedAsyncioTestCase):
     self.thread = await self.runtime.threads.create_thread()
 
   async def active(self):
-    created = await self.store.create_run(
+    created = await RunTransitions(self.store).create_run(
       thread_id=self.thread,
       run_id="run",
       entry_message=HumanMessage(id="human", content="hi"),
@@ -43,7 +48,7 @@ class ObservationTests(unittest.IsolatedAsyncioTestCase):
     return execution
 
   async def finish(self, execution):
-    settled = await self.store.settle_execution(
+    settled = await RunTransitions(self.store).settle_execution(
       thread_id=self.thread,
       run_id="run",
       outcome=ExecutionOutcome(ExecutionReason.COMPLETED),
@@ -171,17 +176,17 @@ class ObservationTests(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(calls.call_count, 1)
 
   async def test_all_settled_states_rebuild_after_reopen(self):
-    from shikigen.execution import ExecutionPause
+    from shikigen.core.execution import ExecutionPause
 
     for reason in ExecutionReason:
       with self.subTest(reason=reason):
         thread = await self.runtime.threads.create_thread()
-        await self.store.create_run(
+        await RunTransitions(self.store).create_run(
           thread_id=thread,
           run_id=reason.value,
           entry_message=HumanMessage(id=reason.value, content="hi"),
         )
-        await self.store.settle_execution(
+        await RunTransitions(self.store).settle_execution(
           thread_id=thread,
           run_id=reason.value,
           outcome=ExecutionOutcome(

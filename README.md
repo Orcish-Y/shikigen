@@ -11,6 +11,39 @@
 - `packages/harness/shikigen/runtime/`：共享运行环境，包含装配、生命周期、会话与 Run 管理；对外入口为 `Runtime`、`open_runtime()`、`assemble_runtime()`。
 - `tests/`：测试。
 
+框架包内部按职责组织：
+
+```text
+shikigen/
+├── __init__.py       # 公共 Python 导出
+├── app_config.py     # 配置模型与加载
+├── core/            # Agent 工厂、审批规则、Loop、Graph 适配与本地执行资源
+├── runtime/         # 会话、持久 Run、审批、执行协调、装配与 CLI
+├── contracts/       # 消息、事件、Run 状态及流载荷的数据模型
+├── persistence/     # SQLite 事务和读写
+├── checkpoint/      # Graph checkpoint 存取
+├── tools/           # 工具与注册表
+├── middleware/      # Agent middleware
+├── callback_handler/ # 模型回调与 token 统计
+└── utils/           # 通用辅助函数
+```
+
+`core` 负责一次 Agent 执行，不依赖 `runtime` 或业务数据库；`runtime`
+将执行与 `persistence` 组合成可持续查询、取消和恢复的 Run。
+共享数据模型放在 `contracts`，存储层不再导入 runtime。
+`core/approval.py` 集中工具审批策略、middleware 构建和人工决策校验；
+runtime 负责审批对应的 Run 状态检查、持久化与恢复执行。
+`core/stream.py` 实现内存广播，`contracts/stream.py` 定义其载荷；
+`contracts/events.py` 定义事件内容，`runtime/run_events.py` 负责接入与写入协调。
+旧的纯内存 `RunManager` 位于 `core/run_manager.py`，供 `run_agent_loop()` 使用；
+持久运行使用 `runtime.runs.RunService`。
+
+公共导入 `from shikigen import create_lead_agent, execute_agent_loop` 和
+`from shikigen.runtime import open_runtime` 保持不变。直接引用旧内部模块的代码
+需改用 `shikigen.core.*` 或 `shikigen.contracts.*`；例如
+`shikigen.loop` 改为 `shikigen.core.loop`，`shikigen.runtime.run_state`
+改为 `shikigen.contracts.runs`，`shikigen.runtime_context` 改为 `shikigen.core.context`。
+
 根项目通过 uv workspace 依赖 `shikigen-harness`；`uv sync` 会以 editable 模式安装框架包。
 以下命令均在项目根目录执行；默认配置 `config.json` 和运行数据路径相对于当前工作目录。
 
@@ -33,6 +66,14 @@ uv run python -m shikigen.runtime --config config.json '你好'
 Python 调用方通过 `from shikigen.runtime import open_runtime` 打开异步上下文，
 使用 `runtime.threads` 和 `runtime.runs` 操作会话与运行；退出上下文时回收后台任务和存储连接。
 旧的 `app.run` CLI 入口已迁移至 `shikigen.runtime`。
+
+`runtime/runs.py` 中的 `RunService` 负责本地执行协调，`RunTransitions`
+负责创建、结算、取消和审批恢复等持久状态变更。
+这些操作通过 `ChatStore.transaction()` 将状态检查、状态更新与相关事件一起提交。
+事件写入统一经过 `runtime/run_events.py`：生命周期操作调用
+`RunEventIngestor.write_in_transaction()` 使用已有事务，完整消息通过
+`ingest_message()` 接入。事件层不决定 Run 状态，不自行提交调用方的事务；
+只有提交成功后才广播。SQL、序号分配和回滚留在 persistence。
 
 ## 启动 Web 服务器
 

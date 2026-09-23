@@ -3,7 +3,6 @@ from unittest.mock import AsyncMock, patch
 
 from langchain.messages import AIMessage
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
-from shikigen.agent import create_lead_agent
 from shikigen.app_config import (
   AppConfig,
   AppConfigError,
@@ -12,6 +11,7 @@ from shikigen.app_config import (
   SubagentConfig,
   SubagentsConfig,
 )
+from shikigen.core.agent import create_lead_agent
 from shikigen.tools import ToolRegistry, build_task_tool, create_builtin_registry
 
 
@@ -20,9 +20,11 @@ class AgentFactoryTests(unittest.IsolatedAsyncioTestCase):
     for message in ("Config file not found", "Invalid config file"):
       with (
         self.subTest(message=message),
-        patch("shikigen.agent.load_app_config", side_effect=AppConfigError(message)),
-        patch("shikigen.agent.create_chat_model") as make_model,
-        patch("shikigen.agent.load_mcp_tools", new=AsyncMock()) as load_tools,
+        patch(
+          "shikigen.core.agent.load_app_config", side_effect=AppConfigError(message)
+        ),
+        patch("shikigen.core.agent.create_chat_model") as make_model,
+        patch("shikigen.core.agent.load_mcp_tools", new=AsyncMock()) as load_tools,
       ):
         with self.assertRaisesRegex(AppConfigError, message):
           await create_lead_agent()
@@ -39,14 +41,14 @@ class AgentFactoryTests(unittest.IsolatedAsyncioTestCase):
     subagents = SubagentsConfig()
     config = AppConfig(model=model_config, mcp=mcp, subagents=subagents)
     with (
-      patch("shikigen.agent.load_app_config", return_value=config) as load_config,
-      patch("shikigen.agent.create_chat_model", return_value=model) as make_model,
-      patch("shikigen.agent.create_builtin_registry", return_value=registry),
+      patch("shikigen.core.agent.load_app_config", return_value=config) as load_config,
+      patch("shikigen.core.agent.create_chat_model", return_value=model) as make_model,
+      patch("shikigen.core.agent.create_builtin_registry", return_value=registry),
       patch(
-        "shikigen.agent.load_mcp_tools", new=AsyncMock(return_value=[mcp_tool])
+        "shikigen.core.agent.load_mcp_tools", new=AsyncMock(return_value=[mcp_tool])
       ) as load_tools,
-      patch("shikigen.agent.build_task_tool", wraps=build_task_tool) as make_task,
-      patch("shikigen.agent.create_agent") as make_agent,
+      patch("shikigen.core.agent.build_task_tool", wraps=build_task_tool) as make_task,
+      patch("shikigen.core.agent.create_agent") as make_agent,
     ):
       result = await create_lead_agent()
 
@@ -67,13 +69,13 @@ class AgentFactoryTests(unittest.IsolatedAsyncioTestCase):
     registry = ToolRegistry()
     with (
       patch(
-        "shikigen.agent.load_app_config",
+        "shikigen.core.agent.load_app_config",
         side_effect=AssertionError("Unexpected file read"),
       ) as load_config,
-      patch("shikigen.agent.create_chat_model") as make_model,
-      patch("shikigen.agent.create_builtin_registry") as make_builtin,
-      patch("shikigen.agent.load_mcp_tools", new=AsyncMock()) as load_tools,
-      patch("shikigen.agent.create_agent") as make_agent,
+      patch("shikigen.core.agent.create_chat_model") as make_model,
+      patch("shikigen.core.agent.create_builtin_registry") as make_builtin,
+      patch("shikigen.core.agent.load_mcp_tools", new=AsyncMock()) as load_tools,
+      patch("shikigen.core.agent.create_agent") as make_agent,
     ):
       await create_lead_agent(
         model,

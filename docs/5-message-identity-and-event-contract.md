@@ -46,7 +46,7 @@ block 数组，原样保留 block；本步不解释图片、音频或厂商专�
 
 ## SSE 事件契约
 
-`shikigen/event_contract.py` 定义协议无关内部事件；`app/run_contract.py` 定义
+`shikigen/contracts/events.py` 定义协议无关内部事件；`app/run_contract.py` 定义
 SSE 判别联合、内部事件投影和编码，不依赖 FastAPI。路由负责订阅与响应资源释放。
 HTTP 只支持 `text/event-stream`，每帧为 `event: <name>\ndata: <JSON>\n\n`。
 JSON 字符串中的换行会转义，不能拆成新的 SSE 帧。

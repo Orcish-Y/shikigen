@@ -13,20 +13,21 @@ from langgraph.types import Command, interrupt
 from pydantic import ValidationError
 from runtime_fixtures import ToolModel, add
 from shikigen.app_config import AppConfig, DatabaseConfig, McpConfig, ModelConfig
-from shikigen.execution import (
+from shikigen.contracts.messages import message_content, normalize_message
+from shikigen.contracts.runs import MessageConflict
+from shikigen.contracts.stream import StreamEvent
+from shikigen.core.context import AgentRunContext
+from shikigen.core.execution import (
   ExecutionOutcome,
   ExecutionReason,
   ExecutionRegistry,
   RunExecution,
 )
-from shikigen.graph_events import GraphEventAdapter
-from shikigen.messages import message_content, normalize_message
+from shikigen.core.graph_events import GraphEventAdapter
 from shikigen.persistence import ChatStore
 from shikigen.runtime.composition import open_runtime
 from shikigen.runtime.run_events import RunEventIngestor
-from shikigen.runtime.run_state import MessageConflict
-from shikigen.runtime_context import AgentRunContext
-from shikigen.stream import StreamEvent
+from shikigen.runtime.runs import RunTransitions
 from sse_fixtures import parse_sse
 
 from app.routes.run import stream_run_events
@@ -65,7 +66,7 @@ class MessageContractTests(unittest.IsolatedAsyncioTestCase):
     self.store = await ChatStore.open(self.path)
     self.addAsyncCleanup(self.store.close)
     await self.store.create_thread("thread")
-    await self.store.create_run(
+    await RunTransitions(self.store).create_run(
       thread_id="thread",
       run_id="first",
       entry_message=HumanMessage(id="entry", content="hi"),
@@ -76,19 +77,19 @@ class MessageContractTests(unittest.IsolatedAsyncioTestCase):
     original = await self.store.append_message(
       thread_id="thread", run_id="first", content=message
     )
-    await self.store.settle_execution(
+    await RunTransitions(self.store).settle_execution(
       thread_id="thread",
       run_id="first",
       outcome=ExecutionOutcome(ExecutionReason.COMPLETED),
     )
     with self.assertRaises(MessageConflict):
-      await self.store.create_run(
+      await RunTransitions(self.store).create_run(
         thread_id="thread",
         run_id="second",
         entry_message=HumanMessage(id="entry", content="hi"),
       )
     self.assertIsNone(await self.store.get_run("second", "thread"))
-    await self.store.create_run(
+    await RunTransitions(self.store).create_run(
       thread_id="thread",
       run_id="second",
       entry_message=HumanMessage(id="entry-2", content="next"),

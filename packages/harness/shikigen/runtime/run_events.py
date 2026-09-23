@@ -1,4 +1,4 @@
-"""应用层的持久事实接入：先提交，再广播存储返回的完整事件。"""
+"""事件写入、消息预览与提交后广播；运行状态变更由 runs 管理。"""
 
 import asyncio
 import logging
@@ -6,16 +6,24 @@ from dataclasses import dataclass, field
 from typing import Any
 from weakref import WeakKeyDictionary
 
-from shikigen.event_contract import Preview
-from shikigen.execution import ExecutionRegistry, RunExecution
-from shikigen.persistence import ChatStore
-from shikigen.runtime.run_state import (
+from shikigen.contracts.events import (
+  Preview,
+)
+from shikigen.contracts.messages import message_identity
+from shikigen.contracts.runs import (
   CommittedEvent,
   CommittedRunState,
   MessageConflict,
   RunStatus,
 )
-from shikigen.stream import MessageData, Stream
+from shikigen.contracts.stream import MessageData
+from shikigen.core.execution import (
+  ExecutionRegistry,
+  RunExecution,
+)
+from shikigen.core.stream import Stream
+from shikigen.persistence import ChatStore
+from shikigen.persistence.chat_store import RunTransaction
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +37,10 @@ class _PreviewState:
 
 
 class RunEventIngestor:
-  """供执行事件消费入口注入；广播失败不改变已经提交的业务事实。
+  """接入事件与消息，不决定 Run 状态或审批流程。
 
+  事务内事件写入不要求活跃 execution；消息预览使用本地执行句柄。
+  广播失败不改变已经提交的业务事实。
   不提供跨进程可靠投递。观察者按事实的 id/seq 去重，通过查询补读；
   Stream 自己的 id 仅表示当前内存流顺序。
   """
@@ -42,6 +52,25 @@ class RunEventIngestor:
     self._store = store
     self._executions: ExecutionRegistry = executions
     self._previews: WeakKeyDictionary[RunExecution, _PreviewState] = WeakKeyDictionary()
+
+  @staticmethod
+  async def write_in_transaction(
+    transaction: RunTransaction,
+    thread_id: str,
+    run_id: str,
+    event_type: str,
+    category: str,
+    event_key: str,
+    content: Any,
+  ) -> None:
+    """在调用方事务内写入事件；不提交、不广播，不要求活跃 execution。
+
+    调用方负责生成事件内容，并将相关状态变更放在同一事务中。
+    只有事务成功退出后，才能发布这些事件。
+    """
+    await transaction.events.insert_fact(
+      thread_id, run_id, event_type, category, event_key, content
+    )
 
   def _state(self, execution: RunExecution) -> _PreviewState:
     return self._previews.setdefault(execution, _PreviewState())
@@ -124,8 +153,6 @@ class RunEventIngestor:
   async def ingest_message(
     self, content: dict[str, Any], *, thread_id: str, run_id: str
   ) -> int:
-    from shikigen.messages import message_identity
-
     event_type, event_key = message_identity(content)
     return await self.append_event(
       thread_id=thread_id,

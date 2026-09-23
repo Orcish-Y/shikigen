@@ -8,19 +8,19 @@ from langchain_core.messages import HumanMessage
 from langgraph.stream import CheckpointsTransformer
 from langgraph.types import Command
 
-from shikigen.execution import (
+from shikigen.contracts.stream import MessageData, ToolCallData
+from shikigen.core.context import AgentRunContext
+from shikigen.core.execution import (
   ExecutionOutcome,
   ExecutionReason,
   RunExecution,
 )
-from shikigen.graph_events import GraphEventAdapter
-from shikigen.graph_pause import GraphPauseCollector
-from shikigen.runtime_context import AgentRunContext
-from shikigen.stream import MessageData, ToolCallData
+from shikigen.core.graph_events import GraphEventAdapter
+from shikigen.core.graph_pause import GraphPauseCollector
 
 if TYPE_CHECKING:
   from shikigen.callback_handler import TokenTracker
-  from shikigen.run_manager import RunRecord
+  from shikigen.core.run_manager import RunRecord
 
 
 async def execute_agent_loop(
@@ -146,7 +146,7 @@ async def run_agent_loop(
 
   保留旧调用方的内存状态和终态事件语义；它不代表状态拆分已经完成。
   """
-  from shikigen.run_manager import RunStatus
+  from shikigen.core.run_manager import RunStatus
 
   record.start()
   try:

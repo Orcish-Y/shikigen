@@ -4,7 +4,7 @@ import json
 from typing import Annotated, Literal
 
 from pydantic import Field, TypeAdapter
-from shikigen.event_contract import (
+from shikigen.contracts.events import (
   EVENT,
   ApprovalInvalidated,
   ApprovalRequired,
@@ -12,8 +12,8 @@ from shikigen.event_contract import (
   Lifecycle,
   Usage,
 )
-from shikigen.messages import CompleteMessage, Identity, StrictModel
-from shikigen.stream import StreamEventVariant
+from shikigen.contracts.messages import CompleteMessage, Identity, StrictModel
+from shikigen.contracts.stream import StreamEventVariant
 
 
 class MetadataData(StrictModel):

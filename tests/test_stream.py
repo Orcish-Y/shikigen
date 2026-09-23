@@ -1,7 +1,7 @@
 import asyncio
 import unittest
 
-from shikigen.stream import Stream
+from shikigen.core.stream import Stream
 
 
 class StreamTests(unittest.IsolatedAsyncioTestCase):

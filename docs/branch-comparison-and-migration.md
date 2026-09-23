@@ -123,7 +123,7 @@ Run 查询与 GET metadata 暴露累计 usage、usage_pending；未结算为未�
 - **运行清理已有明确职责。** Loop 使用 TaskGroup、取消信号竞争和 finally 收尾；`RunManager.detach()` 允许消费者断连后继续执行，待任务和持久化完成再回收。
 - **已存在产品消息记录、幂等键和 Thread 内序号。** copy 的优势是进一步完善规则，不是首次引入这些能力。
 
-来源：[workspace 配置](../pyproject.toml)、[包配置](../packages/harness/pyproject.toml)、[当前 Graph 事件转换](../packages/harness/shikigen/graph_events.py)、[RunManager](../packages/harness/shikigen/run_manager.py)、[ChatStore](../packages/harness/shikigen/persistence/chat_store.py)。
+来源：[workspace 配置](../pyproject.toml)、[包配置](../packages/harness/pyproject.toml)、[当前 Graph 事件转换](../packages/harness/shikigen/core/graph_events.py)、[RunManager](../packages/harness/shikigen/core/run_manager.py)、[ChatStore](../packages/harness/shikigen/persistence/chat_store.py)。
 
 ### 2.2 总体差异表
 
@@ -188,7 +188,7 @@ Run 查询与 GET metadata 暴露累计 usage、usage_pending；未结算为未�
 
 **验收：**暂停后仍可查询同一个 Run；resume 沿用 run_id；断开观察连接不会改变 Run 状态；本地任务回收后，已结束 Run 仍可读取。
 
-来源：[copy 产品概念](../../shikigen-agent-copy/CONTEXT.md)、[本地 handle 与编排](../../shikigen-agent-copy/server/product_run.py:44)、[当前 RunRecord](../packages/harness/shikigen/run_manager.py:19)。
+来源：[copy 产品概念](../../shikigen-agent-copy/CONTEXT.md)、[本地 handle 与编排](../../shikigen-agent-copy/server/product_run.py:44)、[当前 RunRecord](../packages/harness/shikigen/core/run_manager.py:19)。
 
 ### 3.2 用业务操作封装事务，完整事实先提交再发布
 
@@ -237,7 +237,7 @@ Run 查询与 GET metadata 暴露累计 usage、usage_pending；未结算为未�
 
 **迁移前置条件：先解决 copy 的跨 Run 历史识别问题。**同一消息只设一个正常写入归属。可保留 middleware 并接入统一写入接口，也可在执行 runtime 中由新 Ingestor 接管；仅在接管后停用对应旧写入路径。两种方式都在执行侧获取完整事实，不从 HTTP token 流重建消息，也不意味着 harness 退出持久化职责。
 
-来源：[当前 Graph 事件转换](../packages/harness/shikigen/graph_events.py)、[copy Adapter](../../shikigen-agent-copy/server/langgraph_event_adapter.py:72)、[工具结果转换](../../shikigen-agent-copy/server/langgraph_event_adapter.py:470)。
+来源：[当前 Graph 事件转换](../packages/harness/shikigen/core/graph_events.py)、[copy Adapter](../../shikigen-agent-copy/server/langgraph_event_adapter.py:72)、[工具结果转换](../../shikigen-agent-copy/server/langgraph_event_adapter.py:470)。
 
 ### 3.5 稳定 seq、完整事件与临时增量分工
 
@@ -333,7 +333,7 @@ copy 还区分持久的 Run lifecycle error 与连接／协议 error，并把稳
 
 **验收：**未迭代就关闭，订阅数回到零；关闭某个订阅不影响其他观察者；同步订阅后、开始迭代前发布的事件不丢失。本次已局部复现当前缺口，copy 的相关测试通过。
 
-来源：[当前 subscribe](../packages/harness/shikigen/stream.py:136)、[copy 订阅对象](../../shikigen-agent-copy/harness/stream.py:55)、[copy Stream 测试](../../shikigen-agent-copy/tests/test_stream.py)。
+来源：[当前 subscribe](../packages/harness/shikigen/core/stream.py:136)、[copy 订阅对象](../../shikigen-agent-copy/harness/stream.py:55)、[copy Stream 测试](../../shikigen-agent-copy/tests/test_stream.py)。
 
 ### 3.11 子 Agent 独立接收工具集合
 
@@ -361,7 +361,7 @@ copy 还区分持久的 Run lifecycle error 与连接／协议 error，并把稳
 
 当前 HTTP 服务已经使用 SQLite，因此这个迁移改善的是工厂默认语义，不是给服务器首次添加持久化。copy 另加 `CheckpointsTransformer` 以观察 checkpoint 事件，这应与审批／准确恢复坐标一起评估，不能当作 saver 算法升级。
 
-来源：[当前 agent 工厂](../packages/harness/shikigen/agent.py)、[copy agent 工厂](../../shikigen-agent-copy/harness/agent.py)、[当前服务器注入](../app/server.py)。
+来源：[当前 agent 工厂](../packages/harness/shikigen/core/agent.py)、[copy agent 工厂](../../shikigen-agent-copy/harness/agent.py)、[当前服务器注入](../app/server.py)。
 
 ### 3.13 同一个 Run 累积多次 invocation 的用量
 

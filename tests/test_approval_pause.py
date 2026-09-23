@@ -13,12 +13,17 @@ from langgraph.graph import END, START, StateGraph, add_messages
 from langgraph.types import interrupt
 from runtime_fixtures import ToolModel
 from shikigen.app_config import AppConfig, DatabaseConfig, McpConfig, ModelConfig
-from shikigen.execution import ExecutionOutcome, ExecutionPause, ExecutionReason
-from shikigen.graph_pause import GraphPauseCollector
+from shikigen.contracts.runs import ThreadBusy
+from shikigen.core.approval import build_approval_middleware
+from shikigen.core.execution import (
+  ExecutionOutcome,
+  ExecutionPause,
+  ExecutionReason,
+)
+from shikigen.core.graph_pause import GraphPauseCollector
 from shikigen.persistence import ChatStore
-from shikigen.runtime.approval import build_approval_middleware
 from shikigen.runtime.composition import assemble_runtime, open_runtime
-from shikigen.runtime.run_state import ThreadBusy
+from shikigen.runtime.runs import RunTransitions
 from sse_fixtures import parse_sse_frames
 
 from app.server import app
@@ -191,7 +196,7 @@ class ApprovalPauseTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_approval_and_status_rollback_together(self):
     await self.store.create_thread("thread")
-    await self.store.create_run(
+    await RunTransitions(self.store).create_run(
       thread_id="thread",
       run_id="run",
       entry_message=HumanMessage(id="human", content="hi"),
@@ -210,24 +215,26 @@ class ApprovalPauseTests(unittest.IsolatedAsyncioTestCase):
         interrupts=({"id": "interrupt", "namespace": "", "value": payload("bash")},),
       ),
     )
-    original = self.store._insert_fact
+    original = self.store._events.insert_fact
 
     async def fail_after_required(*args):
       if args[2] == "run_interrupted":
         raise OSError("disk failure")
       await original(*args)
 
-    with patch.object(self.store, "_insert_fact", side_effect=fail_after_required):
+    with patch.object(
+      self.store._events, "insert_fact", side_effect=fail_after_required
+    ):
       with self.assertRaises(OSError):
-        await self.store.settle_execution(
+        await RunTransitions(self.store).settle_execution(
           thread_id="thread", run_id="run", outcome=outcome
         )
     self.assertEqual((await self.store.get_run("run", "thread"))["status"], "running")
     self.assertEqual(await self.store.list_run_events("thread", "run"), before)
-    result = await self.store.settle_execution(
+    result = await RunTransitions(self.store).settle_execution(
       thread_id="thread", run_id="run", outcome=outcome
     )
-    again = await self.store.settle_execution(
+    again = await RunTransitions(self.store).settle_execution(
       thread_id="thread", run_id="run", outcome=outcome
     )
     self.assertEqual(result.events, again.events)
@@ -266,7 +273,7 @@ class ApprovalPauseTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_invalid_pause_is_not_committed(self):
     await self.store.create_thread("thread")
-    await self.store.create_run(
+    await RunTransitions(self.store).create_run(
       thread_id="thread", run_id="run", entry_message=HumanMessage(id="h", content="hi")
     )
     for coordinate, interrupts in (
@@ -294,7 +301,7 @@ class ApprovalPauseTests(unittest.IsolatedAsyncioTestCase):
     ):
       with self.subTest(coordinate=coordinate, interrupts=interrupts):
         with self.assertRaises(ValueError):
-          await self.store.settle_execution(
+          await RunTransitions(self.store).settle_execution(
             thread_id="thread",
             run_id="run",
             outcome=ExecutionOutcome(

@@ -8,12 +8,12 @@ from typing import Any
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
-from shikigen.agent import create_lead_agent
 from shikigen.app_config import AppConfig, load_app_config
 from shikigen.checkpoint import make_checkpointer
-from shikigen.execution import ExecutionRegistry
+from shikigen.core.agent import create_lead_agent
+from shikigen.core.approval import build_approval_middleware
+from shikigen.core.execution import ExecutionRegistry
 from shikigen.persistence.chat_store import ChatStore, open_chat_store
-from shikigen.runtime.approval import build_approval_middleware
 from shikigen.runtime.lifecycle import ApplicationLifecycle
 from shikigen.runtime.run_events import RunEventIngestor
 from shikigen.runtime.runs import RunService

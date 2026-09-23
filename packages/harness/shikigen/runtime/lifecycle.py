@@ -5,7 +5,7 @@ import logging
 from collections.abc import Coroutine
 from typing import Any
 
-from shikigen.execution import ExecutionRegistry
+from shikigen.core.execution import ExecutionRegistry
 
 logger = logging.getLogger(__name__)
 

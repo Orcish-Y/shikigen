@@ -13,16 +13,17 @@ from langgraph.types import Command
 from pydantic import ValidationError
 from runtime_fixtures import ToolModel
 from shikigen.app_config import AppConfig, McpConfig, ModelConfig
-from shikigen.event_contract import ApprovalSubmission
-from shikigen.execution import ExecutionOutcome, ExecutionReason
-from shikigen.persistence import ChatStore
-from shikigen.runtime.approval import build_approval_middleware
-from shikigen.runtime.composition import assemble_runtime
-from shikigen.runtime.run_state import (
+from shikigen.contracts.events import ApprovalSubmission
+from shikigen.contracts.runs import (
   ApprovalConflict,
   InvalidApprovalResponse,
   InvalidRunState,
 )
+from shikigen.core.approval import build_approval_middleware
+from shikigen.core.execution import ExecutionOutcome, ExecutionReason
+from shikigen.persistence import ChatStore
+from shikigen.runtime.composition import assemble_runtime
+from shikigen.runtime.runs import RunTransitions
 from sse_fixtures import parse_sse_frames
 from test_approval_pause import nested_graph
 
@@ -164,7 +165,7 @@ class ApprovalResumeTests(unittest.IsolatedAsyncioTestCase):
       [e.data async for e in observation if e.event == "durable_event"], facts
     )
     with self.assertRaises(InvalidRunState):
-      await self.store.settle_execution(
+      await RunTransitions(self.store).settle_execution(
         thread_id=self.thread,
         run_id=self.run_id,
         invocation_seq=1,
@@ -201,16 +202,16 @@ class ApprovalResumeTests(unittest.IsolatedAsyncioTestCase):
   async def test_acceptance_rollback_and_cross_connection_competition(self):
     submission = ApprovalSubmission(responses=await self.responses())
     before = await self.facts()
-    original = self.store._insert_fact
+    original = self.store._events.insert_fact
 
     async def fail(*args):
       if args[2] == "run_running":
         raise OSError("disk failed")
       await original(*args)
 
-    with patch.object(self.store, "_insert_fact", side_effect=fail):
+    with patch.object(self.store._events, "insert_fact", side_effect=fail):
       with self.assertRaises(OSError):
-        await self.store.accept_approval_decisions(
+        await RunTransitions(self.store).accept_approval_decisions(
           thread_id=self.thread, run_id=self.run_id, submission=submission
         )
     self.assertEqual(await self.facts(), before)
@@ -221,7 +222,7 @@ class ApprovalResumeTests(unittest.IsolatedAsyncioTestCase):
     self.addAsyncCleanup(other.close)
     results = await asyncio.gather(
       *[
-        store.accept_approval_decisions(
+        RunTransitions(store).accept_approval_decisions(
           thread_id=self.thread, run_id=self.run_id, submission=submission
         )
         for store in (self.store, other)
@@ -237,7 +238,7 @@ class ApprovalResumeTests(unittest.IsolatedAsyncioTestCase):
   async def test_waits_for_previous_cleanup_and_survives_caller_cancellation(self):
     # 下一次暂停已经提交，但旧 invocation 仍在发布/清理。
     settled, release = asyncio.Event(), asyncio.Event()
-    original = self.store.settle_execution
+    original = self.runtime.runs._transitions.settle_execution
 
     async def settle(**kwargs):
       result = await original(**kwargs)
@@ -245,7 +246,9 @@ class ApprovalResumeTests(unittest.IsolatedAsyncioTestCase):
       await release.wait()
       return result
 
-    with patch.object(self.store, "settle_execution", side_effect=settle):
+    with patch.object(
+      self.runtime.runs._transitions, "settle_execution", side_effect=settle
+    ):
       second = await self.runtime.runs.resume_run(
         self.thread, self.run_id, await self.responses()
       )
@@ -359,8 +362,8 @@ class ApprovalResumeTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(len({e["seq"] for e in seen}), len(seen))
 
   async def test_disallowed_decision_does_not_consume_pending(self):
-    from shikigen.event_contract import ApprovalRequired
-    from shikigen.runtime.approval import validate_responses
+    from shikigen.contracts.events import ApprovalRequired
+    from shikigen.core.approval import validate_responses
 
     required = ApprovalRequired.model_validate((await self.facts())[-2]["content"])
     # 自定义策略可只允许批准；模型字段允许 reject 不代表该动作允许拒绝。

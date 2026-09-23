@@ -9,15 +9,17 @@ from langchain.agents.middleware import HumanInTheLoopMiddleware
 from langchain_core.messages import HumanMessage
 from runtime_fixtures import deterministic_agent
 from shikigen.app_config import AppConfig, DatabaseConfig, McpConfig, ModelConfig
-from shikigen.execution import ExecutionOutcome, ExecutionReason
-from shikigen.persistence import ChatStore
-from shikigen.runtime.composition import assemble_runtime, open_runtime
-from shikigen.runtime.run_state import (
+from shikigen.contracts.runs import (
   ExecutionStopped,
   RunNotFound,
   ThreadBusy,
   ThreadNotFound,
 )
+from shikigen.core.execution import ExecutionOutcome, ExecutionReason
+from shikigen.persistence import ChatStore
+from shikigen.runtime.composition import assemble_runtime, open_runtime
+from shikigen.runtime.run_events import RunEventIngestor
+from shikigen.runtime.runs import RunTransitions
 from test_loop import BlockingAgent, FailingAgent, MessageAgent
 
 
@@ -62,14 +64,16 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_waiter_cancellation_does_not_stop_execution_or_settlement(self):
     entered, release = asyncio.Event(), asyncio.Event()
-    original = self.store.settle_execution
+    original = self.runtime.runs._transitions.settle_execution
 
     async def settle(**kwargs):
       entered.set()
       await release.wait()
       return await original(**kwargs)
 
-    with patch.object(self.store, "settle_execution", side_effect=settle):
+    with patch.object(
+      self.runtime.runs._transitions, "settle_execution", side_effect=settle
+    ):
       execution = await self.runtime.runs.start_run(self.thread_id, "hello")
       waiter = asyncio.create_task(self.runtime.runs.wait_run(execution))
       await asyncio.wait_for(entered.wait(), 2)
@@ -89,7 +93,7 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_cancelled_start_caller_does_not_leave_a_committed_orphan(self):
     entered, release = asyncio.Event(), asyncio.Event()
-    original = self.store.create_run
+    original = self.runtime.runs._transitions.create_run
 
     async def create(**kwargs):
       result = await original(**kwargs)
@@ -97,7 +101,7 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
       await release.wait()
       return result
 
-    with patch.object(self.store, "create_run", side_effect=create):
+    with patch.object(self.runtime.runs._transitions, "create_run", side_effect=create):
       starter = asyncio.create_task(
         self.runtime.runs.start_run(self.thread_id, "hello")
       )
@@ -114,7 +118,11 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_settlement_failure_is_reported_to_waiter_and_observer(self):
     with (
-      patch.object(self.store, "settle_execution", side_effect=OSError("disk failed")),
+      patch.object(
+        self.runtime.runs._transitions,
+        "settle_execution",
+        side_effect=OSError("disk failed"),
+      ),
       self.assertLogs("shikigen.runtime.run_execution", level="ERROR"),
     ):
       execution = await self.runtime.runs.start_run(self.thread_id, "hello")
@@ -175,7 +183,7 @@ class TransactionTests(unittest.IsolatedAsyncioTestCase):
     await self.first.create_thread("thread")
 
   async def create(self, store, run_id):
-    await store.create_run(
+    await RunTransitions(store).create_run(
       thread_id="thread",
       run_id=run_id,
       entry_message=HumanMessage(id=f"human:{run_id}", content="hello"),
@@ -190,10 +198,25 @@ class TransactionTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(sum(isinstance(r, ThreadBusy) for r in results), 1)
     self.assertEqual(sum(r is None for r in results), 1)
 
+  async def test_commit_failure_rolls_back_and_releases_transaction(self):
+    with patch.object(
+      self.first._connection, "commit", side_effect=OSError("commit failed")
+    ):
+      with self.assertRaisesRegex(OSError, "commit failed"):
+        await self.create(self.first, "run")
+    self.assertIsNone(await self.second.get_run("run", "thread"))
+    self.assertEqual(await self.second.list_thread_messages("thread"), [])
+    with self.assertRaises(RunNotFound):
+      await self.second.list_run_events("thread", "run")
+    # 同一连接可重新开启事务，失败的入口消息身份与事件序号没有残留。
+    await self.create(self.first, "run")
+    facts = await self.second.list_run_events("thread", "run")
+    self.assertEqual([e["seq"] for e in facts], [1, 2])
+
   async def test_creation_failure_and_cancellation_roll_back_all_facts(self):
     for error in (OSError("disk failed"), asyncio.CancelledError()):
       with self.subTest(error=type(error)):
-        original = self.first._insert_fact
+        original = RunEventIngestor.write_in_transaction
         count = 0
 
         async def insert(*args, original=original, error=error):
@@ -203,7 +226,7 @@ class TransactionTests(unittest.IsolatedAsyncioTestCase):
           if count == 2:
             raise error
 
-        with patch.object(self.first, "_insert_fact", side_effect=insert):
+        with patch.object(RunEventIngestor, "write_in_transaction", side_effect=insert):
           with self.assertRaises(type(error)):
             await self.create(self.first, "run")
         self.assertIsNone(await self.second.get_run("run", "thread"))
@@ -217,12 +240,12 @@ class TransactionTests(unittest.IsolatedAsyncioTestCase):
     ):
       run_id = str(first_reason)
       await self.create(self.first, run_id)
-      first = await self.first.settle_execution(
+      first = await RunTransitions(self.first).settle_execution(
         thread_id="thread",
         run_id=run_id,
         outcome=ExecutionOutcome(first_reason),
       )
-      second = await self.second.settle_execution(
+      second = await RunTransitions(self.second).settle_execution(
         thread_id="thread",
         run_id=run_id,
         outcome=ExecutionOutcome(second_reason),
@@ -233,9 +256,11 @@ class TransactionTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_failed_settlement_rolls_back_state_and_lifecycle(self):
     await self.create(self.first, "run")
-    with patch.object(self.first, "_insert_fact", side_effect=OSError("disk failed")):
+    with patch.object(
+      self.first._events, "insert_fact", side_effect=OSError("disk failed")
+    ):
       with self.assertRaises(OSError):
-        await self.first.settle_execution(
+        await RunTransitions(self.first).settle_execution(
           thread_id="thread",
           run_id="run",
           outcome=ExecutionOutcome(ExecutionReason.COMPLETED),
@@ -246,16 +271,16 @@ class TransactionTests(unittest.IsolatedAsyncioTestCase):
   async def test_same_connection_read_waits_for_commit(self):
     await self.create(self.first, "run")
     entered, release = asyncio.Event(), asyncio.Event()
-    original = self.first._insert_fact
+    original = self.first._events.insert_fact
 
     async def insert(*args):
       await original(*args)
       entered.set()
       await release.wait()
 
-    with patch.object(self.first, "_insert_fact", side_effect=insert):
+    with patch.object(self.first._events, "insert_fact", side_effect=insert):
       writer = asyncio.create_task(
-        self.first.settle_execution(
+        RunTransitions(self.first).settle_execution(
           thread_id="thread",
           run_id="run",
           outcome=ExecutionOutcome(ExecutionReason.COMPLETED),

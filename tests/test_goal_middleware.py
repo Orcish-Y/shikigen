@@ -6,15 +6,15 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.runtime import Runtime
-from shikigen.loop import run_agent_loop
+from shikigen.core.loop import run_agent_loop
+from shikigen.core.run_manager import RunRecord
+from shikigen.core.stream import Stream
 from shikigen.middleware.goal_middleware import (
   GoalAgentState,
   GoalEvaluator,
   GoalMiddleware,
   GoalResult,
 )
-from shikigen.run_manager import RunRecord
-from shikigen.stream import Stream
 
 
 class StubGoalEvaluator:

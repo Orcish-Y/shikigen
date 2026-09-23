@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator, AsyncIterator
 from typing import Protocol
 
-from shikigen.runtime.run_state import CommittedEvent, RunSnapshot
-from shikigen.stream import StreamEvent, StreamEventVariant
+from shikigen.contracts.runs import CommittedEvent, RunSnapshot
+from shikigen.contracts.stream import StreamEvent, StreamEventVariant
 
 
 class Subscription(Protocol):

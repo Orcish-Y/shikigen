@@ -96,7 +96,7 @@ v2 模型、版本切换和对应兼容代码已删除。下面早先关于 4B �
 
 ### 模块位置与目标
 
-放在 `shikigen.stream`。Stream 管缓存与广播，订阅对象管理一个观察者自己的资源。
+放在 `shikigen.core.stream`。Stream 管缓存与广播，订阅对象管理一个观察者自己的资源。
 
 改动前 `subscribe()` 同步注册队列，清理却放在异步生成器的 finally 中。若从未迭代就关闭生成器，该 finally 不会执行。本步骤解决这个具体生命周期缺口。
 
@@ -125,7 +125,7 @@ v2 模型、版本切换和对应兼容代码已删除。下面早先关于 4B �
 
 **交付物：**Stream 的资源释放调整、对应生命周期测试。验收通过后即可独立完成这一项。
 
-参考：[当前 Stream](../packages/harness/shikigen/stream.py)、[copy Stream](../../shikigen-agent-copy/harness/stream.py)。
+参考：[当前 Stream](../packages/harness/shikigen/core/stream.py)、[copy Stream](../../shikigen-agent-copy/harness/stream.py)。
 
 ## 五、第 2 步：明确工厂的依赖和子 Agent 能力
 
@@ -199,7 +199,7 @@ v2 模型、版本切换和对应兼容代码已删除。下面早先关于 4B �
 
 **交付物：**两项可独立验收的工厂改动。此时无需添加产品审批流程。
 
-参考：[当前工厂](../packages/harness/shikigen/agent.py)、[copy 工厂](../../shikigen-agent-copy/harness/agent.py)、[copy 工具 registry](../../shikigen-agent-copy/tools/tool_registry.py)。
+参考：[当前工厂](../packages/harness/shikigen/core/agent.py)、[copy 工厂](../../shikigen-agent-copy/harness/agent.py)、[copy 工具 registry](../../shikigen-agent-copy/tools/tool_registry.py)。
 
 ## 六、第 3 步：拆分产品 Run 与本地执行资源
 
@@ -210,9 +210,9 @@ v2 模型、版本切换和对应兼容代码已删除。下面早先关于 4B �
 新链路只维护执行资源索引，通过 `execution.stream` 获取 Stream，
 不再建立第二份 `StreamManager` 索引。执行注册与观察者订阅仍是两种独立职责。
 
-- 已新增 [执行资源与结果](../packages/harness/shikigen/execution.py)：
+- 已新增 [执行资源与结果](../packages/harness/shikigen/core/execution.py)：
   不包含产品 status；注册表校验归属、拒绝重复执行、按对象身份移除，shutdown 等待 Task 清理。
-- 已新增 [execute_agent_loop](../packages/harness/shikigen/loop.py)：
+- 已新增 [execute_agent_loop](../packages/harness/shikigen/core/loop.py)：
   返回 completed/aborted/failed/interrupted 执行结果，不发布产品终态、不关闭 Stream；
   使用 checkpointer 时在 Graph 退出后读取状态，保留暂停的 checkpoint 坐标与中断信息。
   外部 Task 取消继续传播，不自动解释为用户取消。
@@ -242,7 +242,7 @@ v2 模型、版本切换和对应兼容代码已删除。下面早先关于 4B �
   [HTTP lifespan](../app/server.py) 和 [普通 Python 入口](../packages/harness/shikigen/runtime/__main__.py) 使用同一上下文，
   路由调用共享运行接口，已删除路由内的 Task 创建及 `run_and_persist_status()`。
 - 为完成切换，提前完成第 4 步所需的最小真实存储操作：
-  `ChatStore.create_run()` 一次事务保存 running Run、生命周期事实及入口消息；
+  `RunTransitions.create_run()` 一次事务保存 running Run、生命周期事实及入口消息；
   `settle_execution()` 用条件更新提交状态与生命周期事实。已有终态不覆盖、不重复追加，
   interrupted 不填写 completed_at。单连接读取等待写事务结束，避免读到未提交状态。
   完整输出消息暂由原 middleware 保存，装配时设置 `persist_entry=False`，入口消息只有创建事务写入。
@@ -322,7 +322,7 @@ shutdown 的强制停止不伪造 cancelled，
 
 **交付物：**资源接口、执行结果接口、应用编排骨架及资源生命周期测试；与第 4 步共同完成可运行的应用切换。
 
-参考：[当前 RunManager](../packages/harness/shikigen/run_manager.py)、[当前 Loop](../packages/harness/shikigen/loop.py)、[copy 产品编排](../../shikigen-agent-copy/server/product_run.py)。
+参考：[当前 RunManager](../packages/harness/shikigen/core/run_manager.py)、[当前 Loop](../packages/harness/shikigen/core/loop.py)、[copy 产品编排](../../shikigen-agent-copy/server/product_run.py)。
 
 ## 七、第 4 步：原子存储与提交后发布
 
@@ -334,7 +334,7 @@ shutdown 的强制停止不伪造 cancelled，
 
 ### 2026-09-15 4A 验收记录：已完成（仅支持新库）
 
-实现见 [ChatStore](../packages/harness/shikigen/persistence/chat_store.py)、[状态与返回模型](../packages/harness/shikigen/runtime/run_state.py)；
+实现见 [ChatStore](../packages/harness/shikigen/persistence/chat_store.py)、[状态与返回模型](../packages/harness/shikigen/contracts/runs.py)；
 新增 [存储契约测试](../tests/test_storage_contracts.py)，并补充 HTTP 身份冲突映射测试。
 创建返回 `RunWriteResult`，消息／事件业务写入返回 `EventWriteResult`，
 结算返回携带完整 lifecycle 事件的 `CommittedRunState`；重试保留原事实身份、序号和时间。
@@ -612,7 +612,7 @@ interrupted 的完整 checkpoint 事实。测试使用临时数据库和确定�
 
 **为什么：**消费者离开后，暂停请求仍应存在；恢复需要定位产生这次暂停的 checkpoint。
 
-**接口：**`HumanInTheLoopMiddleware`、`CheckpointsTransformer`、`aget_state(..., subgraphs=True)`；当前项目通过 `ChatStore.settle_execution(INTERRUPTED)` 完成暂停事务，对应 copy 的 `interrupt_run()`，不额外增加同义入口。
+**接口：**`HumanInTheLoopMiddleware`、`CheckpointsTransformer`、`aget_state(..., subgraphs=True)`；当前项目通过 `RunTransitions.settle_execution(INTERRUPTED)` 完成暂停事务，对应 copy 的 `interrupt_run()`，不额外增加同义入口。
 
 - [x] 先为少量明确工具配置 approve/reject，并校验策略引用的工具存在。
 - [x] 观察根 checkpoint，保存准确 namespace 和 checkpoint_id，不用“当前最新”替代暂停时坐标。
@@ -625,7 +625,7 @@ interrupted 的完整 checkpoint 事实。测试使用临时数据库和确定�
 
 #### 2026-09-22：7A 已完成
 
-- **策略装配：**`packages/harness/shikigen/runtime/approval.py` 定义主 Agent 的 `write_file`、`bash` 审批策略，
+- **策略装配：**`packages/harness/shikigen/core/approval.py` 定义主 Agent 的 `write_file`、`bash` 审批策略，
   只提供 approve/reject。`open_runtime()` 固定使用项目的 `create_lead_agent()`，
   先构建实际工具注册表，校验策略引用的工具存在，再注入 middleware。
   当前 `task` 工具自行创建的子 Agent 不自动继承这份 middleware；本次父子图验收
@@ -660,7 +660,7 @@ interrupted 的完整 checkpoint 事实。测试使用临时数据库和确定�
 
 **为什么：**“用户响应已接受”与“恢复调用已开始”存在故障间隔，必须能分别解释。
 
-**接口：**`ChatStore.accept_approval_decisions()`、`RunService.resume_run()`、`Command(resume=...)`。
+**接口：**`RunTransitions.accept_approval_decisions()`、`RunService.resume_run()`、`Command(resume=...)`。
 
 - [x] 请求中的 Interrupt ID 集合必须与当前 pending 集合准确匹配。
 - [x] 验证每项 response 的数量、类型与允许动作；后续需要 edit/respond 时再扩展策略。
@@ -746,7 +746,7 @@ interrupted 的完整 checkpoint 事实。测试使用临时数据库和确定�
 成功返回 `200 {"data": RunSnapshot}`；归属不匹配或不存在返回 404。
 取消 completed/error/cancelled 不新增事实，返回已有终态；调用方必须读取返回的 status。
 
-**事务规则：**`ChatStore.cancel_run()` 使用 `BEGIN IMMEDIATE` 串行检查状态。
+**事务规则：**`RunTransitions.cancel_run()` 通过 `ChatStore.transaction()` 串行检查状态。
 取消 running 写 cancelled；取消 interrupted 同时写 `approval_invalidated` 与
 `run_cancelled`，设置 completed_at。失效载荷包含准确 checkpoint、interrupt_ids、
 `status=invalidated` 和 `reason=run_cancelled`。任一写入失败整体回滚。
@@ -783,7 +783,7 @@ Ruff 与 diff 检查通过。7D 的后续实现见下节。
 
 **为什么：**暂停前后属于同一用户任务，用量需要累加；同时不能把供应商尚未报告的数据当成准确计费事实。
 
-**接口：**`TokenTracker.summary()` → `ChatStore.settle_execution(usage=..., invocation_seq=...)`；通过 `RunService.read_run()` / `wait_run()` 读取累计结果，GET 内容流首帧 metadata 携带相同快照。
+**接口：**`TokenTracker.summary()` → `RunTransitions.settle_execution(usage=..., invocation_seq=...)`；通过 `RunService.read_run()` / `wait_run()` 读取累计结果，GET 内容流首帧 metadata 携带相同快照。
 
 - [x] 先检查本项目 callbacks 的传播，验证普通模型、Goal evaluator 和子 Agent 的统计范围，避免漏计或重复。
 - [x] 选择明确的时序：建议自然完成／暂停时先结算已知用量再发布完成／暂停通知；取消用量可能稍后收尾，查询语义需说明。
@@ -805,7 +805,7 @@ Ruff 与 diff 检查通过。7D 的后续实现见下节。
 
 用量归属保持在应用层：harness Loop 只执行 Graph 和收集回调；每次
 `start_run_execution()` 创建独立 tracker，Graph 退出并完成清理后读取其 summary。
-`RunStore.settle_execution()` 在同一事务中提交本次用量和完成／暂停／错误事实，
+`RunTransitions.settle_execution()` 在同一事务中提交本次用量和完成／暂停／错误事实，
 应用随后发布累计 usage（SSE 表现为 metadata.usage）及生命周期通知。
 自然完成、暂停和错误通知到达时，读取 Run 已能得到本次累计值。
 

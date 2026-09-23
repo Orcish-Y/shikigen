@@ -4,10 +4,11 @@ from unittest.mock import patch
 
 import httpx
 import test_approval_resume as approval_tests
-from shikigen.event_contract import ApprovalSubmission
-from shikigen.execution import ExecutionOutcome, ExecutionReason
+from shikigen.contracts.events import ApprovalSubmission
+from shikigen.contracts.runs import ApprovalConflict
+from shikigen.core.execution import ExecutionOutcome, ExecutionReason
 from shikigen.persistence import ChatStore
-from shikigen.runtime.run_state import ApprovalConflict
+from shikigen.runtime.runs import RunTransitions
 
 from app.run_contract import RunSseEncoder
 from app.server import app
@@ -41,7 +42,7 @@ class RunCancelTests(unittest.IsolatedAsyncioTestCase):
     encoder = RunSseEncoder(self.thread, self.run_id)
     frames = [encoder.encode(e) async for e in observation]
     self.assertTrue(any("invalidated" in f for f in frames if f))
-    late = await self.store.settle_execution(
+    late = await RunTransitions(self.store).settle_execution(
       thread_id=self.thread,
       run_id=self.run_id,
       outcome=ExecutionOutcome(ExecutionReason.COMPLETED),
@@ -51,14 +52,14 @@ class RunCancelTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_cancel_transaction_rolls_back_both_facts(self):
     before = await self.facts()
-    original = self.store._insert_fact
+    original = self.store._events.insert_fact
 
     async def fail(*args):
       if args[2] == "run_cancelled":
         raise OSError("failed cancellation")
       await original(*args)
 
-    with patch.object(self.store, "_insert_fact", side_effect=fail):
+    with patch.object(self.store._events, "insert_fact", side_effect=fail):
       with self.assertRaises(OSError):
         await self.runtime.runs.cancel_run(self.thread, self.run_id)
     self.assertEqual(await self.facts(), before)
@@ -126,14 +127,16 @@ class RunCancelTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_disconnected_cancel_still_commits(self):
     entered, release = asyncio.Event(), asyncio.Event()
-    original = self.store.cancel_run
+    original = self.runtime.runs._transitions.cancel_run
 
     async def blocked(**kwargs):
       entered.set()
       await release.wait()
       return await original(**kwargs)
 
-    with patch.object(self.store, "cancel_run", side_effect=blocked):
+    with patch.object(
+      self.runtime.runs._transitions, "cancel_run", side_effect=blocked
+    ):
       caller = asyncio.create_task(
         self.runtime.runs.cancel_run(self.thread, self.run_id)
       )
@@ -167,8 +170,8 @@ class RunCancelTests(unittest.IsolatedAsyncioTestCase):
     self.addAsyncCleanup(other.close)
     responses = ApprovalSubmission(responses=await self.responses())
     results = await asyncio.gather(
-      self.store.cancel_run(thread_id=self.thread, run_id=self.run_id),
-      other.accept_approval_decisions(
+      RunTransitions(self.store).cancel_run(thread_id=self.thread, run_id=self.run_id),
+      RunTransitions(other).accept_approval_decisions(
         thread_id=self.thread, run_id=self.run_id, submission=responses
       ),
       return_exceptions=True,
@@ -191,7 +194,7 @@ class RunCancelTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_completion_commit_blocks_cancel_until_publication(self):
     entered, release = asyncio.Event(), asyncio.Event()
-    original = self.store.settle_execution
+    original = self.runtime.runs._transitions.settle_execution
 
     async def complete(*args, **kwargs):
       return ExecutionOutcome(ExecutionReason.COMPLETED)
@@ -204,7 +207,9 @@ class RunCancelTests(unittest.IsolatedAsyncioTestCase):
 
     with (
       patch("shikigen.runtime.run_execution.execute_agent_loop", side_effect=complete),
-      patch.object(self.store, "settle_execution", side_effect=delayed),
+      patch.object(
+        self.runtime.runs._transitions, "settle_execution", side_effect=delayed
+      ),
     ):
       execution = await self.runtime.runs.resume_run(
         self.thread, self.run_id, await self.responses()

@@ -3,8 +3,9 @@ import unittest
 from pathlib import Path
 
 from langchain_core.messages import HumanMessage
-from shikigen.execution import ExecutionOutcome, ExecutionReason
+from shikigen.core.execution import ExecutionOutcome, ExecutionReason
 from shikigen.persistence import ChatStore
+from shikigen.runtime.runs import RunTransitions
 
 
 class ChatStoreTests(unittest.IsolatedAsyncioTestCase):
@@ -18,7 +19,7 @@ class ChatStoreTests(unittest.IsolatedAsyncioTestCase):
     self.temp_dir.cleanup()
 
   async def create_run(self, run_id: str, content: str = "hello") -> None:
-    await self.store.create_run(
+    await RunTransitions(self.store).create_run(
       run_id=run_id,
       thread_id="thread-1",
       entry_message=HumanMessage(id=f"entry-{run_id}", content=content),
@@ -56,7 +57,7 @@ class ChatStoreTests(unittest.IsolatedAsyncioTestCase):
       event_key="ai:answer",
       content={"type": "ai", "content": "hi", "message_id": "answer", "tool_calls": []},
     )
-    await self.store.settle_execution(
+    await RunTransitions(self.store).settle_execution(
       thread_id="thread-1",
       run_id="run-1",
       outcome=ExecutionOutcome(ExecutionReason.COMPLETED),
@@ -126,7 +127,7 @@ class ChatStoreTests(unittest.IsolatedAsyncioTestCase):
   async def test_finishing_run_updates_status_and_thread_order(self) -> None:
     await self.store.create_thread("thread-1")
     await self.create_run("run-1")
-    await self.store.settle_execution(
+    await RunTransitions(self.store).settle_execution(
       thread_id="thread-1",
       run_id="run-1",
       outcome=ExecutionOutcome(ExecutionReason.COMPLETED),

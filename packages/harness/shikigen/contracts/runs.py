@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, TypedDict
 
-from shikigen.stream import UsageData
+from shikigen.contracts.stream import UsageData
 
 
 class RunStatus(StrEnum):

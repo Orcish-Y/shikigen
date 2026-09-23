@@ -7,9 +7,10 @@ from unittest.mock import patch
 
 from runtime_fixtures import deterministic_agent
 from shikigen.app_config import AppConfig, DatabaseConfig, McpConfig, ModelConfig
+from shikigen.core.stream import Stream
 from shikigen.runtime.composition import open_runtime
 from shikigen.runtime.run_events import RunEventIngestor
-from shikigen.stream import Stream
+from shikigen.runtime.runs import RunTransitions
 
 
 class RunEventTests(unittest.IsolatedAsyncioTestCase):
@@ -165,7 +166,9 @@ class RunEventTests(unittest.IsolatedAsyncioTestCase):
         thread = await runtime.threads.create_thread()
         with (
           patch.object(
-            runtime.chat_store, "settle_execution", side_effect=OSError("disk failed")
+            runtime.runs._transitions,
+            "settle_execution",
+            side_effect=OSError("disk failed"),
           ),
           patch.object(Stream, "publish", publish),
           self.assertLogs("shikigen.runtime", level="ERROR"),
@@ -184,15 +187,15 @@ class RunEventTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_message_replay_keeps_identity_and_conflict_is_not_broadcast(self):
     from langchain_core.messages import HumanMessage
-    from shikigen.execution import RunExecution
-    from shikigen.runtime.run_state import MessageConflict
+    from shikigen.contracts.runs import MessageConflict
+    from shikigen.core.execution import RunExecution
 
     with patch(
       "shikigen.runtime.composition.create_lead_agent", new=deterministic_agent
     ):
       async with open_runtime(self.config) as runtime:
         thread = await runtime.threads.create_thread()
-        await runtime.chat_store.create_run(
+        await RunTransitions(runtime.chat_store).create_run(
           thread_id=thread,
           run_id="run",
           entry_message=HumanMessage(id="human", content="hello"),

@@ -7,16 +7,17 @@ from pathlib import Path
 from unittest.mock import patch
 
 from langchain_core.messages import AIMessage, HumanMessage
-from shikigen.execution import (
+from shikigen.contracts.messages import message_content
+from shikigen.contracts.runs import MessageConflict
+from shikigen.core.execution import (
   ExecutionOutcome,
   ExecutionReason,
   ExecutionRegistry,
   RunExecution,
 )
-from shikigen.messages import message_content
 from shikigen.persistence import ChatStore
 from shikigen.runtime.run_events import RunEventIngestor
-from shikigen.runtime.run_state import MessageConflict
+from shikigen.runtime.runs import RunTransitions
 
 
 class MessageSequenceTests(unittest.IsolatedAsyncioTestCase):
@@ -27,7 +28,7 @@ class MessageSequenceTests(unittest.IsolatedAsyncioTestCase):
     self.store = await ChatStore.open(self.path)
     self.addAsyncCleanup(self.store.close)
     await self.store.create_thread("thread")
-    await self.store.create_run(
+    await RunTransitions(self.store).create_run(
       thread_id="thread",
       run_id="run",
       entry_message=HumanMessage(id="entry", content="hi"),
@@ -89,7 +90,7 @@ class MessageSequenceTests(unittest.IsolatedAsyncioTestCase):
       content=message_content(AIMessage(id="early", content="early")),
     )
     self.assertEqual(complete.event["seq"], early)
-    settled = await self.store.settle_execution(
+    settled = await RunTransitions(self.store).settle_execution(
       thread_id="thread",
       run_id="run",
       outcome=ExecutionOutcome(ExecutionReason.COMPLETED),
@@ -131,12 +132,12 @@ class MessageSequenceTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_reservation_cannot_be_taken_by_another_run(self):
     await self.reserve("owned")
-    await self.store.settle_execution(
+    await RunTransitions(self.store).settle_execution(
       thread_id="thread",
       run_id="run",
       outcome=ExecutionOutcome(ExecutionReason.COMPLETED),
     )
-    await self.store.create_run(
+    await RunTransitions(self.store).create_run(
       thread_id="thread",
       run_id="next",
       entry_message=HumanMessage(id="next-entry", content="hi"),

@@ -10,7 +10,7 @@
 
 **为什么：**让调用方调用一次业务操作，就能获得一致的持久结果，无需自己安排多条 SQL 的顺序、提交、回滚和竞争处理。
 
-**用什么 API：**以现有 `ChatStore.create_run()`、`settle_execution()`、`get_run()`、`list_run_events()` 为基础，提供完整消息操作与已提交事件返回模型。方法名称可以保留，不必为了对应清单拆出 `complete_run()`、`fail_run()`。
+**用什么 API：**以 `RunTransitions.create_run()`、`settle_execution()` 和 `ChatStore.get_run()`、`list_run_events()` 为基础，提供完整消息操作与已提交事件返回模型。方法名称可以保留，不必为了对应清单拆出 `complete_run()`、`fail_run()`。
 
 按此前的[持久化职责调查](agent-persistence-ownership-research.md)与[运行边界对照](agent-runtime-boundary-comparison.md)，需要区分保存对象、保存时机、读写实现和资源装配。
 
@@ -32,7 +32,7 @@
 
 ## 2. 当前数据字段
 
-源码：[ChatStore](../packages/harness/shikigen/persistence/chat_store.py)、[RunStatus](../packages/harness/shikigen/runtime/run_state.py)。
+源码：[ChatStore](../packages/harness/shikigen/persistence/chat_store.py)、[RunStatus](../packages/harness/shikigen/contracts/runs.py)。
 
 ### 2.1 Thread 与 Run
 
@@ -145,7 +145,7 @@
 
 ## 4. 返回模型与数据库边界
 
-模型定义在 [packages/harness/shikigen/runtime/run_state.py](../packages/harness/shikigen/runtime/run_state.py)：
+模型定义在 [packages/harness/shikigen/contracts/runs.py](../packages/harness/shikigen/contracts/runs.py)：
 
 - `RunSnapshot`：身份、归属、状态、错误码／信息和时间字段。
 - `CommittedEvent`：事件身份、归属、序号、类型、分类、key、内容、元数据和写入时间。

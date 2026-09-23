@@ -1,6 +1,6 @@
 """协议无关的运行环境入口。
 
-按需导出装配入口，避免 persistence 引用 run_state 时反向触发资源装配模块导入。
+按需导出装配入口，导入运行管理子模块时不提前加载完整资源装配。
 """
 
 from importlib import import_module

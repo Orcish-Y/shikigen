@@ -27,7 +27,12 @@ class PackageImportTests(unittest.TestCase):
           "-I",
           "-c",
           "import shikigen; import shikigen.tools; "
-          "import shikigen.graph_events; "
+          "import shikigen.core.graph_events; "
+          "import shikigen.contracts.events; "
+          "import shikigen.contracts.runs; "
+          "import shikigen.contracts.stream; "
+          "from shikigen.core.loop import execute_agent_loop; "
+          "assert shikigen.execute_agent_loop is execute_agent_loop; "
           "from shikigen.persistence import ChatStore; "
           "from shikigen.runtime import Runtime, open_runtime, assemble_runtime; "
           "import shikigen.utils.text_safety",

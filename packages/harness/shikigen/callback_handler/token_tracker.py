@@ -8,7 +8,7 @@ from typing import Any
 
 from langchain_core.callbacks import BaseCallbackHandler
 
-from shikigen.stream import UsageData, UsageModelData
+from shikigen.contracts.stream import UsageData, UsageModelData
 
 logger = logging.getLogger(__name__)
 

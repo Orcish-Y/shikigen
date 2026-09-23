@@ -4,7 +4,7 @@ from langchain.agents import create_agent
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage
 from langchain_core.tools import tool
-from shikigen.runtime_context import AgentRunContext
+from shikigen.core.context import AgentRunContext
 
 
 class ToolModel(FakeMessagesListChatModel):

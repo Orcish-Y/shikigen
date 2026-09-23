@@ -13,11 +13,11 @@ from langchain_core.messages import HumanMessage
 from langgraph.types import Command
 
 from shikigen.callback_handler import TokenTracker
-from shikigen.execution import ExecutionOutcome, ExecutionRegistry, RunExecution
-from shikigen.loop import execute_agent_loop
+from shikigen.contracts.runs import CommittedEvent, CommittedRunState
+from shikigen.contracts.stream import MessageData, UsageData
+from shikigen.core.execution import ExecutionOutcome, ExecutionRegistry, RunExecution
+from shikigen.core.loop import execute_agent_loop
 from shikigen.runtime.run_events import RunEventIngestor
-from shikigen.runtime.run_state import CommittedEvent, CommittedRunState
-from shikigen.stream import MessageData, UsageData
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ class RunSettlement(Protocol):
 
     必须检查允许的旧状态；迟到完成不能覆盖已提交取消。
     失败须抛出异常，不能返回未经提交的候选状态。
-    ChatStore.settle_execution 提供事务实现。
+    RunTransitions.settle_execution 协调事务内的状态与事件写入。
     """
     ...
 

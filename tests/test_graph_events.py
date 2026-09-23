@@ -10,9 +10,9 @@ from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolRuntime
 from langgraph.types import Command
 from runtime_fixtures import ToolModel
-from shikigen.execution import ExecutionReason, RunExecution
-from shikigen.graph_events import GraphEventAdapter
-from shikigen.loop import execute_agent_loop
+from shikigen.core.execution import ExecutionReason, RunExecution
+from shikigen.core.graph_events import GraphEventAdapter
+from shikigen.core.loop import execute_agent_loop
 from test_loop import protocol
 
 

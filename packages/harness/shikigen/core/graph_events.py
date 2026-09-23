@@ -4,8 +4,8 @@ from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
-from shikigen.messages import message_content, message_identity
-from shikigen.stream import MessageData
+from shikigen.contracts.messages import message_content, message_identity
+from shikigen.contracts.stream import MessageData
 
 
 class GraphEventAdapter:

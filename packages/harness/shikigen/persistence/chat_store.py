@@ -2,28 +2,30 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import aiosqlite
-from langchain_core.messages import HumanMessage
 
-from shikigen.event_contract import ApprovalSubmission
-from shikigen.execution import ExecutionOutcome
-from shikigen.persistence.database import Database
+from shikigen.contracts.runs import (
+  CommittedEvent,
+  EventWriteResult,
+  RunSnapshot,
+)
+from shikigen.persistence.database import Database, integrity_error
 from shikigen.persistence.event_store import EventStore
 from shikigen.persistence.run_store import RunStore
 from shikigen.persistence.schema import setup_schema
 from shikigen.persistence.thread_store import ThreadStore
-from shikigen.runtime.run_state import (
-  AcceptedApproval,
-  CommittedEvent,
-  CommittedRunState,
-  EventWriteResult,
-  RunSnapshot,
-  RunWriteResult,
-)
-from shikigen.stream import UsageData
+
+
+@dataclass(frozen=True, slots=True)
+class RunTransaction:
+  """仅在 ChatStore.transaction 上下文内使用，不调用自动加锁的接口。"""
+
+  runs: RunStore
+  events: EventStore
 
 
 class ChatStore:
@@ -31,10 +33,10 @@ class ChatStore:
 
   def __init__(self, connection: aiosqlite.Connection):
     self._connection = connection
-    database = Database(connection)
+    database = self._database = Database(connection)
     self._threads = ThreadStore(database)
     self._events = EventStore(database)
-    self._runs = RunStore(database, self._events)
+    self._runs = RunStore(database)
 
   @classmethod
   async def open(cls, database_path: str | Path) -> ChatStore:
@@ -88,79 +90,24 @@ class ChatStore:
   async def list_threads(self) -> list[dict[str, Any]]:
     return await self._threads.list_threads()
 
-  async def create_run(
-    self,
-    *,
-    run_id: str,
-    thread_id: str,
-    entry_message: HumanMessage,
-  ) -> RunWriteResult:
-    """在一个写事务中检查排他并提交 Run、running 事实和入口消息。
+  @asynccontextmanager
+  async def transaction(self) -> AsyncGenerator[RunTransaction, None]:
+    """持锁开启写事务；事务内仅调用无需再次加锁的存取方法。
 
-    BEGIN IMMEDIATE 使本接口在多个连接间也串行检查。
-    新库有 schema 排他约束；数据库必须使用当前 schema。
+    BEGIN IMMEDIATE 串行化跨连接的读取与写入。上下文退出后才返回
+    已提交结果；任何异常（包括任务取消）都会回滚。
     """
-    return await self._runs.create_run(
-      run_id=run_id,
-      thread_id=thread_id,
-      entry_message=entry_message,
-      fact_writer=self._insert_fact,
-    )
-
-  async def settle_execution(
-    self,
-    *,
-    thread_id: str,
-    run_id: str,
-    outcome: ExecutionOutcome,
-    error_code: str | None = None,
-    invocation_seq: int | None = None,
-    usage: UsageData | None = None,
-  ) -> CommittedRunState:
-    """只有 running 能结算；已有终态或暂停事实原样返回，禁止覆盖。"""
-    return await self._runs.settle_execution(
-      thread_id=thread_id,
-      run_id=run_id,
-      outcome=outcome,
-      error_code=error_code,
-      invocation_seq=invocation_seq,
-      usage=usage,
-      fact_writer=self._insert_fact,
-    )
-
-  async def cancel_run(self, *, thread_id: str, run_id: str) -> RunWriteResult:
-    return await self._runs.cancel_run(
-      thread_id=thread_id, run_id=run_id, fact_writer=self._insert_fact
-    )
-
-  async def accept_approval_decisions(
-    self, *, thread_id: str, run_id: str, submission: ApprovalSubmission
-  ) -> AcceptedApproval:
-    return await self._runs.accept_approval_decisions(
-      thread_id=thread_id,
-      run_id=run_id,
-      submission=submission,
-      fact_writer=self._insert_fact,
-    )
-
-  async def _insert_fact(
-    self,
-    thread_id: str,
-    run_id: str,
-    event_type: str,
-    category: str,
-    event_key: str,
-    content: Any,
-  ) -> None:
-    """事务注入钩子；调用方需持有写锁和事务。"""
-    await self._events.insert_fact(
-      thread_id,
-      run_id,
-      event_type,
-      category,
-      event_key,
-      content,
-    )
+    async with self._database.lock:
+      try:
+        await self._connection.execute("BEGIN IMMEDIATE")
+        yield RunTransaction(self._runs, self._events)
+        await self._connection.commit()
+      except aiosqlite.IntegrityError as error:
+        await self._connection.rollback()
+        raise integrity_error(error) from error
+      except BaseException:
+        await self._connection.rollback()
+        raise
 
   async def get_run(self, run_id: str, thread_id: str) -> RunSnapshot | None:
     # 同一连接的读也必须等写事务结束，不能把尚未提交的状态暴露出去。

@@ -11,12 +11,13 @@ from langchain_core.tools import tool
 from langgraph.checkpoint.memory import InMemorySaver
 from runtime_fixtures import ToolModel
 from shikigen.app_config import AppConfig, McpConfig, ModelConfig
-from shikigen.execution import ExecutionOutcome, ExecutionReason
+from shikigen.contracts.runs import InvalidRunState
+from shikigen.core.approval import build_approval_middleware
+from shikigen.core.execution import ExecutionOutcome, ExecutionReason
 from shikigen.middleware.goal_middleware import GoalEvaluator, GoalMiddleware
 from shikigen.persistence import ChatStore
-from shikigen.runtime.approval import build_approval_middleware
 from shikigen.runtime.composition import assemble_runtime
-from shikigen.runtime.run_state import InvalidRunState
+from shikigen.runtime.runs import RunTransitions
 from shikigen.tools import ToolRegistry, build_task_tool
 
 
@@ -134,7 +135,7 @@ class RunUsageTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual((await runtime.runs.wait_run(resumed))["usage"]["calls"], 2)
 
   async def create(self):
-    return await self.store.create_run(
+    return await RunTransitions(self.store).create_run(
       thread_id="t", run_id="r", entry_message=HumanMessage(id="h", content="hi")
     )
 
@@ -149,12 +150,12 @@ class RunUsageTests(unittest.IsolatedAsyncioTestCase):
       outcome=ExecutionOutcome(ExecutionReason.COMPLETED),
       usage=usage(),
     )
-    first = await self.store.settle_execution(**args)
-    await self.store.settle_execution(**args)
+    first = await RunTransitions(self.store).settle_execution(**args)
+    await RunTransitions(self.store).settle_execution(**args)
     self.assertEqual((await self.store.get_run("r", "t"))["usage"], usage())
     self.assertEqual(first.usage, usage())
     with self.assertRaises(InvalidRunState):
-      await self.store.settle_execution(**(args | {"usage": usage(2)}))
+      await RunTransitions(self.store).settle_execution(**(args | {"usage": usage(2)}))
 
   async def test_usage_and_status_roll_back_together(self):
     await self.create()
@@ -162,9 +163,9 @@ class RunUsageTests(unittest.IsolatedAsyncioTestCase):
     async def fail(*args):
       raise OSError("disk failed")
 
-    with patch.object(self.store, "_insert_fact", side_effect=fail):
+    with patch.object(self.store._events, "insert_fact", side_effect=fail):
       with self.assertRaises(OSError):
-        await self.store.settle_execution(
+        await RunTransitions(self.store).settle_execution(
           thread_id="t",
           run_id="r",
           usage=usage(),
@@ -246,7 +247,7 @@ class RunUsageTests(unittest.IsolatedAsyncioTestCase):
   async def test_storage_failure_is_observable_without_false_completion(self):
     runtime = self.runtime(create_agent(ToolModel(responses=[reply()]), tools=[]))
     with patch.object(
-      self.store, "settle_execution", side_effect=OSError("disk failed")
+      runtime.runs._transitions, "settle_execution", side_effect=OSError("disk failed")
     ):
       with self.assertLogs("shikigen.runtime.run_execution", level="ERROR") as logs:
         execution = await runtime.runs.start_run("t", "work")

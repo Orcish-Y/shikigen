@@ -4,7 +4,7 @@ from typing import Annotated, Literal
 
 from pydantic import Field, JsonValue, TypeAdapter, model_validator
 
-from shikigen.messages import CompleteMessage, Identity, StrictModel
+from shikigen.contracts.messages import CompleteMessage, Identity, StrictModel
 
 
 class Lifecycle(StrictModel):

@@ -8,14 +8,19 @@ from pathlib import Path
 from unittest.mock import patch
 
 from langchain_core.messages import HumanMessage
-from shikigen.execution import ExecutionOutcome, ExecutionPause, ExecutionReason
-from shikigen.persistence import ChatStore
-from shikigen.runtime.run_state import (
+from shikigen.contracts.runs import (
   MessageConflict,
   RunNotFound,
   StorageConflict,
   ThreadBusy,
 )
+from shikigen.core.execution import (
+  ExecutionOutcome,
+  ExecutionPause,
+  ExecutionReason,
+)
+from shikigen.persistence import ChatStore
+from shikigen.runtime.runs import RunTransitions
 
 
 class StorageContractTests(unittest.IsolatedAsyncioTestCase):
@@ -28,7 +33,7 @@ class StorageContractTests(unittest.IsolatedAsyncioTestCase):
     self.reader = await ChatStore.open(self.path)
     self.addAsyncCleanup(self.reader.close)
     await self.store.create_thread("thread")
-    self.created = await self.store.create_run(
+    self.created = await RunTransitions(self.store).create_run(
       thread_id="thread",
       run_id="run",
       entry_message=HumanMessage(id="entry", content="hello"),
@@ -55,7 +60,7 @@ class StorageContractTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(
       list(self.created.events), await self.reader.list_run_events("thread", "run")
     )
-    settled = await self.store.settle_execution(
+    settled = await RunTransitions(self.store).settle_execution(
       thread_id="thread",
       run_id="run",
       outcome=ExecutionOutcome(ExecutionReason.FAILED, error=ValueError("detail")),
@@ -68,7 +73,7 @@ class StorageContractTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(
       settled.events[0], (await self.reader.list_run_events("thread", "run"))[-1]
     )
-    repeated = await self.reader.settle_execution(
+    repeated = await RunTransitions(self.reader).settle_execution(
       thread_id="thread",
       run_id="run",
       outcome=ExecutionOutcome(ExecutionReason.COMPLETED),
@@ -192,7 +197,7 @@ class StorageContractTests(unittest.IsolatedAsyncioTestCase):
           )
         await self.reader._connection.rollback()
         with self.assertRaises(ThreadBusy):
-          await self.reader.create_run(
+          await RunTransitions(self.reader).create_run(
             thread_id="thread",
             run_id="other",
             entry_message=HumanMessage(id="other", content="hi"),
@@ -210,7 +215,7 @@ class StorageContractTests(unittest.IsolatedAsyncioTestCase):
       await self.store.create_thread("thread")
     await self.store.create_thread("other")
     with self.assertRaises(StorageConflict) as caught:
-      await self.store.create_run(
+      await RunTransitions(self.store).create_run(
         thread_id="other",
         run_id="run",
         entry_message=HumanMessage(id="other", content="hi"),
@@ -219,7 +224,7 @@ class StorageContractTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(await self.reader.list_thread_messages("other"), [])
 
   async def test_pause_replay_returns_original_checkpoint_fact(self):
-    first = await self.store.settle_execution(
+    first = await RunTransitions(self.store).settle_execution(
       thread_id="thread",
       run_id="run",
       outcome=ExecutionOutcome(
@@ -238,7 +243,7 @@ class StorageContractTests(unittest.IsolatedAsyncioTestCase):
         ),
       ),
     )
-    second = await self.reader.settle_execution(
+    second = await RunTransitions(self.reader).settle_execution(
       thread_id="thread",
       run_id="run",
       outcome=ExecutionOutcome(ExecutionReason.COMPLETED),
@@ -255,14 +260,14 @@ class StorageContractTests(unittest.IsolatedAsyncioTestCase):
       self.store._connection, "commit", side_effect=asyncio.CancelledError()
     ):
       with self.assertRaises(asyncio.CancelledError):
-        await self.store.settle_execution(
+        await RunTransitions(self.store).settle_execution(
           thread_id="thread",
           run_id="run",
           outcome=ExecutionOutcome(ExecutionReason.COMPLETED),
         )
     self.assertEqual((await self.reader.get_run("run", "thread"))["status"], "running")
     self.assertEqual(len(await self.reader.list_run_events("thread", "run")), 2)
-    settled = await self.store.settle_execution(
+    settled = await RunTransitions(self.store).settle_execution(
       thread_id="thread",
       run_id="run",
       outcome=ExecutionOutcome(ExecutionReason.COMPLETED),

@@ -4,7 +4,7 @@ import uuid
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-from shikigen.stream import Stream, StreamManager
+from shikigen.core.stream import Stream, StreamManager
 
 
 class RunStatus(StrEnum):

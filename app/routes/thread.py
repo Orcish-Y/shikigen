@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Request
+from shikigen.contracts.runs import StorageConflict, ThreadNotFound
 from shikigen.runtime import Runtime
-from shikigen.runtime.run_state import StorageConflict, ThreadNotFound
 
 router = APIRouter(prefix="/api/threads")
 

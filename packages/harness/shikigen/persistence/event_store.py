@@ -1,6 +1,6 @@
 """事件、完整消息的校验、幂等写入与查询。
 
-insert_fact、event_by_key、read_events 供 RunStore 在持锁事务中调用，
+insert_fact、event_by_key、read_events 供 runtime 在持锁事务中调用，
 这些底层方法不自行加锁或提交。
 """
 
@@ -9,14 +9,14 @@ from typing import Any
 
 import aiosqlite
 
-from shikigen.messages import message_identity, normalize_message
-from shikigen.persistence.database import Database, _now, integrity_error
-from shikigen.runtime.run_state import (
+from shikigen.contracts.messages import message_identity, normalize_message
+from shikigen.contracts.runs import (
   CommittedEvent,
   EventWriteResult,
   MessageConflict,
   RunNotFound,
 )
+from shikigen.persistence.database import Database, _now, integrity_error
 
 
 class EventStore:

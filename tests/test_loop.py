@@ -3,10 +3,10 @@ import unittest
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from shikigen.callback_handler import TokenTracker
-from shikigen.loop import run_agent_loop
-from shikigen.run_manager import RunRecord, RunStatus
-from shikigen.runtime_context import AgentRunContext
-from shikigen.stream import Stream
+from shikigen.core.context import AgentRunContext
+from shikigen.core.loop import run_agent_loop
+from shikigen.core.run_manager import RunRecord, RunStatus
+from shikigen.core.stream import Stream
 
 
 class AsyncItems:
