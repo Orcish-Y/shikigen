@@ -1,5 +1,7 @@
 # Agent 消息状态与流式事件调研
 
+> 本文针对早期 `main.py` 实现；当前消息采集与归属见[项目开发参考](../project.md#消息与观察)。
+
 ## 结论
 
 针对 `main.py` 目前订阅的 `kind == "values"`，二选一应选**方案 2：用
@@ -30,7 +32,7 @@ agent state 的新 `AIMessage` 合并/追加到本地历史；`messages` 流则�
 
 ## 对当前程序的直接建议
 
-当前 [main.py](../main.py) 在发起 run 前已经手动追加用户消息。保留 `values` 时，
+调查时的 `main.py`（现已移除） 在发起 run 前已经手动追加用户消息。保留 `values` 时，
 在一轮流结束后的最后一个 `values` 快照执行下面的语义即可（属性/字典访问以运行时
 `item` 类型为准）：
 
@@ -53,18 +55,18 @@ DeerFlow 将「运行中的 graph state」与「可回放的完整聊天历史�
 
 1. Runtime 用 `graph.astream(..., stream_mode=...)`，并明确约定 `values` 为完整状态、
    `updates` 为 `{node: writes}`、`messages` 为 `(chunk, metadata)`。见
-   [`worker.py:1-13`](../../deer-flow/backend/packages/harness/deerflow/runtime/runs/worker.py)
+   [`worker.py:1-13`](../../../deer-flow/backend/packages/harness/deerflow/runtime/runs/worker.py)
    与其多模式流处理
-   [`worker.py:735-779`](../../deer-flow/backend/packages/harness/deerflow/runtime/runs/worker.py)。
+   [`worker.py:735-779`](../../../deer-flow/backend/packages/harness/deerflow/runtime/runs/worker.py)。
 2. 公共 `messages-tuple` 模式会映射到 LangGraph `messages`，并保留独立的 `values`、
    `updates` 模式，而不是把三者混用。见
-   [`stream_modes.py:7-46`](../../deer-flow/backend/packages/harness/deerflow/runtime/stream_modes.py)。
+   [`stream_modes.py:7-46`](../../../deer-flow/backend/packages/harness/deerflow/runtime/stream_modes.py)。
 3. Thread state 的 messages reducer 以 message ID 合并：已有 ID 替换、没有 ID 追加，
    还能处理删除。这是 `add_messages` 语义的实现。见
-   [`thread_state.py:268-362`](../../deer-flow/backend/packages/harness/deerflow/agents/thread_state.py)。
+   [`thread_state.py:268-362`](../../../deer-flow/backend/packages/harness/deerflow/agents/thread_state.py)。
 4. 为防止摘要/裁剪后的 checkpoint state 丢失早期对话，DeerFlow 还在 LLM 完成时将每条
    完整 `AIMessage.model_dump()` 写入 append-only 的 RunEventStore。见
-   [`journal.py:381-445`](../../deer-flow/backend/packages/harness/deerflow/runtime/journal.py)。
+   [`journal.py:381-445`](../../../deer-flow/backend/packages/harness/deerflow/runtime/journal.py)。
    这说明「state 快照」服务于下一次模型调用，而「消息日志」服务于完整历史/界面回放；
    两者不应互相替代。
 

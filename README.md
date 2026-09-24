@@ -1,5 +1,7 @@
 # Shikigen Agent
 
+文档：[工作文档](docs/project.md) · [调查与技术参考](docs/research/README.md) · [学习记录](learning-records/)
+
 ## 项目结构
 
 - `packages/harness/shikigen/`：框架包，包含 Agent、执行 Loop、运行时、工具和 middleware，使用 `shikigen.*` 导入。
@@ -147,8 +149,10 @@ curl -N \
 seq 可以有空洞；预留序号不表示完整消息已提交，也不能作为增量续传游标。
 EOF 不表示运行成功，完成状态以 lifecycle 事实为准。
 
-客户端断线后只关闭自己的订阅，Agent 继续执行并保存结果。目前不提供实时重连，
-也不发送 SSE id 或支持 Last-Event-ID 恢复。通过
+客户端断线后只关闭自己的订阅，Agent 继续执行并保存结果。使用
+`GET /api/threads/{thread_id}/runs/{run_id}/stream` 可全量重建并跟随既有 Run，
+不会重新执行 Graph；每次重连应新建客户端投影。目前不提供增量游标、SSE id 或
+Last-Event-ID 恢复。也可通过
 `GET /api/threads/{thread_id}/messages` 查询已保存的消息，或使用首帧 run_id 调用
 `GET /api/threads/{thread_id}/runs/{run_id}/messages`。不要重发创建请求来恢复观察，
 它会新建 Run。服务器关闭时会取消未结束的任务。
@@ -165,7 +169,7 @@ data: {"seq":3,"message_id":"answer-1","field":"content","value":"你好"}
 ```
 
 本入口是 POST，浏览器应使用 fetch 流式读取并解析 SSE 帧，不能直接用原生 EventSource
-发送请求体。详细契约见 [消息与事件契约](docs/5-message-identity-and-event-contract.md)。
+发送请求体。消息与观察约定见[项目开发参考](docs/project.md#消息与观察)。
 Agent 和 Stream 发布协议无关内部事件，`app/run_contract.py` 负责投影和 SSE 编码。
 
 ### 允许容器或局域网访问
