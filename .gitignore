@@ -28,4 +28,9 @@ config.json
 # agent
 skills-lock.json
 .agents/skills/
+.claude/skills/
+.claude/settings.local.json
+
+# Local scratch notes
+/docs/temp.md
 design/

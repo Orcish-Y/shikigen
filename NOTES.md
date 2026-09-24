@@ -37,6 +37,18 @@
 - [ ] 多轮 Goal 续跑
 - [ ] 子 Agent 委派
 
+### 前端工作台：设计与页面框架 ✅（2026-09-24）
+
+- [x] 根据两份 HTML demo 整理 [前端设计规范](frontend/design.md)
+- [x] React/Tauri 页面框架：导航展开/收起、历史、消息与代码区块、输入区、命令面板、详情空态
+- [x] 本地过滤、新建会话、草稿隔离、代码复制、Markdown 导出与响应式布局
+- [x] TypeScript/Vite 构建通过，四种窗口尺寸完成 Chromium 验证
+- [ ] 真实会话与 HTTP/SSE 接入、运行状态投影、审批/取消/恢复、真实用量
+- [ ] Tauri 原生窗口启动与打包验收
+
+本阶段由用户明确委托助手实现；当前是示例数据驱动的页面框架，发送禁用，会话与草稿刷新后重置。
+完整归档与截图见 [前端工作台项目工作记录](frontend/work-records/2026-09-24-workbench.md)。
+
 ## 技术环境
 - Python 3.12, uv 包管理, ruff linter
 - 模型：deepseek-v4-flash (via LangChain)

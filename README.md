@@ -11,6 +11,7 @@
 - `packages/harness/shikigen/persistence/`：会话、运行与事件的 SQLite 持久化。
 - `packages/harness/shikigen/checkpoint/`：Graph checkpoint 与连接管理。
 - `packages/harness/shikigen/runtime/`：共享运行环境，包含装配、生命周期、会话与 Run 管理；对外入口为 `Runtime`、`open_runtime()`、`assemble_runtime()`。
+- `frontend/`：React + TypeScript + Tauri 桌面工作台框架；[运行说明](frontend/README.md)、[设计规范](frontend/design.md)。当前使用示例数据，尚未接入后端。
 - `tests/`：测试。
 
 框架包内部按职责组织：

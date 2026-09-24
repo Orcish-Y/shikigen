@@ -240,6 +240,12 @@ usage_pending=false 仅表示各次执行已知用量已保存；calls 是收到
 HTTP 已由 JSONL 改为 SSE，删除 output_index、旧完成事件及 v2 版本切换代码，event_version 不升级。
 旧消费者需按上述四类帧与完整事实投影适配；不保留旧协议开关。
 
+## 前端工作台阶段进度
+
+2026-09-24 已完成基于两份 HTML demo 的设计规范与 React/Tauri 页面框架，覆盖双侧栏、导航折叠、示例消息、输入草稿、命令面板、运行详情空态与响应式布局。TypeScript/Vite 构建及四种窗口尺寸的 Chromium 检查通过；Tauri 原生启动与打包未验收。
+
+当前未连接后端，真实发送、SSE 状态投影、审批、取消、恢复观察和用量展示仍待接入。设计与组件边界见 [frontend/design.md](../frontend/design.md)，完成项、验证范围与截图见 [前端工作台工作记录](../frontend/work-records/2026-09-24-workbench.md)。
+
 ## 后续任务
 
 ### 迁移收尾
