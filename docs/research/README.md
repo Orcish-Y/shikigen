@@ -28,4 +28,8 @@
 - [DeerFlow MCP 空值处理](deerflow-mcp-null-handling.md)
 - [主流 Agent 的 MCP 启动延迟处理](mcp-startup-latency-mainstream-agents.md)
 
+## 桌面后端生命周期
+
+- [Windows 后端托管与运行数据独占机制](windows-backend-lifecycle-mechanisms.md)
+
 [返回文档导航](../README.md)

@@ -2,6 +2,7 @@ import asyncio
 import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 from unittest.mock import patch
 
@@ -31,7 +32,7 @@ class RunEventTests(unittest.IsolatedAsyncioTestCase):
 
     def publish(stream, event, data):
       if event == "durable_event":
-        with sqlite3.connect(self.path) as reader:
+        with closing(sqlite3.connect(self.path)) as reader:
           row = reader.execute(
             "SELECT seq, event_type FROM run_events WHERE id = ?", (data["id"],)
           ).fetchone()

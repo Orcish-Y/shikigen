@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 from unittest.mock import patch
 
@@ -337,7 +338,7 @@ class RecoveryCrashTests(unittest.TestCase):
         crash = invoke(phase)
         self.assertEqual(crash.returncode, 73, crash.stderr)
         if phase == "create_uncommitted":
-          with sqlite3.connect(Path(directory) / "runtime.db") as connection:
+          with closing(sqlite3.connect(Path(directory) / "runtime.db")) as connection:
             self.assertEqual(
               connection.execute("SELECT COUNT(*) FROM runs").fetchone()[0], 0
             )

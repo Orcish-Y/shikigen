@@ -3,10 +3,19 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from shikigen.tools.filesystem import grep, list_dir, read_file, write_file
+from shikigen.tools.filesystem import bash, grep, list_dir, read_file, write_file
 
 
 class FilesystemToolTests(unittest.TestCase):
+  def test_shell_runs_in_workspace(self) -> None:
+    with tempfile.TemporaryDirectory() as temporary_directory:
+      workspace = Path(temporary_directory).resolve()
+      with patch("shikigen.tools.filesystem.WORKSPACE_ROOT", workspace):
+        bash.invoke({"command": "echo migration-ok > shell-output.txt"})
+      self.assertEqual(
+        (workspace / "shell-output.txt").read_text().strip(), "migration-ok"
+      )
+
   def test_writes_and_reads_a_file_inside_the_workspace(self) -> None:
     with tempfile.TemporaryDirectory() as temporary_directory:
       workspace = Path(temporary_directory).resolve()
