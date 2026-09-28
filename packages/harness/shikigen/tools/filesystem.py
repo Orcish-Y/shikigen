@@ -1,3 +1,4 @@
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -62,6 +63,7 @@ def bash(command: str) -> str:
       cwd=WORKSPACE_ROOT,
       capture_output=True,
       text=True,
+      errors="replace",
       timeout=30,
     )
   except subprocess.TimeoutExpired:
@@ -69,6 +71,16 @@ def bash(command: str) -> str:
 
   output = result.stdout + result.stderr
   return output[:4000]
+
+
+# Tool descriptions are sent to the model; keep the historical tool name while
+# making the actual shell syntax explicit on each platform.
+bash.description += (
+  "\n当前环境是 Windows，命令由 cmd.exe 执行。使用 dir、type 等 cmd 语法；"
+  "不要直接使用 Bash 或 PowerShell 语法。需要它们时显式启动相应解释器。"
+  if os.name == "nt"
+  else "\n当前命令由 /bin/sh 执行，使用 POSIX shell 语法。"
+)
 
 
 @tool

@@ -178,10 +178,13 @@ class AppConfigTests(unittest.TestCase):
         load_app_config(path)
 
   def test_reports_missing_file_with_path(self) -> None:
-    path = Path("/definitely/missing/config.json")
+    with tempfile.TemporaryDirectory() as directory:
+      path = Path(directory) / "missing" / "config.json"
 
-    with self.assertRaisesRegex(AppConfigError, str(path)):
-      load_app_config(path)
+      with self.assertRaises(AppConfigError) as raised:
+        load_app_config(path)
+
+      self.assertIn(str(path), str(raised.exception))
 
   def test_reports_invalid_json_location(self) -> None:
     with tempfile.TemporaryDirectory() as directory:

@@ -2,6 +2,7 @@
   "name": "shikigen-desktop",
   "private": true,
   "version": "0.1.0",
+  "packageManager": "pnpm@12.6.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
