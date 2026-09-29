@@ -935,6 +935,18 @@ wheels = [
 ]
 
 [[package]]
+name = "portalocker"
+version = "3.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pywin32", marker = "sys_platform == 'win32'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/5e/77/65b857a69ed876e1951e88aaba60f5ce6120c33703f7cb61a3c894b8c1b6/portalocker-3.2.0.tar.gz", hash = "sha256:1f3002956a54a8c3730586c5c77bf18fae4149e07eaf1c29fc3faf4d5a3f89ac", size = 95644, upload-time = "2025-06-14T13:20:40.03Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4b/a6/38c8e2f318bf67d338f4d629e93b0b4b9af331f455f0390ea8ce4a099b26/portalocker-3.2.0-py3-none-any.whl", hash = "sha256:3cdc5f565312224bc570c49337bd21428bba0ef363bbcf58b9ef4a9f11779968", size = 22424, upload-time = "2025-06-14T13:20:38.083Z" },
+]
+
+[[package]]
 name = "pycparser"
 version = "3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1427,6 +1439,7 @@ dependencies = [
 dev = [
     { name = "ruff" },
     { name = "ty" },
+    { name = "types-pywin32" },
 ]
 
 [package.metadata]
@@ -1444,6 +1457,7 @@ requires-dist = [
 dev = [
     { name = "ruff", specifier = ">=0.16.0" },
     { name = "ty", specifier = ">=0.0.83" },
+    { name = "types-pywin32", specifier = ">=312.0.0.20260928" },
 ]
 
 [[package]]
@@ -1460,7 +1474,9 @@ dependencies = [
     { name = "langgraph" },
     { name = "langgraph-checkpoint-sqlite" },
     { name = "markdownify" },
+    { name = "portalocker" },
     { name = "pydantic" },
+    { name = "pywin32", marker = "sys_platform == 'win32'" },
     { name = "readabilipy" },
 ]
 
@@ -1475,7 +1491,9 @@ requires-dist = [
     { name = "langgraph", specifier = ">=1.2.9" },
     { name = "langgraph-checkpoint-sqlite", specifier = ">=3.0.0" },
     { name = "markdownify", specifier = ">=1.2.0" },
+    { name = "portalocker", specifier = "==3.2.0" },
     { name = "pydantic", specifier = ">=2.13.4" },
+    { name = "pywin32", marker = "sys_platform == 'win32'", specifier = ">=306" },
     { name = "readabilipy", specifier = ">=0.3.0" },
 ]
 
@@ -1635,6 +1653,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/d8/b2/c941ce83a59e46ef31dd04bdf6067530e7ec77d5f0cdd1e223fbc6fc351b/ty-0.0.83-py3-none-win32.whl", hash = "sha256:0391017dac6ba3e452e0322301f50bba12fbccadac07d7fd888c46951ad37638", size = 13105291, upload-time = "2026-09-21T22:47:19.807Z" },
     { url = "https://files.pythonhosted.org/packages/b2/8a/5eef9458505698b144643cbd2062f465c5d860d8cf86a8710d74505ad9a0/ty-0.0.83-py3-none-win_amd64.whl", hash = "sha256:1b67d86f5bbad4076ae1a2ff23a6a4493219885d72d4b148cb0193e090390060", size = 13901557, upload-time = "2026-09-21T22:47:23.429Z" },
     { url = "https://files.pythonhosted.org/packages/9f/27/a06061513f1de25569c2e8898018bd552ab7b31afa7cfe818703269b3350/ty-0.0.83-py3-none-win_arm64.whl", hash = "sha256:a916a3d7d68fe30b7aacdb9fe16d461fa944d722e59e96ea0fa9d206a1b6625f", size = 13627960, upload-time = "2026-09-21T22:47:26.305Z" },
+]
+
+[[package]]
+name = "types-pywin32"
+version = "312.0.0.20260928"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/cc/39/476d851d215ce19c3234bb726e1f6417f1b636723573d0c1351f138d93cc/types_pywin32-312.0.0.20260928.tar.gz", hash = "sha256:a06b6edb3dbeb3d6e9a3fada3e7fadbb97e9ae998d394ff3545efdd1090932c4", size = 357631, upload-time = "2026-09-28T07:50:48.206Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/20/e6/8c87f81a114cdb0abf4c9a55153b10e85eba7a4ef5292d4557cdcfc39f15/types_pywin32-312.0.0.20260928-py3-none-any.whl", hash = "sha256:173c0498ba0d6e3c02d05e96c999fbfbd89feef5ce2eae238ddbaac614aeb51a", size = 419382, upload-time = "2026-09-28T07:50:47.133Z" },
 ]
 
 [[package]]

@@ -1,7 +1,7 @@
 """HTTP 与普通 Python 入口共享的资源装配。"""
 
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -14,6 +14,7 @@ from shikigen.core.agent import create_lead_agent
 from shikigen.core.approval import build_approval_middleware
 from shikigen.core.execution import ExecutionRegistry
 from shikigen.persistence.chat_store import ChatStore, open_chat_store
+from shikigen.runtime.data_ownership import own_runtime_data
 from shikigen.runtime.lifecycle import ApplicationLifecycle
 from shikigen.runtime.run_events import RunEventIngestor
 from shikigen.runtime.runs import RunService
@@ -72,10 +73,12 @@ async def open_runtime(
 ) -> AsyncIterator[Runtime]:
   """使用项目 Agent 工厂装配工具、审批和 Runtime，并管理资源生命周期。"""
   app_config = config if config is not None else load_app_config()
-  async with (
-    open_chat_store(Path(app_config.database.path).expanduser()) as store,
-    make_checkpointer(app_config) as checkpointer,
-  ):
+  async with AsyncExitStack() as stack:
+    app_config = stack.enter_context(own_runtime_data(app_config))
+    store = await stack.enter_async_context(
+      open_chat_store(Path(app_config.database.path).expanduser())
+    )
+    checkpointer = await stack.enter_async_context(make_checkpointer(app_config))
     executions = ExecutionRegistry()
     ingestor = RunEventIngestor(store, executions)
     registry = create_builtin_registry()
