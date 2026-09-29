@@ -1,0 +1,165 @@
+.Subagent bash: unavailable tools: ['bash', 'grep', 'list_dir', 'read_file', 'write_file']
+.Subagent bash: unavailable tools: ['bash', 'grep', 'list_dir', 'write_file']
+.Subagent bash: unavailable tools: ['bash', 'grep', 'list_dir', 'read_file', 'write_file']
+............................C:\code\shikigen-agent\packages\harness\shikigen\core\loop.py:113: LangChainBetaWarning: The v3 streaming protocol on Pregel is experimental.
+  async with await agent.astream_events(
+C:\code\shikigen-agent\.venv\Lib\site-packages\langgraph\pregel\main.py:3612: LangChainBetaWarning: The v3 streaming protocol on Pregel is experimental.
+  return AsyncGraphRunStream(graph_aiter, mux)
+.....recovery_unavailable thread_id=638654ae7a6747169e1e92892f2ca5fd run_id=92d4d5820c7f4a57bc35725e204fc001 error_type=OSError
+Traceback (most recent call last):
+  File "C:\code\shikigen-agent\packages\harness\shikigen\runtime\recovery.py", line 88, in reconcile_run
+    return await self._reconcile_run(thread_id, run_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\code\shikigen-agent\packages\harness\shikigen\runtime\recovery.py", line 152, in _reconcile_run
+    pause = await collector.read_pause(self._agent)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\code\shikigen-agent\packages\harness\shikigen\core\graph_pause.py", line 47, in read_pause
+    snapshot = await agent.aget_state(self.checkpoint, subgraphs=True)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\unittest\mock.py", line 2291, in _execute_mock_call
+    raise effect
+OSError: unavailable
+...Executing <Task pending name='Task-798' coro=<ApprovalResumeTests.asyncSetUp() running at C:\code\shikigen-agent\tests\test_approval_resume.py:82> wait_for=<Future pending cb=[shield.<locals>._outer_done_callback() at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\tasks.py:922, Task.task_wakeup()] created at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\base_events.py:448> cb=[_run_until_complete_cb() at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\base_events.py:181] created at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\runners.py:100> took 0.125 seconds
+..Executing <Task finished name='Task-1055' coro=<<async_generator_asend without __name__>()> result={'data': {'config': {'configurable': {'checkpoint_id': '1f1bb235-b2b...-a58ababbe0f1', 'checkpoint_ns': '', 'thread_id': 'c819bb565c26...2cbbb4c7f3f23'}}, 'metadata': {'parents': {}, 'source': 'input', 'step': -1}, 'next': ['__start__'], 'parent_config': None, ...}, 'ns': (), 'type': 'checkpoints'} created at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\tasks.py:695> took 0.188 seconds
+E.........................Executing <Task finished name='Task-1340' coro=<<async_generator_asend without __name__>()> result={'data': {'config': {'configurable': {'checkpoint_id': '1f1bb236-37a...-07275d9ee3e4', 'checkpoint_ns': '', 'thread_id': 'goal-output-thread'}}, 'metadata': {'parents': {}, 'source': 'input', 'step': -1}, 'next': ['__start__'], 'parent_config': None, ...}, 'ns': (), 'type': 'checkpoints'} created at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\tasks.py:695> took 0.110 seconds
+.........C:\code\shikigen-agent\.venv\Lib\site-packages\pydantic\functional_validators.py:835: UserWarning: Pydantic serializer warnings:
+  PydanticSerializationUnexpectedValue(Expected `none` - serialized value may not be as expected [field_name='context', input_value=AgentRunContext(thread_id='thread', run_id='run'), input_type=AgentRunContext])
+  function=lambda v, h: h(v), schema=original_schema
+C:\code\shikigen-agent\.venv\Lib\site-packages\pydantic\main.py:475: UserWarning: Pydantic serializer warnings:
+  PydanticSerializationUnexpectedValue(Expected `none` - serialized value may not be as expected [field_name='context', input_value=AgentRunContext(thread_id='thread', run_id='run'), input_type=AgentRunContext])
+  return self.__pydantic_serializer__.to_python(
+....................invocation_lost thread_id=thread run_id=first
+Executing <Task pending name='Task-1768' coro=<RunnableCallable.ainvoke() running at C:\code\shikigen-agent\.venv\Lib\site-packages\langgraph\_internal\_runnable.py:501> wait_for=<_GatheringFuture pending cb=[Task.task_wakeup()] created at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\tasks.py:712> cb=[Task.task_wakeup()] created at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\tasks.py:422> took 0.125 seconds
+........approval_checkpoint_corrupt thread_id=092cb1ec716a4b50ab254fc6c908cdc4 run_id=f217108107e4404ba7e7b3b81c320138
+Traceback (most recent call last):
+  File "C:\code\shikigen-agent\packages\harness\shikigen\runtime\recovery.py", line 152, in _reconcile_run
+    pause = await collector.read_pause(self._agent)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\code\shikigen-agent\packages\harness\shikigen\core\graph_pause.py", line 47, in read_pause
+    snapshot = await agent.aget_state(self.checkpoint, subgraphs=True)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\unittest\mock.py", line 2291, in _execute_mock_call
+    raise effect
+json.decoder.JSONDecodeError: truncated: line 1 column 2 (char 1)
+approval_state_corrupt thread_id=092cb1ec716a4b50ab254fc6c908cdc4 run_id=f217108107e4404ba7e7b3b81c320138
+.approval_state_corrupt thread_id=6e149cd397c746fbbc1a70067e304fcd run_id=c6d66d36c7384c67bfdd1aa01cb255c5
+approval_state_corrupt thread_id=5cf1f61583b7448e9c5c7b2476d11664 run_id=aeba858636954386a9292c103d94dd25
+.invocation_lost thread_id=653f1a3969364c97a7e7a62494f784b9 run_id=653f1a3969364c97a7e7a62494f784b9
+.approval_fact_corrupt thread_id=11076e7fe411470388abda3da51db7bf run_id=eb67869271da465cb0ed4d80f2187207
+Traceback (most recent call last):
+  File "C:\code\shikigen-agent\packages\harness\shikigen\runtime\recovery.py", line 117, in _reconcile_run
+    history = await self._store.list_run_events(thread_id, run_id)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\code\shikigen-agent\packages\harness\shikigen\persistence\chat_store.py", line 205, in list_run_events
+    return await self._events.list_run_events(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\code\shikigen-agent\packages\harness\shikigen\persistence\event_store.py", line 332, in list_run_events
+    return [self._decode_event(row) for row in await cursor.fetchall()]
+            ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\code\shikigen-agent\packages\harness\shikigen\persistence\event_store.py", line 344, in _decode_event
+    content=json.loads(row["content_json"]),
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\json\__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\json\decoder.py", line 338, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\json\decoder.py", line 354, in raw_decode
+    obj, end = self.scan_once(s, idx)
+               ^^^^^^^^^^^^^^^^^^^^^^
+json.decoder.JSONDecodeError: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+approval_state_corrupt thread_id=11076e7fe411470388abda3da51db7bf run_id=eb67869271da465cb0ed4d80f2187207
+invocation_lost thread_id=084a44f4d756476eb55428df748e018c run_id=084a44f4d756476eb55428df748e018c
+.recovery_unavailable thread_id=ac83a72385ff48ec871f43d1be5165be run_id=ac83a72385ff48ec871f43d1be5165be error_type=OSError
+Traceback (most recent call last):
+  File "C:\code\shikigen-agent\packages\harness\shikigen\runtime\recovery.py", line 88, in reconcile_run
+    return await self._reconcile_run(thread_id, run_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\code\shikigen-agent\packages\harness\shikigen\runtime\recovery.py", line 171, in _reconcile_run
+    updated = await self._transitions.fail_recovery(run, code, message)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\code\shikigen-agent\packages\harness\shikigen\runtime\runs.py", line 270, in fail_recovery
+    await tx.runs.update_state(
+  File "C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\unittest\mock.py", line 2291, in _execute_mock_call
+    raise effect
+OSError: disk
+invocation_lost thread_id=ac83a72385ff48ec871f43d1be5165be run_id=ac83a72385ff48ec871f43d1be5165be
+.recovery_scan_unavailable error_type=OSError
+Traceback (most recent call last):
+  File "C:\code\shikigen-agent\packages\harness\shikigen\runtime\recovery.py", line 67, in reconcile_all
+    runs = await self._store.list_nonterminal_runs()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\code\shikigen-agent\tests\test_recovery.py", line 289, in unavailable
+    raise OSError("offline")
+OSError: offline
+recovery_retry delay=1.0
+.recovery_unavailable thread_id=681c3b69a3fa4490b7716e3cc96ca3fc run_id=9366f05e74e34caaa9b505a66a19cb46 error_type=OSError
+Traceback (most recent call last):
+  File "C:\code\shikigen-agent\packages\harness\shikigen\runtime\recovery.py", line 88, in reconcile_run
+    return await self._reconcile_run(thread_id, run_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\code\shikigen-agent\packages\harness\shikigen\runtime\recovery.py", line 152, in _reconcile_run
+    pause = await collector.read_pause(self._agent)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\code\shikigen-agent\packages\harness\shikigen\core\graph_pause.py", line 47, in read_pause
+    snapshot = await agent.aget_state(self.checkpoint, subgraphs=True)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\code\shikigen-agent\tests\test_recovery.py", line 129, in flaky
+    raise OSError("temporary")
+OSError: temporary
+recovery_retry delay=0
+recovery_scan_unavailable error_type=OperationalError
+Traceback (most recent call last):
+  File "C:\code\shikigen-agent\packages\harness\shikigen\runtime\recovery.py", line 67, in reconcile_all
+    runs = await self._store.list_nonterminal_runs()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\code\shikigen-agent\tests\test_recovery.py", line 147, in flaky_scan
+    raise error
+sqlite3.OperationalError: database is locked
+recovery_retry delay=0
+............Executing <Task pending name='Task-2616' coro=<RunEventTests.test_entire_observation_channel_failure_still_settles() running at C:\code\shikigen-agent\tests\test_run_events.py:118> wait_for=<Future pending cb=[Task.task_wakeup()] created at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\base_events.py:448> cb=[_run_until_complete_cb() at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\base_events.py:181] created at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\runners.py:100> took 0.109 seconds
+......................Subagent bash: unavailable tools: ['bash', 'grep', 'list_dir', 'read_file', 'write_file']
+.........invocation_lost thread_id=d2d9aa25f3994debaa9505796a4149d9 run_id=c923618e3fde402dbd9c4318e31ce1d5
+.Executing <Task pending name='Task-3815' coro=<CompositionTests.test_independent_process_blocks_http_imports() running at C:\code\shikigen-agent\tests\test_runtime.py:314> wait_for=<Future pending cb=[Task.task_wakeup()] created at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\base_events.py:448> cb=[_run_until_complete_cb() at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\base_events.py:181] created at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\runners.py:100> took 0.157 seconds
+...........................................................Executing <Task pending name='Task-4603' coro=<ToolNode._arun_one() running at C:\code\shikigen-agent\.venv\Lib\site-packages\langgraph\prebuilt\tool_node.py:1207> wait_for=<Future pending cb=[_chain_future.<locals>._call_check_cancel() at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\futures.py:389, Task.task_wakeup()] created at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\base_events.py:448> cb=[gather.<locals>._done_callback() at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\tasks.py:767] created at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\tasks.py:695> took 0.125 seconds
+Subagent bash: unavailable tools: ['bash', 'write_file']
+Subagent bash: unavailable tools: ['bash', 'write_file']
+Subagent bash: unavailable tools: ['bash', 'grep', 'list_dir', 'read_file', 'write_file']
+Subagent bash: unavailable tools: ['bash', 'grep', 'list_dir', 'read_file', 'write_file']
+.Executing <Task pending name='Task-4891' coro=<TaskToolTests.test_explicit_json_checkpoint_restores_conversation() running at C:\code\shikigen-agent\tests\test_task_tool.py:115> wait_for=<Task pending name='Task-4895' coro=<RunnableCallable.ainvoke() running at C:\code\shikigen-agent\.venv\Lib\site-packages\langgraph\_internal\_runnable.py:431> cb=[Task.task_wakeup()] created at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\tasks.py:422> cb=[_run_until_complete_cb() at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\base_events.py:181] created at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\runners.py:100> took 0.110 seconds
+Executing <Task pending name='Task-4891' coro=<TaskToolTests.test_explicit_json_checkpoint_restores_conversation() running at C:\code\shikigen-agent\tests\test_task_tool.py:124> wait_for=<Task pending name='Task-4923' coro=<RunnableCallable.ainvoke() running at C:\code\shikigen-agent\.venv\Lib\site-packages\langgraph\_internal\_runnable.py:431> cb=[Task.task_wakeup()] created at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\tasks.py:422> cb=[_run_until_complete_cb() at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\base_events.py:181] created at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\runners.py:100> took 0.547 seconds
+...............
+======================================================================
+ERROR: test_waits_for_previous_cleanup_and_survives_caller_cancellation (test_approval_resume.ApprovalResumeTests.test_waits_for_previous_cleanup_and_survives_caller_cancellation)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\tasks.py", line 520, in wait_for
+    return await fut
+           ^^^^^^^^^
+  File "C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\locks.py", line 212, in wait
+    await fut
+asyncio.exceptions.CancelledError
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "C:\code\shikigen-agent\tests\test_approval_resume.py", line 255, in test_waits_for_previous_cleanup_and_survives_caller_cancellation
+    await asyncio.wait_for(settled.wait(), 3)
+  File "C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\tasks.py", line 519, in wait_for
+    async with timeouts.timeout(timeout):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\timeouts.py", line 115, in __aexit__
+    raise TimeoutError from exc_val
+TimeoutError
+
+----------------------------------------------------------------------
+Ran 229 tests in 378.447s
+
+FAILED (errors=1)

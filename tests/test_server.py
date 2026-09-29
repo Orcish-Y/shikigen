@@ -26,9 +26,47 @@ from app.routes.run import (
   stream_run_events,
 )
 from app.server import app as server_app
+from app.server import create_app
 
 
 class LifespanTests(unittest.IsolatedAsyncioTestCase):
+  async def test_owned_runtime_releases_resources_after_request_failure(self):
+    with tempfile.TemporaryDirectory() as directory:
+      config = AppConfig(
+        model=ModelConfig(),
+        mcp=McpConfig(),
+        database={"path": str(Path(directory) / "runs.db")},
+        checkpointer={"type": "memory"},
+      )
+      app = create_app()
+      with (
+        patch("shikigen.runtime.composition.load_app_config", return_value=config),
+        patch(
+          "shikigen.runtime.composition.create_lead_agent", new=deterministic_agent
+        ),
+      ):
+        with self.assertRaisesRegex(OSError, "request failed"):
+          async with (
+            app.router.lifespan_context(app),
+            httpx.AsyncClient(
+              transport=httpx.ASGITransport(app=app), base_url="http://test"
+            ) as client,
+          ):
+            runtime = app.state.runtime
+            response = await client.post("/api/threads")
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(
+              (await runtime.threads.list_threads())[0]["id"],
+              response.json()["thread_id"],
+            )
+            with patch.object(
+              runtime.threads, "list_threads", side_effect=OSError("request failed")
+            ):
+              await client.get("/api/threads")
+      self.assertFalse(hasattr(app.state, "runtime"))
+      with self.assertRaises(ValueError):
+        await runtime.chat_store.list_threads()
+
   async def test_lifespan_uses_shared_context_and_releases_it(self):
     runtime = SimpleNamespace(lifecycle=SimpleNamespace(shutdown=AsyncMock()))
     entered, exited = [], []
@@ -289,19 +327,35 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
       "shikigen.runtime.composition.create_lead_agent", new=deterministic_agent
     ):
       async with open_runtime(config) as runtime:
-        with patch.object(server_app.state, "runtime", runtime):
-          thread = (await self.client.post("/api/threads")).json()["thread_id"]
-          response = await self.client.post(
-            f"/api/threads/{thread}/stream", json={"message": "1+2"}
-          )
-          events = parse_sse_frames(response.text)
-          self.assertEqual(events[-1]["data"]["status"], "completed")
-          messages = (await self.client.get(f"/api/threads/{thread}/messages")).json()[
-            "data"
-          ]
-          self.assertEqual(
-            [m["content"]["type"] for m in messages], ["human", "ai", "tool", "ai"]
-          )
+        app = create_app(runtime=runtime)
+        with patch("app.server.open_runtime", side_effect=AssertionError("owned")):
+          async with (
+            app.router.lifespan_context(app),
+            httpx.AsyncClient(
+              transport=httpx.ASGITransport(app=app), base_url="http://test"
+            ) as client,
+          ):
+            self.assertIs(app.state.runtime, runtime)
+            thread = (await client.post("/api/threads")).json()["thread_id"]
+            response = await client.post(
+              f"/api/threads/{thread}/stream", json={"message": "1+2"}
+            )
+            events = parse_sse_frames(response.text)
+            self.assertEqual(events[-1]["data"]["status"], "completed")
+            messages = (await client.get(f"/api/threads/{thread}/messages")).json()[
+              "data"
+            ]
+            self.assertEqual(
+              [m["content"]["type"] for m in messages], ["human", "ai", "tool", "ai"]
+            )
+        self.assertFalse(hasattr(app.state, "runtime"))
+        # HTTP 退出后，所有者仍能使用同一 runtime 发起任务。
+        execution = await runtime.runs.start_run(thread, "1+2")
+        self.assertEqual(
+          (await runtime.runs.wait_run(execution))["status"], "completed"
+        )
+      with self.assertRaises(ValueError):
+        await runtime.chat_store.list_threads()
 
 
 class EncoderTests(unittest.IsolatedAsyncioTestCase):
