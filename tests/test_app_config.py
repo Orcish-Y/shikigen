@@ -13,6 +13,65 @@ from shikigen.app_config import (
 
 
 class AppConfigTests(unittest.TestCase):
+  def test_validation_error_does_not_echo_resolved_environment_secrets(self):
+    with tempfile.TemporaryDirectory() as directory:
+      path = self.write_config(
+        directory,
+        {
+          "model": {},
+          "mcp": {},
+          "backend": {"port": "$TEST_SECRET"},
+        },
+      )
+      with patch.dict("os.environ", {"TEST_SECRET": "private-secret-value"}):
+        with self.assertRaises(AppConfigError) as raised:
+          load_app_config(path)
+      self.assertIn("backend.port", str(raised.exception))
+      self.assertNotIn("private-secret-value", str(raised.exception))
+
+  def test_invalid_transport_error_does_not_echo_environment_secret(self):
+    with tempfile.TemporaryDirectory() as directory:
+      path = self.write_config(
+        directory,
+        {
+          "model": {},
+          "mcp": {"servers": {"test": {"transport": "$TEST_SECRET"}}},
+        },
+      )
+      with patch.dict("os.environ", {"TEST_SECRET": "private-secret-value"}):
+        with self.assertRaises(AppConfigError) as raised:
+          load_app_config(path)
+      self.assertIn("transport", str(raised.exception))
+      self.assertNotIn("private-secret-value", str(raised.exception))
+
+  def test_backend_defaults_and_strict_validation(self):
+    from pydantic import ValidationError
+    from shikigen.app_config import AppConfig
+
+    base = {"model": {}, "mcp": {}}
+    self.assertEqual(
+      AppConfig.model_validate(base).backend.model_dump(),
+      {
+        "port": 43127,
+        "startup_timeout_seconds": 60,
+        "shutdown_timeout_seconds": 10,
+      },
+    )
+    invalid = [None, {"typo": 1}]
+    for field in ("port", "startup_timeout_seconds", "shutdown_timeout_seconds"):
+      invalid.extend({field: value} for value in (None, True, "12", 0, -1))
+    invalid.extend(
+      [
+        {"port": 65536},
+        {"port": 1.5},
+        {"startup_timeout_seconds": float("inf")},
+        {"shutdown_timeout_seconds": float("nan")},
+      ]
+    )
+    for backend in invalid:
+      with self.subTest(backend=backend), self.assertRaises(ValidationError):
+        AppConfig.model_validate({**base, "backend": backend})
+
   def test_subagent_policies_preserve_null_empty_and_reject_typos(self):
     from pydantic import ValidationError
     from shikigen.app_config import AppConfig

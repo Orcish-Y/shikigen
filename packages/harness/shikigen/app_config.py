@@ -99,6 +99,16 @@ class DatabaseConfig(BaseModel):
   path: str = Field(default=".shikigen/data/shikigen.db", min_length=1)
 
 
+class BackendConfig(BaseModel):
+  """桌面宿主每次启动固定的端口和期限。"""
+
+  model_config = ConfigDict(extra="forbid", strict=True)
+
+  port: int = Field(default=43127, ge=1, le=65535)
+  startup_timeout_seconds: float = Field(default=60, gt=0, allow_inf_nan=False)
+  shutdown_timeout_seconds: float = Field(default=10, gt=0, allow_inf_nan=False)
+
+
 class AppConfig(BaseModel):
   model_config = ConfigDict(extra="forbid")
 
@@ -107,6 +117,7 @@ class AppConfig(BaseModel):
   subagents: SubagentsConfig = Field(default_factory=SubagentsConfig)
   checkpointer: CheckpointerConfig = Field(default_factory=CheckpointerConfig)
   database: DatabaseConfig = Field(default_factory=DatabaseConfig)
+  backend: BackendConfig = Field(default_factory=BackendConfig)
 
 
 def _resolve_env_vars(value: object, path: tuple[str | int, ...] = ()) -> object:
@@ -158,6 +169,18 @@ def load_app_config(path: str | Path | None = None) -> AppConfig:
   except json.JSONDecodeError as exc:
     raise AppConfigError(f"Invalid config file: {config_path}\n{exc}") from exc
   except ValidationError as exc:
-    raise AppConfigError(f"Invalid config file: {config_path}\n{exc}") from exc
+    details = []
+    for error in exc.errors(include_input=False, include_context=False):
+      # discriminator 错误的 msg 本身也包含输入，不能直接回显。
+      reason = (
+        "Invalid transport; expected 'http' or 'stdio'"
+        if error["type"] == "union_tag_invalid"
+        else error["msg"]
+      )
+      details.append(f"{'.'.join(map(str, error['loc']))}: {reason}")
+    # 原始 ValidationError 及其 traceback 会包含已解析的密钥值。
+    raise AppConfigError(
+      f"Invalid config file: {config_path}\nvalidation errors:\n" + "\n".join(details)
+    ) from None
   except (OSError, UnicodeDecodeError) as exc:
     raise AppConfigError(f"Cannot read config file: {config_path}") from exc
