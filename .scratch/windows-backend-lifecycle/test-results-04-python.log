@@ -1,0 +1,395 @@
+test_config_errors_propagate_before_loading_dependencies (test_agent_factory.AgentFactoryTests.test_config_errors_propagate_before_loading_dependencies) ... ok
+test_injected_empty_registry_and_model_skip_loading (test_agent_factory.AgentFactoryTests.test_injected_empty_registry_and_model_skip_loading) ... Subagent bash: unavailable tools: ['bash', 'grep', 'list_dir', 'read_file', 'write_file']
+ok
+test_loads_dependencies_and_shares_model (test_agent_factory.AgentFactoryTests.test_loads_dependencies_and_shares_model) ... Subagent bash: unavailable tools: ['bash', 'grep', 'list_dir', 'write_file']
+ok
+test_per_type_policy_empty_deny_and_framework_restriction (test_agent_factory.AgentFactoryTests.test_per_type_policy_empty_deny_and_framework_restriction) ... Subagent bash: unavailable tools: ['bash', 'grep', 'list_dir', 'read_file', 'write_file']
+Executing <Task pending name='Task-17' coro=<AgentFactoryTests.test_per_type_policy_empty_deny_and_framework_restriction() running at C:\code\shikigen-agent\tests\test_agent_factory.py:110> wait_for=<Task pending name='Task-18' coro=<StructuredTool._arun() running at C:\code\shikigen-agent\.venv\Lib\site-packages\langchain_core\tools\structured.py:101> cb=[Task.task_wakeup()] created at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\tasks.py:422> cb=[_run_until_complete_cb() at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\base_events.py:181] created at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\runners.py:100> took 0.281 seconds
+ok
+test_unavailable_allowlist_does_not_fall_back_to_all_tools (test_agent_factory.AgentFactoryTests.test_unavailable_allowlist_does_not_fall_back_to_all_tools) ... ok
+test_backend_defaults_and_strict_validation (test_app_config.AppConfigTests.test_backend_defaults_and_strict_validation) ... ok
+test_invalid_transport_error_does_not_echo_environment_secret (test_app_config.AppConfigTests.test_invalid_transport_error_does_not_echo_environment_secret) ... ok
+test_leaves_non_placeholder_strings_unchanged (test_app_config.AppConfigTests.test_leaves_non_placeholder_strings_unchanged) ... ok
+test_loads_complete_model_config (test_app_config.AppConfigTests.test_loads_complete_model_config) ... ok
+test_loads_initial_max_attempts (test_app_config.AppConfigTests.test_loads_initial_max_attempts) ... ok
+test_loads_nested_mcp_config (test_app_config.AppConfigTests.test_loads_nested_mcp_config) ... ok
+test_loads_stdio_server_config (test_app_config.AppConfigTests.test_loads_stdio_server_config) ... ok
+test_mcp_config_uses_default_initial_max_attempts (test_app_config.AppConfigTests.test_mcp_config_uses_default_initial_max_attempts) ... ok
+test_model_config_uses_current_defaults (test_app_config.AppConfigTests.test_model_config_uses_current_defaults) ... ok
+test_rejects_incomplete_server_configs (test_app_config.AppConfigTests.test_rejects_incomplete_server_configs) ... ok
+test_rejects_invalid_field_types (test_app_config.AppConfigTests.test_rejects_invalid_field_types) ... ok
+test_rejects_missing_and_unexpected_fields (test_app_config.AppConfigTests.test_rejects_missing_and_unexpected_fields) ... ok
+test_rejects_non_positive_initial_max_attempts (test_app_config.AppConfigTests.test_rejects_non_positive_initial_max_attempts) ... ok
+test_rejects_null_servers (test_app_config.AppConfigTests.test_rejects_null_servers) ... ok
+test_rejects_unexpected_nested_mcp_fields (test_app_config.AppConfigTests.test_rejects_unexpected_nested_mcp_fields) ... ok
+test_rejects_unexpected_server_fields (test_app_config.AppConfigTests.test_rejects_unexpected_server_fields) ... ok
+test_rejects_unsupported_server_transport (test_app_config.AppConfigTests.test_rejects_unsupported_server_transport) ... ok
+test_reports_invalid_json_location (test_app_config.AppConfigTests.test_reports_invalid_json_location) ... ok
+test_reports_missing_environment_variable_with_config_path (test_app_config.AppConfigTests.test_reports_missing_environment_variable_with_config_path) ... ok
+test_reports_missing_file_with_path (test_app_config.AppConfigTests.test_reports_missing_file_with_path) ... ok
+test_resolves_environment_variables_recursively (test_app_config.AppConfigTests.test_resolves_environment_variables_recursively) ... ok
+test_subagent_policies_preserve_null_empty_and_reject_typos (test_app_config.AppConfigTests.test_subagent_policies_preserve_null_empty_and_reject_typos) ... ok
+test_uses_project_root_config_by_default (test_app_config.AppConfigTests.test_uses_project_root_config_by_default) ... ok
+test_validation_error_does_not_echo_resolved_environment_secrets (test_app_config.AppConfigTests.test_validation_error_does_not_echo_resolved_environment_secrets) ... ok
+test_approval_and_status_rollback_together (test_approval_pause.ApprovalPauseTests.test_approval_and_status_rollback_together) ... Executing <Task pending name='Task-29' coro=<ApprovalPauseTests.asyncSetUp() running at C:\code\shikigen-agent\tests\test_approval_pause.py:74> wait_for=<Future pending cb=[Task.task_wakeup()] created at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\base_events.py:448> cb=[_run_until_complete_cb() at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\base_events.py:181] created at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\runners.py:100> took 0.125 seconds
+ok
+test_default_composition_installs_policy_on_actual_tool_registry (test_approval_pause.ApprovalPauseTests.test_default_composition_installs_policy_on_actual_tool_registry) ... ok
+test_invalid_pause_is_not_committed (test_approval_pause.ApprovalPauseTests.test_invalid_pause_is_not_committed) ... ok
+test_missing_checkpoint_never_falls_back_to_latest (test_approval_pause.ApprovalPauseTests.test_missing_checkpoint_never_falls_back_to_latest) ... ok
+test_policy_rejects_missing_tools (test_approval_pause.ApprovalPauseTests.test_policy_rejects_missing_tools) ... ok
+test_real_policy_blocks_tools_and_rebuilds_over_http (test_approval_pause.ApprovalPauseTests.test_real_policy_blocks_tools_and_rebuilds_over_http) ... C:\code\shikigen-agent\packages\harness\shikigen\core\loop.py:113: LangChainBetaWarning: The v3 streaming protocol on Pregel is experimental.
+  async with await agent.astream_events(
+C:\code\shikigen-agent\.venv\Lib\site-packages\langgraph\pregel\main.py:3612: LangChainBetaWarning: The v3 streaming protocol on Pregel is experimental.
+  return AsyncGraphRunStream(graph_aiter, mux)
+Executing <Task finished name='Task-66' coro=<<async_generator_asend without __name__>()> result={'data': {'config': {'configurable': {'checkpoint_id': '1f1bca3a-d31...-8cf41447af5e', 'checkpoint_ns': '', 'thread_id': 'ff1f6d0c1a88...9d2d10cd95dfc'}}, 'metadata': {'parents': {}, 'source': 'input', 'step': -1}, 'next': ['__start__'], 'parent_config': None, ...}, 'ns': (), 'type': 'checkpoints'} created at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\tasks.py:695> took 0.109 seconds
+Executing <Task pending name='Task-60' coro=<ApprovalPauseTests.test_real_policy_blocks_tools_and_rebuilds_over_http() running at C:\code\shikigen-agent\tests\test_approval_pause.py:152> wait_for=<Future pending cb=[Task.task_wakeup()] created at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\base_events.py:448> cb=[_run_until_complete_cb() at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\base_events.py:181] created at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\runners.py:100> took 0.594 seconds
+Executing <Task pending name='Task-60' coro=<ApprovalPauseTests.test_real_policy_blocks_tools_and_rebuilds_over_http() running at C:\code\shikigen-agent\tests\test_approval_pause.py:152> wait_for=<Future pending cb=[Task.task_wakeup()] created at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\base_events.py:448> cb=[_run_until_complete_cb() at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\base_events.py:181] created at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\runners.py:100> took 0.187 seconds
+ok
+test_root_and_child_interrupts_use_exact_observed_checkpoint (test_approval_pause.ApprovalPauseTests.test_root_and_child_interrupts_use_exact_observed_checkpoint) ... ok
+test_acceptance_rollback_and_cross_connection_competition (test_approval_resume.ApprovalResumeTests.test_acceptance_rollback_and_cross_connection_competition) ... ok
+test_disallowed_decision_does_not_consume_pending (test_approval_resume.ApprovalResumeTests.test_disallowed_decision_does_not_consume_pending) ... ok
+test_http_submission_conflicts_and_rebuild (test_approval_resume.ApprovalResumeTests.test_http_submission_conflicts_and_rebuild) ... Executing <Task pending name='starlette.responses.StreamingResponse.__call__.<locals>.wrap' coro=<TaskHandle._run_coro() running at C:\code\shikigen-agent\.venv\Lib\site-packages\anyio\_core\_tasks.py:275> wait_for=<Future pending cb=[Task.task_wakeup()] created at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\base_events.py:448> cb=[TaskGroup._spawn.<locals>.task_done() at C:\code\shikigen-agent\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:836] created at C:\code\shikigen-agent\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:899> took 0.141 seconds
+ok
+test_invalid_responses_leave_pending_unchanged (test_approval_resume.ApprovalResumeTests.test_invalid_responses_leave_pending_unchanged) ... recovery_unavailable thread_id=5b898b0fce16484f856c060a12053482 run_id=0ee638829eee4b29bce0c3a842afbc06 error_type=OSError
+Traceback (most recent call last):
+  File "C:\code\shikigen-agent\packages\harness\shikigen\runtime\recovery.py", line 88, in reconcile_run
+    return await self._reconcile_run(thread_id, run_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\code\shikigen-agent\packages\harness\shikigen\runtime\recovery.py", line 152, in _reconcile_run
+    pause = await collector.read_pause(self._agent)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\code\shikigen-agent\packages\harness\shikigen\core\graph_pause.py", line 47, in read_pause
+    snapshot = await agent.aget_state(self.checkpoint, subgraphs=True)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\unittest\mock.py", line 2291, in _execute_mock_call
+    raise effect
+OSError: unavailable
+ok
+test_nested_interrupts_resume_together (test_approval_resume.ApprovalResumeTests.test_nested_interrupts_resume_together) ... ok
+test_observe_active_resume_combines_history_and_current_cache_once (test_approval_resume.ApprovalResumeTests.test_observe_active_resume_combines_history_and_current_cache_once) ... ok
+test_start_failure_preserves_resolved_fact (test_approval_resume.ApprovalResumeTests.test_start_failure_preserves_resolved_fact) ... ok
+test_two_pauses_concurrent_response_and_exact_resume (test_approval_resume.ApprovalResumeTests.test_two_pauses_concurrent_response_and_exact_resume) ... ok
+test_waits_for_previous_cleanup_and_survives_caller_cancellation (test_approval_resume.ApprovalResumeTests.test_waits_for_previous_cleanup_and_survives_caller_cancellation) ... Executing <Task finished name='Task-1054' coro=<<async_generator_asend without __name__>()> result={'data': {'config': {'configurable': {'checkpoint_id': '1f1bca3b-b09...-8c924a88cbce', 'checkpoint_ns': '', 'thread_id': '6ec82611f0df...1cff6f654da32'}}, 'metadata': {'parents': {}, 'source': 'input', 'step': -1}, 'next': ['__start__'], 'parent_config': None, ...}, 'ns': (), 'type': 'checkpoints'} created at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\tasks.py:695> took 0.110 seconds
+ok
+test_creates_model_from_validated_config (test_chat_model.CreateChatModelTests.test_creates_model_from_validated_config) ... ok
+test_omits_missing_base_url (test_chat_model.CreateChatModelTests.test_omits_missing_base_url) ... ok
+test_event_key_makes_message_writes_idempotent (test_chat_store.ChatStoreTests.test_event_key_makes_message_writes_idempotent) ... ok
+test_finishing_run_updates_status_and_thread_order (test_chat_store.ChatStoreTests.test_finishing_run_updates_status_and_thread_order) ... ok
+test_lists_messages_for_exact_thread_and_run_in_thread_order (test_chat_store.ChatStoreTests.test_lists_messages_for_exact_thread_and_run_in_thread_order) ... ok
+test_returns_none_when_run_does_not_belong_to_thread (test_chat_store.ChatStoreTests.test_returns_none_when_run_does_not_belong_to_thread) ... ok
+test_bind_errors_skip_10013_but_fail_other_errors (test_desktop.DesktopTests.test_bind_errors_skip_10013_but_fail_other_errors) ... Executing <Task pending name='Task-1278' coro=<DesktopTests.test_bind_errors_skip_10013_but_fail_other_errors() running at C:\code\shikigen-agent\tests\test_desktop.py:126> wait_for=<Future pending cb=[Task.task_wakeup()] created at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\base_events.py:448> cb=[_run_until_complete_cb() at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\base_events.py:181] created at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\runners.py:100> took 0.157 seconds
+ok
+test_bound_ready_business_and_shutdown (test_desktop.DesktopTests.test_bound_ready_business_and_shutdown) ... Executing <Task pending name='Task-1290' coro=<DesktopTests.test_bound_ready_business_and_shutdown() running at C:\code\shikigen-agent\tests\test_desktop.py:100> cb=[_run_until_complete_cb() at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\base_events.py:181] created at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\runners.py:100> took 0.188 seconds
+Executing <Task pending name='Task-1290' coro=<DesktopTests.test_bound_ready_business_and_shutdown() running at C:\code\shikigen-agent\tests\test_desktop.py:100> wait_for=<Future pending cb=[Task.task_wakeup()] created at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\base_events.py:448> cb=[_run_until_complete_cb() at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\base_events.py:181] created at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\runners.py:100> took 0.297 seconds
+ok
+test_contiguous_occupied_ports_and_exhaustion (test_desktop.DesktopTests.test_contiguous_occupied_ports_and_exhaustion) ... ok
+test_environment_loaded_before_config_without_overriding_host (test_desktop.DesktopTests.test_environment_loaded_before_config_without_overriding_host) ... ok
+test_eof_closes_backend (test_desktop.DesktopTests.test_eof_closes_backend) ... ok
+test_message_size_boundary_and_partial_eof (test_desktop.DesktopTests.test_message_size_boundary_and_partial_eof) ... ok
+test_missing_environment_reports_name_and_exits (test_desktop.DesktopTests.test_missing_environment_reports_name_and_exits) ... ok
+test_old_startup_is_ignored (test_desktop.DesktopTests.test_old_startup_is_ignored) ... ok
+test_protocol_errors_exit_without_waiting_for_eof (test_desktop.DesktopTests.test_protocol_errors_exit_without_waiting_for_eof) ... ok
+test_committed_cancellation_wins_over_loop_completion (test_execution.ExecutionTests.test_committed_cancellation_wins_over_loop_completion) ... ok
+test_cooperative_abort_is_only_an_execution_result (test_execution.ExecutionTests.test_cooperative_abort_is_only_an_execution_result) ... ok
+test_disconnect_does_not_own_execution_or_other_subscription (test_execution.ExecutionTests.test_disconnect_does_not_own_execution_or_other_subscription) ... ok
+test_duplicate_install_and_old_cleanup_do_not_replace_new_execution (test_execution.ExecutionTests.test_duplicate_install_and_old_cleanup_do_not_replace_new_execution) ... ok
+test_loop_reports_result_without_terminal_or_stream_close (test_execution.ExecutionTests.test_loop_reports_result_without_terminal_or_stream_close) ... ok
+test_persistence_failure_never_publishes_success (test_execution.ExecutionTests.test_persistence_failure_never_publishes_success) ... ok
+test_shutdown_before_task_starts_closes_subscription (test_execution.ExecutionTests.test_shutdown_before_task_starts_closes_subscription) ... ok
+test_shutdown_waits_for_graph_cleanup_without_committing_cancel (test_execution.ExecutionTests.test_shutdown_waits_for_graph_cleanup_without_committing_cancel) ... ok
+test_grep_skips_noise_directories_and_non_utf8_files (test_filesystem.FilesystemToolTests.test_grep_skips_noise_directories_and_non_utf8_files) ... ok
+test_lists_files_and_directories_in_name_order (test_filesystem.FilesystemToolTests.test_lists_files_and_directories_in_name_order) ... ok
+test_rejects_a_path_outside_the_workspace (test_filesystem.FilesystemToolTests.test_rejects_a_path_outside_the_workspace) ... ok
+test_reports_empty_directory_and_non_directory_separately (test_filesystem.FilesystemToolTests.test_reports_empty_directory_and_non_directory_separately) ... ok
+test_shell_runs_in_workspace (test_filesystem.FilesystemToolTests.test_shell_runs_in_workspace) ... ok
+test_writes_and_reads_a_file_inside_the_workspace (test_filesystem.FilesystemToolTests.test_writes_and_reads_a_file_inside_the_workspace) ... ok
+test_parses_yes_followed_by_newline (test_goal_middleware.GoalEvaluatorTests.test_parses_yes_followed_by_newline) ... ok
+test_treats_no_as_unsatisfied (test_goal_middleware.GoalEvaluatorTests.test_treats_no_as_unsatisfied) ... ok
+test_before_agent_activates_goal_and_records_message_boundary (test_goal_middleware.GoalMiddlewareTests.test_before_agent_activates_goal_and_records_message_boundary) ... ok
+test_before_agent_is_inactive_without_a_goal_message (test_goal_middleware.GoalMiddlewareTests.test_before_agent_is_inactive_without_a_goal_message) ... ok
+test_compiled_agent_continues_within_one_graph_run (test_goal_middleware.GoalMiddlewareTests.test_compiled_agent_continues_within_one_graph_run) ... ok
+test_evaluator_output_is_not_published_as_agent_message (test_goal_middleware.GoalMiddlewareTests.test_evaluator_output_is_not_published_as_agent_message) ... ok
+test_final_continuation_is_evaluated_before_exhaustion (test_goal_middleware.GoalMiddlewareTests.test_final_continuation_is_evaluated_before_exhaustion) ... ok
+test_satisfied_goal_stops_without_jumping_to_model (test_goal_middleware.GoalMiddlewareTests.test_satisfied_goal_stops_without_jumping_to_model) ... ok
+test_unsatisfied_goal_injects_continuation_and_jumps (test_goal_middleware.GoalMiddlewareTests.test_unsatisfied_goal_injects_continuation_and_jumps) ... ok
+test_child_graph_events_are_not_parent_messages (test_graph_events.GraphEventAdapterTests.test_child_graph_events_are_not_parent_messages) ... ok
+test_repeated_values_and_tool_identity (test_graph_events.GraphEventAdapterTests.test_repeated_values_and_tool_identity) ... ok
+test_standard_text_start_delta_and_finish (test_graph_events.GraphEventAdapterTests.test_standard_text_start_delta_and_finish) ... ok
+test_complete_message_is_ingested_before_later_node_failure (test_graph_events.GraphIngestionTests.test_complete_message_is_ingested_before_later_node_failure) ... ok
+test_streaming_model_deltas_precede_root_complete_message (test_graph_events.GraphIngestionTests.test_streaming_model_deltas_precede_root_complete_message) ... ok
+test_tool_command_result_is_extracted_from_root_state (test_graph_events.GraphIngestionTests.test_tool_command_result_is_extracted_from_root_state) ... C:\code\shikigen-agent\.venv\Lib\site-packages\pydantic\functional_validators.py:835: UserWarning: Pydantic serializer warnings:
+  PydanticSerializationUnexpectedValue(Expected `none` - serialized value may not be as expected [field_name='context', input_value=AgentRunContext(thread_id='thread', run_id='run'), input_type=AgentRunContext])
+  function=lambda v, h: h(v), schema=original_schema
+C:\code\shikigen-agent\.venv\Lib\site-packages\pydantic\main.py:475: UserWarning: Pydantic serializer warnings:
+  PydanticSerializationUnexpectedValue(Expected `none` - serialized value may not be as expected [field_name='context', input_value=AgentRunContext(thread_id='thread', run_id='run'), input_type=AgentRunContext])
+  return self.__pydantic_serializer__.to_python(
+ok
+test_round_trips_latest_and_exact_checkpoint (test_json_checkpointer.JsonCheckpointerTests.test_round_trips_latest_and_exact_checkpoint) ... ok
+test_attaches_tracker_and_publishes_zero_usage (test_loop.RunAgentLoopTests.test_attaches_tracker_and_publishes_zero_usage) ... ok
+test_cancels_consumption_when_abort_signal_wins (test_loop.RunAgentLoopTests.test_cancels_consumption_when_abort_signal_wins) ... ok
+test_does_not_commit_completed_before_stream_context_exits (test_loop.RunAgentLoopTests.test_does_not_commit_completed_before_stream_context_exits) ... ok
+test_external_task_cancellation_commits_cancelled (test_loop.RunAgentLoopTests.test_external_task_cancellation_commits_cancelled) ... ok
+test_preserves_errors_raised_before_consumption_starts (test_loop.RunAgentLoopTests.test_preserves_errors_raised_before_consumption_starts) ... ok
+test_publishes_message_chunks_and_completion (test_loop.RunAgentLoopTests.test_publishes_message_chunks_and_completion) ... ok
+test_publishes_one_complete_event_for_each_tool_call (test_loop.RunAgentLoopTests.test_publishes_one_complete_event_for_each_tool_call) ... ok
+test_empty_config_returns_no_tools_without_creating_client (test_mcp_loader.McpLoaderTests.test_empty_config_returns_no_tools_without_creating_client) ... ok
+test_loads_and_combines_tools_from_each_server (test_mcp_loader.McpLoaderTests.test_loads_and_combines_tools_from_each_server) ... ok
+test_skips_failed_server_and_keeps_healthy_tools (test_mcp_loader.McpLoaderTests.test_skips_failed_server_and_keeps_healthy_tools) ... ok
+test_stops_retrying_after_a_server_connects (test_mcp_loader.McpLoaderTests.test_stops_retrying_after_a_server_connects) ... ok
+test_uses_configured_initial_max_attempts (test_mcp_loader.McpLoaderTests.test_uses_configured_initial_max_attempts) ... ok
+test_complete_fact_corrects_preview_and_replay_has_one_identity (test_message_contract.MessageContractTests.test_complete_fact_corrects_preview_and_replay_has_one_identity) ... ok
+test_contract_rejects_unknown_fields_and_separates_preview_and_facts (test_message_contract.MessageContractTests.test_contract_rejects_unknown_fields_and_separates_preview_and_facts) ... ok
+test_history_replay_retains_owner_and_conflicting_history_fails (test_message_contract.MessageContractTests.test_history_replay_retains_owner_and_conflicting_history_fails) ... ok
+test_invalid_observation_ends_subscription_without_changing_run (test_message_contract.MessageContractTests.test_invalid_observation_ends_subscription_without_changing_run) ... ok
+test_same_run_checkpoint_resume_replay_returns_existing_fact (test_message_contract.MessageContractTests.test_same_run_checkpoint_resume_replay_returns_existing_fact) ... ok
+test_tool_identity_ignores_framework_id_but_preserves_artifact_presence (test_message_contract.MessageContractTests.test_tool_identity_ignores_framework_id_but_preserves_artifact_presence) ... ok
+test_two_checkpointed_rounds_have_separate_facts_and_stable_preview_ids (test_message_contract.MessageContractTests.test_two_checkpointed_rounds_have_separate_facts_and_stable_preview_ids) ... invocation_lost thread_id=thread run_id=first
+ok
+test_one_reservation_for_many_tokens_and_complete_replaces_preview (test_message_sequence.MessageSequenceTests.test_one_reservation_for_many_tokens_and_complete_replaces_preview) ... ok
+test_out_of_order_commit_and_hole_are_not_history_cursor (test_message_sequence.MessageSequenceTests.test_out_of_order_commit_and_hole_are_not_history_cursor) ... ok
+test_reservation_cannot_be_taken_by_another_run (test_message_sequence.MessageSequenceTests.test_reservation_cannot_be_taken_by_another_run) ... ok
+test_two_connections_reserve_once_and_reopen_reuses_identity (test_message_sequence.MessageSequenceTests.test_two_connections_reserve_once_and_reopen_reuses_identity) ... ok
+test_installed_harness_imports_outside_project (test_package_imports.PackageImportTests.test_installed_harness_imports_outside_project) ... ok
+test_tools_imports_in_a_fresh_process (test_package_imports.PackageImportTests.test_tools_imports_in_a_fresh_process) ... ok
+test_process_crash_matrix (test_recovery.RecoveryCrashTests.test_process_crash_matrix) ... ok
+test_checkpoint_json_decode_error_is_permanent (test_recovery.RecoveryTests.test_checkpoint_json_decode_error_is_permanent) ... approval_checkpoint_corrupt thread_id=b2377834b6364b1e87df2fde9266ed2d run_id=694671bfa9a943de95eefa67ebdb2f95
+Traceback (most recent call last):
+  File "C:\code\shikigen-agent\packages\harness\shikigen\runtime\recovery.py", line 152, in _reconcile_run
+    pause = await collector.read_pause(self._agent)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\code\shikigen-agent\packages\harness\shikigen\core\graph_pause.py", line 47, in read_pause
+    snapshot = await agent.aget_state(self.checkpoint, subgraphs=True)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\unittest\mock.py", line 2291, in _execute_mock_call
+    raise effect
+json.decoder.JSONDecodeError: truncated: line 1 column 2 (char 1)
+approval_state_corrupt thread_id=b2377834b6364b1e87df2fde9266ed2d run_id=694671bfa9a943de95eefa67ebdb2f95
+ok
+test_corrupt_read_and_resume_defense (test_recovery.RecoveryTests.test_corrupt_read_and_resume_defense) ... approval_state_corrupt thread_id=f2b4edfe409042e5b127249da383a495 run_id=249690d988ba4f4982fafbfe7735cf76
+approval_state_corrupt thread_id=7606e3910fec448b81bb213b9fd16b47 run_id=378e519a315641e19ebc702181fd3bde
+ok
+test_lost_idempotency_terminal_and_live_execution (test_recovery.RecoveryTests.test_lost_idempotency_terminal_and_live_execution) ... invocation_lost thread_id=1d94e4e33ffb4f408f59475454e2fd8a run_id=1d94e4e33ffb4f408f59475454e2fd8a
+ok
+test_malformed_approval_json_converges_and_scan_continues (test_recovery.RecoveryTests.test_malformed_approval_json_converges_and_scan_continues) ... approval_fact_corrupt thread_id=7f23582f53e34ef183fcd2b1fe80aa15 run_id=868b83d865e1446f88385591be414a33
+Traceback (most recent call last):
+  File "C:\code\shikigen-agent\packages\harness\shikigen\runtime\recovery.py", line 117, in _reconcile_run
+    history = await self._store.list_run_events(thread_id, run_id)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\code\shikigen-agent\packages\harness\shikigen\persistence\chat_store.py", line 205, in list_run_events
+    return await self._events.list_run_events(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\code\shikigen-agent\packages\harness\shikigen\persistence\event_store.py", line 332, in list_run_events
+    return [self._decode_event(row) for row in await cursor.fetchall()]
+            ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\code\shikigen-agent\packages\harness\shikigen\persistence\event_store.py", line 344, in _decode_event
+    content=json.loads(row["content_json"]),
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\json\__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\json\decoder.py", line 338, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\json\decoder.py", line 354, in raw_decode
+    obj, end = self.scan_once(s, idx)
+               ^^^^^^^^^^^^^^^^^^^^^^
+json.decoder.JSONDecodeError: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+approval_state_corrupt thread_id=7f23582f53e34ef183fcd2b1fe80aa15 run_id=868b83d865e1446f88385591be414a33
+invocation_lost thread_id=b1da0a7d9353471ebd343b2956a7ce8f run_id=b1da0a7d9353471ebd343b2956a7ce8f
+ok
+test_recovery_write_rollback (test_recovery.RecoveryTests.test_recovery_write_rollback) ... recovery_unavailable thread_id=c7e28b7413f74710b74905b0dcde6831 run_id=c7e28b7413f74710b74905b0dcde6831 error_type=OSError
+Traceback (most recent call last):
+  File "C:\code\shikigen-agent\packages\harness\shikigen\runtime\recovery.py", line 88, in reconcile_run
+    return await self._reconcile_run(thread_id, run_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\code\shikigen-agent\packages\harness\shikigen\runtime\recovery.py", line 171, in _reconcile_run
+    updated = await self._transitions.fail_recovery(run, code, message)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\code\shikigen-agent\packages\harness\shikigen\runtime\runs.py", line 270, in fail_recovery
+    await tx.runs.update_state(
+  File "C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\unittest\mock.py", line 2291, in _execute_mock_call
+    raise effect
+OSError: disk
+invocation_lost thread_id=c7e28b7413f74710b74905b0dcde6831 run_id=c7e28b7413f74710b74905b0dcde6831
+ok
+test_startup_wait_is_cancellable_and_closes_resources (test_recovery.RecoveryTests.test_startup_wait_is_cancellable_and_closes_resources) ... recovery_scan_unavailable error_type=OSError
+Traceback (most recent call last):
+  File "C:\code\shikigen-agent\packages\harness\shikigen\runtime\recovery.py", line 67, in reconcile_all
+    runs = await self._store.list_nonterminal_runs()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\code\shikigen-agent\tests\test_recovery.py", line 289, in unavailable
+    raise OSError("offline")
+OSError: offline
+recovery_retry delay=1.0
+ok
+test_transient_read_then_success_and_scan_retry (test_recovery.RecoveryTests.test_transient_read_then_success_and_scan_retry) ... recovery_unavailable thread_id=c5d52f9e0cd049c8b5115bbc233e7d3f run_id=034c92865b374444ac691f958e9c9ac0 error_type=OSError
+Traceback (most recent call last):
+  File "C:\code\shikigen-agent\packages\harness\shikigen\runtime\recovery.py", line 88, in reconcile_run
+    return await self._reconcile_run(thread_id, run_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\code\shikigen-agent\packages\harness\shikigen\runtime\recovery.py", line 152, in _reconcile_run
+    pause = await collector.read_pause(self._agent)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\code\shikigen-agent\packages\harness\shikigen\core\graph_pause.py", line 47, in read_pause
+    snapshot = await agent.aget_state(self.checkpoint, subgraphs=True)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\code\shikigen-agent\tests\test_recovery.py", line 129, in flaky
+    raise OSError("temporary")
+OSError: temporary
+recovery_retry delay=0
+recovery_scan_unavailable error_type=OperationalError
+Traceback (most recent call last):
+  File "C:\code\shikigen-agent\packages\harness\shikigen\runtime\recovery.py", line 67, in reconcile_all
+    runs = await self._store.list_nonterminal_runs()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\code\shikigen-agent\tests\test_recovery.py", line 147, in flaky_scan
+    raise error
+sqlite3.OperationalError: database is locked
+recovery_retry delay=0
+ok
+test_transient_retry_checks_other_runs_and_can_cancel (test_recovery.RecoveryTests.test_transient_retry_checks_other_runs_and_can_cancel) ... ok
+test_unexpected_checkpoint_errors_propagate_without_changing_run (test_recovery.RecoveryTests.test_unexpected_checkpoint_errors_propagate_without_changing_run) ... ok
+test_unexpected_scan_errors_propagate_without_retry (test_recovery.RecoveryTests.test_unexpected_scan_errors_propagate_without_retry) ... ok
+test_cancel_transaction_rolls_back_both_facts (test_run_cancel.RunCancelTests.test_cancel_transaction_rolls_back_both_facts) ... ok
+test_completion_commit_blocks_cancel_until_publication (test_run_cancel.RunCancelTests.test_completion_commit_blocks_cancel_until_publication) ... ok
+test_cross_connection_cancel_vs_approval (test_run_cancel.RunCancelTests.test_cross_connection_cancel_vs_approval) ... ok
+test_disconnected_cancel_still_commits (test_run_cancel.RunCancelTests.test_disconnected_cancel_still_commits) ... ok
+test_http_cancel_and_ownership (test_run_cancel.RunCancelTests.test_http_cancel_and_ownership) ... ok
+test_normal_completion_wins (test_run_cancel.RunCancelTests.test_normal_completion_wins) ... ok
+test_paused_cancel_invalidates_and_is_idempotent (test_run_cancel.RunCancelTests.test_paused_cancel_invalidates_and_is_idempotent) ... ok
+test_resume_then_cancel_publishes_once_and_waits_cleanup (test_run_cancel.RunCancelTests.test_resume_then_cancel_publishes_once_and_waits_cleanup) ... ok
+test_entire_observation_channel_failure_still_settles (test_run_events.RunEventTests.test_entire_observation_channel_failure_still_settles) ... ok
+test_every_published_fact_is_committed_and_matches_query (test_run_events.RunEventTests.test_every_published_fact_is_committed_and_matches_query) ... ok
+test_failed_settlement_and_failed_notification_preserve_storage_error (test_run_events.RunEventTests.test_failed_settlement_and_failed_notification_preserve_storage_error) ... ok
+test_message_replay_keeps_identity_and_conflict_is_not_broadcast (test_run_events.RunEventTests.test_message_replay_keeps_identity_and_conflict_is_not_broadcast) ... ok
+test_message_write_failure_does_not_publish_candidate_message (test_run_events.RunEventTests.test_message_write_failure_does_not_publish_candidate_message) ... ok
+test_publication_failure_does_not_fail_graph_or_lose_committed_facts (test_run_events.RunEventTests.test_publication_failure_does_not_fail_graph_or_lose_committed_facts) ... ok
+test_cancel_uses_abort_signal_without_cancelling_task (test_run_manager.RunManagerTests.test_cancel_uses_abort_signal_without_cancelling_task) ... ok
+test_completed_run_does_not_block_next_run_for_thread (test_run_manager.RunManagerTests.test_completed_run_does_not_block_next_run_for_thread) ... ok
+test_error_finish_commits_error_event (test_run_manager.RunManagerTests.test_error_finish_commits_error_event) ... ok
+test_finish_commits_status_event_and_closes_stream (test_run_manager.RunManagerTests.test_finish_commits_status_event_and_closes_stream) ... ok
+test_release_aborts_waits_and_removes_run (test_run_manager.RunManagerTests.test_release_aborts_waits_and_removes_run) ... ok
+test_release_is_idempotent (test_run_manager.RunManagerTests.test_release_is_idempotent) ... ok
+test_shutdown_cancels_tasks_and_removes_all_runs (test_run_manager.RunManagerTests.test_shutdown_cancels_tasks_and_removes_all_runs) ... ok
+test_terminal_status_can_only_be_committed_once (test_run_manager.RunManagerTests.test_terminal_status_can_only_be_committed_once) ... ok
+test_all_settled_states_rebuild_after_reopen (test_run_observation.ObservationTests.test_all_settled_states_rebuild_after_reopen) ... ok
+test_completion_between_run_lookup_and_registry_lookup (test_run_observation.ObservationTests.test_completion_between_run_lookup_and_registry_lookup) ... ok
+test_history_read_race_with_deltas_commit_close_and_removal (test_run_observation.ObservationTests.test_history_read_race_with_deltas_commit_close_and_removal) ... ok
+test_missing_execution_and_wrong_thread (test_run_observation.ObservationTests.test_missing_execution_and_wrong_thread) ... ok
+test_persistent_prefix_is_not_replayed_from_invocation_cache (test_run_observation.ObservationTests.test_persistent_prefix_is_not_replayed_from_invocation_cache) ... ok
+test_read_failure_and_cancel_release_subscription (test_run_observation.ObservationTests.test_read_failure_and_cancel_release_subscription) ... ok
+test_real_execution_reconnect_never_calls_graph_again (test_run_observation.ObservationTests.test_real_execution_reconnect_never_calls_graph_again) ... ok
+test_two_observers_and_close_before_iteration (test_run_observation.ObservationTests.test_two_observers_and_close_before_iteration) ... ok
+test_callbacks_include_parent_child_and_goal_once (test_run_usage.RunUsageTests.test_callbacks_include_parent_child_and_goal_once) ... Subagent bash: unavailable tools: ['bash', 'grep', 'list_dir', 'read_file', 'write_file']
+ok
+test_cancel_commits_before_cleanup_then_known_usage_arrives (test_run_usage.RunUsageTests.test_cancel_commits_before_cleanup_then_known_usage_arrives) ... ok
+test_error_keeps_reported_usage (test_run_usage.RunUsageTests.test_error_keeps_reported_usage) ... ok
+test_idempotent_settlement_and_conflicting_retry (test_run_usage.RunUsageTests.test_idempotent_settlement_and_conflicting_retry) ... ok
+test_observation_metadata_exposes_persisted_usage (test_run_usage.RunUsageTests.test_observation_metadata_exposes_persisted_usage) ... ok
+test_pause_resume_totals_visible_before_notifications (test_run_usage.RunUsageTests.test_pause_resume_totals_visible_before_notifications) ... ok
+test_shutdown_does_not_turn_unsettled_usage_into_zero (test_run_usage.RunUsageTests.test_shutdown_does_not_turn_unsettled_usage_into_zero) ... ok
+test_storage_failure_is_observable_without_false_completion (test_run_usage.RunUsageTests.test_storage_failure_is_observable_without_false_completion) ... ok
+test_usage_and_status_roll_back_together (test_run_usage.RunUsageTests.test_usage_and_status_roll_back_together) ... ok
+test_context_exit_reclaims_graph_before_closing_storage (test_runtime.CompositionTests.test_context_exit_reclaims_graph_before_closing_storage) ... invocation_lost thread_id=957fa6f7433d4afeab694a2621ffe18b run_id=feb57dc9915744248443b7d5db723d3f
+ok
+test_independent_process_blocks_http_imports (test_runtime.CompositionTests.test_independent_process_blocks_http_imports) ... ok
+test_initialization_failure_closes_store_and_checkpointer (test_runtime.CompositionTests.test_initialization_failure_closes_store_and_checkpointer) ... ok
+test_pause_commits_checkpoint_and_remains_busy_after_resource_removal (test_runtime.CompositionTests.test_pause_commits_checkpoint_and_remains_busy_after_resource_removal) ... ok
+test_real_graph_tool_messages_and_reopened_runtime (test_runtime.CompositionTests.test_real_graph_tool_messages_and_reopened_runtime) ... ok
+test_application_errors_do_not_depend_on_http (test_runtime.RuntimeTests.test_application_errors_do_not_depend_on_http) ... ok
+test_cancelled_start_caller_does_not_leave_a_committed_orphan (test_runtime.RuntimeTests.test_cancelled_start_caller_does_not_leave_a_committed_orphan) ... ok
+test_graph_error_is_a_committed_product_result (test_runtime.RuntimeTests.test_graph_error_is_a_committed_product_result) ... ok
+test_settlement_failure_is_reported_to_waiter_and_observer (test_runtime.RuntimeTests.test_settlement_failure_is_reported_to_waiter_and_observer) ... ok
+test_shutdown_does_not_pretend_to_commit_user_cancellation (test_runtime.RuntimeTests.test_shutdown_does_not_pretend_to_commit_user_cancellation) ... ok
+test_unobserved_run_commits_and_remains_readable_after_removal (test_runtime.RuntimeTests.test_unobserved_run_commits_and_remains_readable_after_removal) ... ok
+test_waiter_cancellation_does_not_stop_execution_or_settlement (test_runtime.RuntimeTests.test_waiter_cancellation_does_not_stop_execution_or_settlement) ... ok
+test_commit_failure_rolls_back_and_releases_transaction (test_runtime.TransactionTests.test_commit_failure_rolls_back_and_releases_transaction) ... ok
+test_creation_failure_and_cancellation_roll_back_all_facts (test_runtime.TransactionTests.test_creation_failure_and_cancellation_roll_back_all_facts) ... ok
+test_failed_settlement_rolls_back_state_and_lifecycle (test_runtime.TransactionTests.test_failed_settlement_rolls_back_state_and_lifecycle) ... ok
+test_first_committed_terminal_wins_and_is_not_duplicated (test_runtime.TransactionTests.test_first_committed_terminal_wins_and_is_not_duplicated) ... ok
+test_same_connection_read_waits_for_commit (test_runtime.TransactionTests.test_same_connection_read_waits_for_commit) ... ok
+test_two_connections_cannot_create_two_active_runs (test_runtime.TransactionTests.test_two_connections_cannot_create_two_active_runs) ... ok
+test_case_alias_of_new_database_is_deduplicated (test_runtime_data.RuntimeDataTests.test_case_alias_of_new_database_is_deduplicated) ... ok
+test_contender_fails_without_disturbing_owner_and_can_retry (test_runtime_data.RuntimeDataTests.test_contender_fails_without_disturbing_owner_and_can_retry) ... ok
+test_hardlink_is_rejected_before_any_database_initialization (test_runtime_data.RuntimeDataTests.test_hardlink_is_rejected_before_any_database_initialization) ... ok
+test_hardlinked_sidecar_is_rejected (test_runtime_data.RuntimeDataTests.test_hardlinked_sidecar_is_rejected) ... ok
+test_initialization_cancellation_releases_ownership (test_runtime_data.RuntimeDataTests.test_initialization_cancellation_releases_ownership) ... ok
+test_junction_parent_is_rejected (test_runtime_data.RuntimeDataTests.test_junction_parent_is_rejected) ... ok
+test_live_tool_child_does_not_keep_runtime_lock (test_runtime_data.RuntimeDataTests.test_live_tool_child_does_not_keep_runtime_lock) ... ok
+test_lock_file_cannot_be_used_as_a_database (test_runtime_data.RuntimeDataTests.test_lock_file_cannot_be_used_as_a_database) ... ok
+test_locks_remain_until_both_connections_finish_closing (test_runtime_data.RuntimeDataTests.test_locks_remain_until_both_connections_finish_closing) ... ok
+test_memory_checkpoint_does_not_lock_its_unused_path (test_runtime_data.RuntimeDataTests.test_memory_checkpoint_does_not_lock_its_unused_path) ... ok
+test_network_device_and_ambiguous_paths_are_rejected (test_runtime_data.RuntimeDataTests.test_network_device_and_ambiguous_paths_are_rejected) ... ok
+test_process_crash_releases_locks_and_keeps_sidecars (test_runtime_data.RuntimeDataTests.test_process_crash_releases_locks_and_keeps_sidecars) ... ok
+test_process_partial_overlap_rolls_back_before_database_creation (test_runtime_data.RuntimeDataTests.test_process_partial_overlap_rolls_back_before_database_creation) ... ok
+test_relative_alias_deduplicates_same_database (test_runtime_data.RuntimeDataTests.test_relative_alias_deduplicates_same_database) ... ok
+test_short_filename_alias_contends_with_long_name (test_runtime_data.RuntimeDataTests.test_short_filename_alias_contends_with_long_name) ... ok
+test_symlink_data_and_parent_are_rejected (test_runtime_data.RuntimeDataTests.test_symlink_data_and_parent_are_rejected) ... skipped 'Windows symlink privilege is unavailable'
+test_run_failure_is_lifecycle_fact_and_metadata_not_observation_error (test_server.EncoderTests.test_run_failure_is_lifecycle_fact_and_metadata_not_observation_error) ... ok
+test_serializes_sse_and_omits_ephemeral_completion_events (test_server.EncoderTests.test_serializes_sse_and_omits_ephemeral_completion_events) ... ok
+test_terminal_names_include_interrupted (test_server.EncoderTests.test_terminal_names_include_interrupted) ... ok
+test_usage_is_metadata_and_null_artifact_survives_sse (test_server.EncoderTests.test_usage_is_metadata_and_null_artifact_survives_sse) ... ok
+test_lifespan_uses_shared_context_and_releases_it (test_server.LifespanTests.test_lifespan_uses_shared_context_and_releases_it) ... ok
+test_owned_runtime_releases_resources_after_request_failure (test_server.LifespanTests.test_owned_runtime_releases_resources_after_request_failure) ... ok
+test_busy_thread_returns_conflict (test_server.ServerTests.test_busy_thread_returns_conflict) ... ok
+test_get_existing_stream_rebuilds_and_rejects_cursors (test_server.ServerTests.test_get_existing_stream_rebuilds_and_rejects_cursors) ... ok
+test_get_response_send_failure_releases_unstarted_observation (test_server.ServerTests.test_get_response_send_failure_releases_unstarted_observation) ... ok
+test_http_disconnect_leaves_execution_and_commit_running (test_server.ServerTests.test_http_disconnect_leaves_execution_and_commit_running) ... ok
+test_http_uses_shared_start_and_returns_matching_committed_terminal (test_server.ServerTests.test_http_uses_shared_start_and_returns_matching_committed_terminal) ... ok
+test_real_agent_through_http_uses_same_persistence_path (test_server.ServerTests.test_real_agent_through_http_uses_same_persistence_path) ... ok
+test_registered_routes_creation_and_not_found (test_server.ServerTests.test_registered_routes_creation_and_not_found) ... ok
+test_running_without_local_execution_returns_retryable_503 (test_server.ServerTests.test_running_without_local_execution_returns_retryable_503) ... ok
+test_storage_failure_has_no_success_terminal (test_server.ServerTests.test_storage_failure_has_no_success_terminal) ... ok
+test_storage_identity_conflicts_map_to_409 (test_server.ServerTests.test_storage_identity_conflicts_map_to_409) ... ok
+test_config_defaults_and_validation (test_sqlite_checkpointer.SqliteCheckpointerTests.test_config_defaults_and_validation) ... ok
+test_creates_database_and_reads_an_empty_thread (test_sqlite_checkpointer.SqliteCheckpointerTests.test_creates_database_and_reads_an_empty_thread) ... ok
+test_memory_is_independent_and_does_not_create_files (test_sqlite_checkpointer.SqliteCheckpointerTests.test_memory_is_independent_and_does_not_create_files) ... ok
+test_omitted_config_uses_loader_once (test_sqlite_checkpointer.SqliteCheckpointerTests.test_omitted_config_uses_loader_once) ... ok
+test_persists_across_reopen_and_closes_on_exception (test_sqlite_checkpointer.SqliteCheckpointerTests.test_persists_across_reopen_and_closes_on_exception) ... ok
+test_setup_failure_closes_connection (test_sqlite_checkpointer.SqliteCheckpointerTests.test_setup_failure_closes_connection) ... ok
+test_concurrent_same_message_has_one_new_fact (test_storage_contracts.StorageContractTests.test_concurrent_same_message_has_one_new_fact) ... ok
+test_creation_and_settlement_return_readable_committed_facts (test_storage_contracts.StorageContractTests.test_creation_and_settlement_return_readable_committed_facts) ... ok
+test_database_rejects_second_nonterminal_even_without_store_api (test_storage_contracts.StorageContractTests.test_database_rejects_second_nonterminal_even_without_store_api) ... ok
+test_identity_conflict_is_application_error_and_rolls_back (test_storage_contracts.StorageContractTests.test_identity_conflict_is_application_error_and_rolls_back) ... ok
+test_journal_cannot_bypass_identity_or_conflict_checks (test_storage_contracts.StorageContractTests.test_journal_cannot_bypass_identity_or_conflict_checks) ... ok
+test_message_commit_failure_and_cancellation_roll_back (test_storage_contracts.StorageContractTests.test_message_commit_failure_and_cancellation_roll_back) ... ok
+test_pause_replay_returns_original_checkpoint_fact (test_storage_contracts.StorageContractTests.test_pause_replay_returns_original_checkpoint_fact) ... ok
+test_reordered_payload_is_idempotent_and_conflicts_are_unchanged (test_storage_contracts.StorageContractTests.test_reordered_payload_is_idempotent_and_conflicts_are_unchanged) ... ok
+test_settlement_cancellation_rolls_back_and_can_retry (test_storage_contracts.StorageContractTests.test_settlement_cancellation_rolls_back_and_can_retry) ... ok
+test_tool_fallback_and_invalid_messages (test_storage_contracts.StorageContractTests.test_tool_fallback_and_invalid_messages) ... ok
+test_broadcasts_each_event_to_every_subscriber (test_stream.StreamTests.test_broadcasts_each_event_to_every_subscriber) ... ok
+test_cancellation_while_processing_releases_via_finally (test_stream.StreamTests.test_cancellation_while_processing_releases_via_finally) ... ok
+test_cancellation_while_waiting_releases_subscription (test_stream.StreamTests.test_cancellation_while_waiting_releases_subscription) ... ok
+test_closes_subscription_before_first_iteration (test_stream.StreamTests.test_closes_subscription_before_first_iteration) ... ok
+test_closing_one_observer_keeps_other_observer_active (test_stream.StreamTests.test_closing_one_observer_keeps_other_observer_active) ... ok
+test_keeps_transport_projection_out_of_stream_events (test_stream.StreamTests.test_keeps_transport_projection_out_of_stream_events) ... ok
+test_registers_before_iteration_and_preserves_event_order (test_stream.StreamTests.test_registers_before_iteration_and_preserves_event_order) ... ok
+test_replays_buffered_events_to_late_subscribers (test_stream.StreamTests.test_replays_buffered_events_to_late_subscribers) ... ok
+test_stream_close_wakes_waiting_observer (test_stream.StreamTests.test_stream_close_wakes_waiting_observer) ... ok
+test_bash_agent_only_receives_workspace_tools (test_task_tool.TaskToolTests.test_bash_agent_only_receives_workspace_tools) ... ok
+test_delegation_uses_configured_child_tools (test_task_tool.TaskToolTests.test_delegation_uses_configured_child_tools) ... Subagent bash: unavailable tools: ['bash', 'write_file']
+Subagent bash: unavailable tools: ['bash', 'write_file']
+Subagent bash: unavailable tools: ['bash', 'grep', 'list_dir', 'read_file', 'write_file']
+Subagent bash: unavailable tools: ['bash', 'grep', 'list_dir', 'read_file', 'write_file']
+ok
+test_explicit_json_checkpoint_restores_conversation (test_task_tool.TaskToolTests.test_explicit_json_checkpoint_restores_conversation) ... Executing <Task pending name='Task-5227' coro=<TaskToolTests.test_explicit_json_checkpoint_restores_conversation() running at C:\code\shikigen-agent\tests\test_task_tool.py:124> wait_for=<Task pending name='Task-5259' coro=<RunnableCallable.ainvoke() running at C:\code\shikigen-agent\.venv\Lib\site-packages\langgraph\_internal\_runnable.py:431> cb=[Task.task_wakeup()] created at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\tasks.py:422> cb=[_run_until_complete_cb() at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\base_events.py:181] created at C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\runners.py:100> took 0.453 seconds
+ok
+test_lead_agent_can_delegate_to_the_task_tool (test_task_tool.TaskToolTests.test_lead_agent_can_delegate_to_the_task_tool) ... ok
+test_lead_agent_runs_without_checkpoint_or_thread_id (test_task_tool.TaskToolTests.test_lead_agent_runs_without_checkpoint_or_thread_id) ... ok
+test_rejects_an_unknown_agent_type (test_task_tool.TaskToolTests.test_rejects_an_unknown_agent_type) ... ok
+test_returns_text_from_structured_model_content (test_task_tool.TaskToolTests.test_returns_text_from_structured_model_content) ... ok
+test_makes_surrogateescape_text_json_encodable (test_text_safety.ReplaceSurrogatesTests.test_makes_surrogateescape_text_json_encodable) ... ok
+test_preserves_valid_utf8_text (test_text_safety.ReplaceSurrogatesTests.test_preserves_valid_utf8_text) ... ok
+test_tracks_legacy_token_usage (test_token_tracker.TokenTrackerTests.test_tracks_legacy_token_usage) ... ok
+test_tracks_usage_metadata_by_model (test_token_tracker.TokenTrackerTests.test_tracks_usage_metadata_by_model) ... ok
+test_builtin_registry_includes_filesystem_tools (test_tool_registry.BuiltinToolRegistryTests.test_builtin_registry_includes_filesystem_tools) ... ok
+test_excluding_all_or_no_tools_returns_independent_registry (test_tool_registry.ToolRegistryTests.test_excluding_all_or_no_tools_returns_independent_registry) ... ok
+test_excluding_preserves_source_order_and_tool_identity (test_tool_registry.ToolRegistryTests.test_excluding_preserves_source_order_and_tool_identity) ... ok
+test_register_many_skips_duplicates (test_tool_registry.ToolRegistryTests.test_register_many_skips_duplicates) ... ok
+test_register_skips_duplicate_and_logs_a_warning (test_tool_registry.ToolRegistryTests.test_register_skips_duplicate_and_logs_a_warning) ... ok
+test_registries_do_not_share_tools (test_tool_registry.ToolRegistryTests.test_registries_do_not_share_tools) ... ok
+
+----------------------------------------------------------------------
+Ran 257 tests in 224.805s
+
+OK (skipped=1)

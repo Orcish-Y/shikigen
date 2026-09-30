@@ -1,3 +1,4 @@
+import { useBackendState } from "./useBackendState";
 import { useEffect, useState } from "react";
 import {
   IconContext,
@@ -24,6 +25,8 @@ function initialCollapsed() {
 }
 
 export default function App() {
+  const backend = useBackendState();
+  const backendReady = backend.desktop && backend.snapshot?.state === "ready";
   const [collapsed, setCollapsed] = useState(initialCollapsed);
   const [sessions, setSessions] = useState<Session[]>(demoSessions);
   const [activeId, setActiveId] = useState(demoSessions[0].id);
@@ -103,6 +106,26 @@ export default function App() {
     return () => window.removeEventListener("keydown", keydown);
   }, []);
 
+  if (backend.desktop && (backend.error || backend.snapshot?.state !== "ready")) {
+    const state = backend.snapshot;
+    const labels = {
+      starting: "正在启动后端",
+      ready: "后端已就绪",
+      stopping: "正在关闭后端",
+      reclaiming: "正在回收后端进程",
+      failed: "后端启动或运行失败",
+      stopped: "后端已停止",
+    };
+    return (
+      <main className="backend-screen" aria-live="polite">
+        <img src="/logo.svg" alt="" width="40" height="40" />
+        <h1>{backend.error ? "无法读取后端状态" : labels[state?.state ?? "starting"]}</h1>
+        <p>{backend.error ?? state?.error?.message ?? "正在准备运行环境，请稍候。"}</p>
+        {state?.state === "failed" && <p>修正问题后请关闭并重新打开应用。</p>}
+      </main>
+    );
+  }
+
   return (
     <IconContext.Provider value={{ weight: "regular", size: 18 }}>
       <div
@@ -116,7 +139,7 @@ export default function App() {
           </div>
           <span className="app-connection">
             <span className="status-dot" />
-            后端未连接
+            {backend.desktop ? "后端已就绪" : "后端未连接"}
           </span>
           <button
             className="text-button"
@@ -137,6 +160,7 @@ export default function App() {
             />
           )}
           <Navigation
+            backendReady={backendReady}
             collapsed={collapsed}
             onToggle={toggleNavigation}
             onCommands={() => setOverlay("commands")}
@@ -200,6 +224,7 @@ export default function App() {
               }}
             />
             <Composer
+              backendReady={backendReady}
               draft={drafts[activeId] ?? ""}
               onChange={updateDraft}
               onCommands={() => setOverlay("commands")}

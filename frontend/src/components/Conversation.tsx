@@ -133,11 +133,13 @@ export function Conversation({
 }
 
 export function Composer({
+  backendReady,
   draft,
   onChange,
   onCommands,
   shortcut,
 }: {
+  backendReady: boolean;
   draft: string;
   onChange: (text: string) => void;
   onCommands: () => void;
@@ -157,12 +159,12 @@ export function Composer({
         <div className="composer-toolbar">
           <span className="composer-status">
             <span className="status-dot" />
-            后端未连接 · 可编辑草稿
+            {backendReady ? "后端已就绪" : "后端未连接"} · 可编辑草稿
           </span>
           <button
             className="primary-button"
             disabled
-            title="连接后端后可发送消息"
+            title="当前为界面预览，暂不支持发送消息"
           >
             发送
             <ArrowUp size={16} />
