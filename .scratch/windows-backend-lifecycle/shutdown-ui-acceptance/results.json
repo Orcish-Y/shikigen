@@ -1,0 +1,26 @@
+[
+  {
+    "check": "unconfirmed_keeps_error_window",
+    "host_pid": 29332,
+    "snapshot": {
+      "state": "failed",
+      "revision": 6,
+      "startup_id": "6215cbed-60f0-4284-b55e-bb3b27f850cf",
+      "base_url": null,
+      "can_retry": false,
+      "error": {
+        "code": "reclamation_unconfirmed",
+        "message": "无法确认后端已完全退出"
+      }
+    },
+    "text": "后端启动或运行失败\n\n无法确认后端已完全退出\n\n正在继续确认退出状态，请保持此窗口打开。"
+  },
+  {
+    "check": "repeated_close_keeps_window",
+    "passed": true
+  },
+  {
+    "check": "later_confirmation_exits_and_releases_process_port_and_data",
+    "passed": true
+  }
+]

@@ -31,7 +31,7 @@ fn main() {
     }
     manager.request_shutdown();
     loop {
-        if matches!(manager.snapshot().state.as_str(), "stopped" | "failed") {
+        if manager.snapshot().state == "stopped" {
             break;
         }
         thread::sleep(Duration::from_millis(10));

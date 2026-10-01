@@ -74,9 +74,25 @@ fn bound_is_probed_before_publishing_ready_and_shutdown_revokes_address() {
     assert!(ready.base_url.unwrap().starts_with("http://127.0.0.1:"));
     assert!(!ready.can_retry);
     manager.request_shutdown();
+    assert!(manager.snapshot().base_url.is_none());
     let stopped = wait_state(&manager, "stopped");
     assert!(stopped.base_url.is_none());
     assert!(stopped.revision > ready.revision);
+}
+
+#[test]
+fn shutdown_after_resource_free_failure_completes_without_cleanup_phases() {
+    let manager = BackendManager::start(
+        LaunchPlan::from_root(std::path::Path::new("Z:/missing shikigen project")),
+        Arc::new(shikigen_desktop_lib::process::spawn),
+        Arc::new(|_| {}),
+    );
+    let failed = wait_state(&manager, "failed");
+    manager.request_shutdown();
+    let stopped = manager.snapshot();
+    assert_eq!(stopped.state, "stopped");
+    assert_eq!(stopped.revision, failed.revision + 1);
+    assert_eq!(stopped.error.unwrap().code, "project_path");
 }
 
 #[test]

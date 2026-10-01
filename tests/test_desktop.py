@@ -211,6 +211,66 @@ class DesktopTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(process.returncode, 0, stderr.decode())
     self.assertEqual(stdout, b"")
 
+  async def test_shutdown_or_eof_cancels_initialization_and_releases_data(self):
+    root = Path(self.directory.name)
+    for command in ("shutdown", "eof"):
+      with self.subTest(command=command):
+        (root / "initializing").unlink(missing_ok=True)
+        (root / "initialization-cancelled").unlink(missing_ok=True)
+        process = await self.launch(env={"DESKTOP_TEST_BLOCK_INIT": "1"})
+        await self.bound(process)
+        async with asyncio.timeout(20):
+          while not (root / "initializing").exists():
+            await asyncio.sleep(0.02)
+        if command == "shutdown":
+          process.stdin.write(
+            b'{"version":1,"startup_id":"test-start","type":"shutdown"}\n'
+          )
+          await process.stdin.drain()
+        else:
+          process.stdin.close()
+        stdout, stderr = await asyncio.wait_for(process.communicate(), 3)
+        self.assertEqual(process.returncode, 0, stderr.decode())
+        self.assertEqual(stdout, b"")
+        self.assertTrue((root / "initialization-cancelled").exists())
+        # A fresh runtime must acquire the same DB and serve normally.
+        successor = await self.launch()
+        await self.ready(await self.bound(successor))
+        successor.stdin.close()
+        await asyncio.wait_for(successor.wait(), 20)
+        self.assertEqual(successor.returncode, 0)
+
+  async def test_shutdown_cancels_execution_while_sse_connection_is_open(self):
+    process = await self.launch(env={"DESKTOP_TEST_EXECUTING": "1"})
+    port = await self.bound(process)
+    await self.ready(port)
+    async with httpx.AsyncClient(trust_env=False) as client:
+      base = f"http://127.0.0.1:{port}"
+      created = await client.post(base + "/api/threads")
+      thread_id = created.json()["thread_id"]
+      async with client.stream(
+        "POST", base + f"/api/threads/{thread_id}/stream", json={"message": "wait"}
+      ) as response:
+        self.assertEqual(response.status_code, 200)
+        async with asyncio.timeout(10):
+          while not (Path(self.directory.name) / "executing").exists():
+            await asyncio.sleep(0.02)
+        process.stdin.write(
+          b'{"version":1,"startup_id":"test-start","type":"shutdown"}\n'
+        )
+        await process.stdin.drain()
+        # The client keeps its SSE response open until after the backend exits.
+        stdout, stderr = await asyncio.wait_for(process.communicate(), 5)
+        self.assertEqual(process.returncode, 0, stderr.decode())
+        self.assertEqual(stdout, b"")
+        body = await response.aread()
+        self.assertIn(b'"code":"execution_stopped"', body)
+        self.assertTrue((Path(self.directory.name) / "cleaning").exists())
+    successor = await self.launch()
+    await self.ready(await self.bound(successor))
+    successor.stdin.close()
+    await asyncio.wait_for(successor.wait(), 20)
+
   async def test_message_size_boundary_and_partial_eof(self):
     message = b'{"version":1,"startup_id":"test-start","type":"shutdown"}'
     process = await self.launch()

@@ -1,0 +1,11 @@
+test_independent_entry_contention_reports_original_ownership_error (__main__.NativeAcceptance.test_independent_entry_contention_reports_original_ownership_error) ... ok
+test_killing_only_host_reclaims_backend_and_tool_but_not_external_service (__main__.NativeAcceptance.test_killing_only_host_reclaims_backend_and_tool_but_not_external_service) ... ok
+test_killing_python_reclaims_the_remaining_tool (__main__.NativeAcceptance.test_killing_python_reclaims_the_remaining_tool) ... ok
+test_quit_during_cancellable_initialization_reclaims_descendants (__main__.NativeAcceptance.test_quit_during_cancellable_initialization_reclaims_descendants) ... ok
+test_quit_during_execution_with_persistent_sse_and_stuck_cleanup (__main__.NativeAcceptance.test_quit_during_execution_with_persistent_sse_and_stuck_cleanup) ... ok
+test_startup_timeout_forces_stuck_initialization_and_preserves_reason (__main__.NativeAcceptance.test_startup_timeout_forces_stuck_initialization_and_preserves_reason) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 47.539s
+
+OK

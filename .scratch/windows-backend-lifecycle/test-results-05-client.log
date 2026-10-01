@@ -1,0 +1,10 @@
+✔ subscribe before querying and ignore an older query result (6.7765ms)
+✔ unmount during subscription releases the late listener and does not query (2.76ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 277.9074
