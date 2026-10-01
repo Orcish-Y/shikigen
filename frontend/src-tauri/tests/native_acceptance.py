@@ -235,7 +235,7 @@ with patch("shikigen.runtime.composition.create_lead_agent", new=deterministic_a
     host = self.host()
     failed = host.state("failed")
     self.assertIsNone(failed["base_url"])
-    self.assertFalse(failed["can_retry"])
+    self.assertTrue(failed["can_retry"])
     self.assertIn("in use", failed["error"]["message"].lower())
     self.assertIsNone(independent.poll())
 

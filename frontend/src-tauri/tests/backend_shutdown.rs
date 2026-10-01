@@ -81,7 +81,7 @@ fn managed_fault(
     let spawned = Arc::new(AtomicBool::new(false));
     let launched = spawned.clone();
     let manager = BackendManager::start(
-        Ok(plan),
+        Arc::new(move || Ok(plan.clone())),
         Arc::new(move |spec| {
             let child = process::spawn(&SpawnSpec {
                 executable: spec.executable.clone(),
@@ -135,6 +135,10 @@ fn late_confirmation_restores_original_fault_without_automatically_stopping() {
     let (manager, _) = managed_fault(gate.clone(), false);
     let failed = wait_for(&manager, |s| s.state == "failed");
     assert_eq!(failed.error.unwrap().code, "reclamation_unconfirmed");
+    let refused = manager.retry();
+    assert!(!refused.accepted);
+    assert!(refused.reason.is_some());
+    assert_eq!(refused.snapshot.revision, failed.revision);
     gate.store(OBSERVATION_OK, Ordering::SeqCst);
     let recovered = wait_for(&manager, |s| {
         s.error
@@ -143,6 +147,7 @@ fn late_confirmation_restores_original_fault_without_automatically_stopping() {
             && s.state == "failed"
     });
     assert!(recovered.revision > failed.revision);
+    assert!(recovered.can_retry);
     manager.request_shutdown();
     assert_eq!(manager.snapshot().state, "stopped");
 }
@@ -170,7 +175,7 @@ fn quit_wins_late_health_and_the_cleanup_budget_includes_probe_time() {
     let events = Arc::new(Mutex::new(Vec::<BackendSnapshot>::new()));
     let published = events.clone();
     let manager = BackendManager::start(
-        Ok(plan),
+        Arc::new(move || Ok(plan.clone())),
         Arc::new(move |spec| {
             let mut args = spec.args.clone();
             args.splice(

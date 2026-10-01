@@ -31,7 +31,7 @@ fn main() {
     let root = PathBuf::from(std::env::args_os().nth(1).expect("isolated project path"));
     let release = root.join("allow-observation");
     shikigen_desktop_lib::run_with_backend(
-        LaunchPlan::from_root(&root),
+        Arc::new(move || LaunchPlan::from_root(&root)),
         Arc::new(move |spec: &SpawnSpec| {
             Ok(Box::new(QueryFault {
                 child: process::spawn(spec)?,

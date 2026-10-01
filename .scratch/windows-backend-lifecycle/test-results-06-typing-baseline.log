@@ -1,0 +1,110 @@
+Baseline fixture typing (unchanged diagnostics; not a production gate)
+error[invalid-method-override]: Invalid override of method `log_message`
+   --> .scratch\windows-backend-lifecycle\typing-baseline-backend_stub.py:64:7
+    |
+ 64 |   def log_message(self, *_):
+    |       ^^^^^^^^^^^^^^^^^^^^^ Definition is incompatible with `BaseHTTPRequestHandler.log_message`
+    |
+   ::: stdlib\http\server.pyi:275:9
+    |
+275 |     def log_message(self, format: str, *args: Any) -> None:
+    |         -------------------------------------------------- `BaseHTTPRequestHandler.log_message` defined here
+info: parameter `format` is missing
+info: This violates the Liskov Substitution Principle
+
+error[not-iterable]: Object of type `IO[str] | None` may not be iterable
+  --> .scratch\windows-backend-lifecycle\typing-baseline-native_acceptance.py:42:19
+   |
+42 |       for line in self.process.stdout:
+   |                   ^^^^^^^^^^^^^^^^^^^
+info: It may not have an `__iter__` method and it doesn't have a `__getitem__` method
+info: `None` does not implement `__iter__`
+
+error[unresolved-attribute]: Attribute `read` is not defined on `None` in union `IO[str] | None`
+  --> .scratch\windows-backend-lifecycle\typing-baseline-native_acceptance.py:55:32
+   |
+55 |           raise AssertionError(self.process.stderr.read()) from None
+   |                                ^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `write` is not defined on `None` in union `IO[str] | None`
+  --> .scratch\windows-backend-lifecycle\typing-baseline-native_acceptance.py:66:7
+   |
+66 |       self.process.stdin.write("shutdown\n")
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `flush` is not defined on `None` in union `IO[str] | None`
+  --> .scratch\windows-backend-lifecycle\typing-baseline-native_acceptance.py:67:7
+   |
+67 |       self.process.stdin.flush()
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `close` is not defined on `None` in union `IO[str] | None`
+  --> .scratch\windows-backend-lifecycle\typing-baseline-native_acceptance.py:74:7
+   |
+74 |       stream.close()
+   |       ^^^^^^^^^^^^
+
+error[unresolved-attribute]: Object of type `int` has no attribute `Close`
+   --> .scratch\windows-backend-lifecycle\typing-baseline-native_acceptance.py:157:23
+    |
+157 |       self.addCleanup(handle.Close)
+    |                       ^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `close` is not defined on `None` in union `IO[str] | None`
+   --> .scratch\windows-backend-lifecycle\typing-baseline-native_acceptance.py:218:7
+    |
+218 |       independent.stdout.close()
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `readline` is not defined on `None` in union `IO[str] | None`
+   --> .scratch\windows-backend-lifecycle\typing-baseline-native_acceptance.py:221:24
+    |
+221 |     bound = json.loads(independent.stdout.readline())
+    |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[invalid-assignment]: Invalid subscript assignment with key of type `Literal["startup_timeout_seconds"]` and value of type `Literal[20]` on object of type `dict[str, str]`
+   --> .scratch\windows-backend-lifecycle\typing-baseline-native_acceptance.py:273:5
+    |
+273 |     self.config["backend"]["startup_timeout_seconds"] = 20
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^--
+    |                                                         |
+    |                                                         Expected value of type `str`, got `Literal[20]`
+info: The full type of the subscripted object is `dict[Unknown, Unknown] | dict[str, str] | dict[str, int]`
+
+error[invalid-assignment]: Invalid subscript assignment with key of type `Literal["startup_timeout_seconds"]` and value of type `Literal[6]` on object of type `dict[str, str]`
+   --> .scratch\windows-backend-lifecycle\typing-baseline-native_acceptance.py:296:5
+    |
+296 |     self.config["backend"]["startup_timeout_seconds"] = 6
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^-
+    |                                                         |
+    |                                                         Expected value of type `str`, got `Literal[6]`
+info: The full type of the subscripted object is `dict[Unknown, Unknown] | dict[str, str] | dict[str, int]`
+
+error[invalid-assignment]: Invalid subscript assignment with key of type `Literal["shutdown_timeout_seconds"]` and value of type `float*` on object of type `dict[str, int]`
+   --> .scratch\windows-backend-lifecycle\typing-baseline-native_acceptance.py:297:5
+    |
+297 |     self.config["backend"]["shutdown_timeout_seconds"] = 0.5
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^---
+    |                                                          |
+    |                                                          Expected value of type `int`, got `float*`
+info: The full type of the subscripted object is `dict[Unknown, Unknown] | dict[str, str] | dict[str, int]`
+
+error[invalid-assignment]: Invalid subscript assignment with key of type `Literal["shutdown_timeout_seconds"]` and value of type `float*` on object of type `dict[str, str]`
+   --> .scratch\windows-backend-lifecycle\typing-baseline-native_acceptance.py:297:5
+    |
+297 |     self.config["backend"]["shutdown_timeout_seconds"] = 0.5
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^---
+    |                                                          |
+    |                                                          Expected value of type `str`, got `float*`
+info: The full type of the subscripted object is `dict[Unknown, Unknown] | dict[str, str] | dict[str, int]`
+
+error[invalid-assignment]: Invalid subscript assignment with key of type `Literal["shutdown_timeout_seconds"]` and value of type `Literal[1]` on object of type `dict[str, str]`
+   --> .scratch\windows-backend-lifecycle\typing-baseline-native_acceptance.py:314:5
+    |
+314 |     self.config["backend"]["shutdown_timeout_seconds"] = 1
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^-
+    |                                                          |
+    |                                                          Expected value of type `str`, got `Literal[1]`
+info: The full type of the subscripted object is `dict[Unknown, Unknown] | dict[str, str] | dict[str, int]`
+
+Found 14 diagnostics

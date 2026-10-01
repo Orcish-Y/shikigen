@@ -9,19 +9,21 @@ fn get_backend_state(manager: tauri::State<'_, Arc<BackendManager>>) -> BackendS
     manager.snapshot()
 }
 
+#[tauri::command]
+fn retry_backend(manager: tauri::State<'_, Arc<BackendManager>>) -> backend::RetryResult {
+    manager.inner().retry()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    run_with_backend(LaunchPlan::development(), Arc::new(process::spawn));
+    run_with_backend(Arc::new(LaunchPlan::development), Arc::new(process::spawn));
 }
 
 /// The native acceptance host supplies an isolated project and platform faults.
 /// The shipped entry always uses the development plan and Windows adapter.
-pub fn run_with_backend(
-    plan: Result<LaunchPlan, backend::BackendError>,
-    launcher: backend::Launcher,
-) {
+pub fn run_with_backend(load_plan: backend::PlanLoader, launcher: backend::Launcher) {
     let app = tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![get_backend_state])
+        .invoke_handler(tauri::generate_handler![get_backend_state, retry_backend])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 let manager = window.state::<Arc<BackendManager>>();
@@ -35,7 +37,7 @@ pub fn run_with_backend(
         .setup(move |app| {
             let handle = app.handle().clone();
             let manager = BackendManager::start(
-                plan,
+                load_plan,
                 launcher,
                 Arc::new(move |snapshot| {
                     let _ = handle.emit("backend-state-changed", &snapshot);

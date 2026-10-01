@@ -125,9 +125,17 @@ export default function App() {
           <p>
             {state.error?.code === "reclamation_unconfirmed"
               ? "正在继续确认退出状态，请保持此窗口打开。"
-              : "修正问题后请关闭并重新打开应用。"}
+              : state.can_retry
+                ? "修正问题后，可以手动重试启动后端。"
+                : "正在处理退出，请稍候。"}
           </p>
         )}
+        {state?.state === "failed" && (
+          <button className="secondary-button" disabled={!state.can_retry || backend.retrying} onClick={() => void backend.retry()}>
+            {backend.retrying ? "正在请求重试…" : "重试启动后端"}
+          </button>
+        )}
+        {backend.retryError && <p role="alert">{backend.retryError}</p>}
       </main>
     );
   }

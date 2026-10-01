@@ -26,8 +26,27 @@ pub struct BackendSnapshot {
     pub can_retry: bool,
     pub error: Option<BackendError>,
 }
+impl BackendSnapshot {
+    fn starting(revision: u64) -> Self {
+        Self {
+            state: "starting".into(),
+            revision,
+            startup_id: Some(uuid::Uuid::new_v4().to_string()),
+            base_url: None,
+            can_retry: false,
+            error: None,
+        }
+    }
+}
 pub type Launcher =
     Arc<dyn Fn(&SpawnSpec) -> std::io::Result<Box<dyn ManagedProcess>> + Send + Sync>;
+pub type PlanLoader = Arc<dyn Fn() -> Result<LaunchPlan, BackendError> + Send + Sync>;
+#[derive(Clone, Debug, Serialize)]
+pub struct RetryResult {
+    pub accepted: bool,
+    pub reason: Option<String>,
+    pub snapshot: BackendSnapshot,
+}
 struct ManagerState {
     snapshot: BackendSnapshot,
     shutdown_at: Option<Instant>,
@@ -36,37 +55,74 @@ struct ManagerState {
 pub struct BackendManager {
     state: Mutex<ManagerState>,
     stop: AtomicBool,
+    load_plan: PlanLoader,
+    launcher: Launcher,
     publish: Arc<dyn Fn(BackendSnapshot) + Send + Sync>,
 }
 impl BackendManager {
-    /// Called once by host setup. Web commands only read the existing manager.
+    /// Called once by host setup. Each accepted attempt loads its own plan.
     pub fn start(
-        plan: Result<LaunchPlan, BackendError>,
+        load_plan: PlanLoader,
         launcher: Launcher,
         publish: Arc<dyn Fn(BackendSnapshot) + Send + Sync>,
     ) -> Arc<Self> {
         let manager = Arc::new(Self {
             state: Mutex::new(ManagerState {
-                snapshot: BackendSnapshot {
-                    state: "starting".into(),
-                    revision: 1,
-                    startup_id: Some(uuid::Uuid::new_v4().to_string()),
-                    base_url: None,
-                    can_retry: false,
-                    error: None,
-                },
+                snapshot: BackendSnapshot::starting(1),
                 shutdown_at: None,
                 released: false,
             }),
             stop: AtomicBool::new(false),
+            load_plan,
+            launcher,
             publish,
         });
-        let worker = manager.clone();
-        thread::spawn(move || match plan {
-            Err(error) => worker.finish(Some(error)),
-            Ok(plan) => worker.run(plan, launcher),
-        });
+        manager.launch(manager.snapshot().startup_id.unwrap());
         manager
+    }
+    fn launch(self: &Arc<Self>, id: String) {
+        let worker = self.clone();
+        thread::spawn(move || {
+            if worker.stop.load(Ordering::SeqCst) {
+                worker.finish(&id, None);
+                return;
+            }
+            match (worker.load_plan)() {
+                Err(error) => worker.finish(&id, Some(error)),
+                Ok(plan) => worker.run(plan, &id),
+            }
+        });
+    }
+    pub fn retry(self: &Arc<Self>) -> RetryResult {
+        let snapshot = {
+            let mut current = self.state.lock().unwrap();
+            let reason = if current.shutdown_at.is_some() {
+                Some("应用正在退出，不能重试")
+            } else if !current.released {
+                Some("后端正在运行或尚未确认完全回收")
+            } else if current.snapshot.state != "failed" || !current.snapshot.can_retry {
+                Some("当前状态不能重试")
+            } else {
+                None
+            };
+            if let Some(reason) = reason {
+                return RetryResult {
+                    accepted: false,
+                    reason: Some(reason.into()),
+                    snapshot: current.snapshot.clone(),
+                };
+            }
+            current.released = false;
+            current.snapshot = BackendSnapshot::starting(current.snapshot.revision + 1);
+            current.snapshot.clone()
+        };
+        (self.publish)(snapshot.clone());
+        self.launch(snapshot.startup_id.clone().unwrap());
+        RetryResult {
+            accepted: true,
+            reason: None,
+            snapshot,
+        }
     }
     pub fn snapshot(&self) -> BackendSnapshot {
         self.state.lock().unwrap().snapshot.clone()
@@ -85,6 +141,7 @@ impl BackendManager {
                 current.snapshot.state = "stopping".into();
             }
             current.snapshot.base_url = None;
+            current.snapshot.can_retry = false;
             current.snapshot.revision += 1;
             current.snapshot.clone()
         };
@@ -92,9 +149,12 @@ impl BackendManager {
     }
     /// Only called when there were no resources or both observations confirmed
     /// completion. Serialize completion with a possibly concurrent quit request.
-    fn finish(&self, error: Option<BackendError>) {
+    fn finish(&self, id: &str, error: Option<BackendError>) {
         let snapshot = {
             let mut current = self.state.lock().unwrap();
+            if current.snapshot.startup_id.as_deref() != Some(id) {
+                return;
+            }
             current.released = true;
             current.snapshot.state = if current.shutdown_at.is_some() {
                 "stopped"
@@ -103,34 +163,43 @@ impl BackendManager {
             }
             .into();
             current.snapshot.base_url = None;
+            current.snapshot.can_retry = current.shutdown_at.is_none();
             current.snapshot.error = error;
             current.snapshot.revision += 1;
             current.snapshot.clone()
         };
         (self.publish)(snapshot);
     }
-    fn transition(&self, state: &str, base_url: Option<String>, error: Option<BackendError>) {
+    fn transition(
+        &self,
+        id: &str,
+        state: &str,
+        base_url: Option<String>,
+        error: Option<BackendError>,
+    ) {
         let snapshot = {
             let mut current = self.state.lock().unwrap();
             // Serialize ready with shutdown requests through this same lock.
-            if state == "ready" && self.stop.load(Ordering::SeqCst) {
+            if current.snapshot.startup_id.as_deref() != Some(id)
+                || (state == "ready" && self.stop.load(Ordering::SeqCst))
+            {
                 return;
             }
             current.snapshot.revision += 1;
             current.snapshot.state = state.into();
             current.snapshot.base_url = base_url;
             current.snapshot.error = error;
+            current.snapshot.can_retry = false;
             current.snapshot.clone()
         };
         (self.publish)(snapshot);
     }
-    fn run(&self, plan: LaunchPlan, launcher: Launcher) {
+    fn run(&self, plan: LaunchPlan, id: &str) {
         if self.stop.load(Ordering::SeqCst) {
-            self.finish(None);
+            self.finish(id, None);
             return;
         }
         let started = Instant::now();
-        let id = self.snapshot().startup_id.unwrap();
         let spec = SpawnSpec {
             executable: plan.python,
             cwd: plan.root,
@@ -140,16 +209,16 @@ impl BackendManager {
                 "--config".into(),
                 plan.config_path.into_os_string(),
                 "--startup-id".into(),
-                id.clone().into(),
+                id.into(),
                 "--port".into(),
                 plan.config.port.to_string().into(),
             ],
             env: vec![],
         };
-        let mut process = match launcher(&spec) {
+        let mut process = match (self.launcher)(&spec) {
             Ok(value) => value,
             Err(error) => {
-                self.finish(Some(BackendError::new("spawn", format!("无法启动项目 Python：{error}。请先在项目根目录运行 uv sync；移动项目后重新构建桌面应用"))));
+                self.finish(id, Some(BackendError::new("spawn", format!("无法启动项目 Python：{error}。请先在项目根目录运行 uv sync；移动项目后重新构建桌面应用"))));
                 return;
             }
         };
@@ -158,7 +227,7 @@ impl BackendManager {
             self.cleanup(
                 process.as_ref(),
                 None,
-                &id,
+                id,
                 plan.config.shutdown_timeout_seconds,
                 Some(error),
             );
@@ -171,7 +240,7 @@ impl BackendManager {
             process.as_ref(),
             &messages,
             &logs,
-            &id,
+            id,
             started,
             plan.config.startup_timeout_seconds,
         );
@@ -181,7 +250,7 @@ impl BackendManager {
         self.cleanup(
             process.as_ref(),
             Some(&mut input),
-            &id,
+            id,
             plan.config.shutdown_timeout_seconds,
             result.err(),
         );
@@ -289,7 +358,7 @@ impl BackendManager {
                         true if !self.stop.load(Ordering::SeqCst)
                             && started.elapsed().as_secs_f64() < timeout =>
                         {
-                            self.transition("ready", Some(url.clone()), None);
+                            self.transition(id, "ready", Some(url.clone()), None);
                             ready = true;
                         }
                         _ => probe_at = Instant::now() + Duration::from_millis(250),
@@ -313,7 +382,7 @@ impl BackendManager {
             .unwrap()
             .shutdown_at
             .unwrap_or_else(Instant::now);
-        self.transition("stopping", None, error.clone());
+        self.transition(id, "stopping", None, error.clone());
         let mut exited = matches!(process.wait_exit(Duration::ZERO), Ok(Some(_)));
         if !exited {
             if let Some(input) = input {
@@ -339,7 +408,7 @@ impl BackendManager {
             }
         }
         if !exited || !matches!(process.wait_tree_empty(Duration::ZERO), Ok(true)) {
-            self.transition("reclaiming", None, error.clone());
+            self.transition(id, "reclaiming", None, error.clone());
             let _ = process.terminate_tree();
         }
         let confirmation = Instant::now();
@@ -356,6 +425,7 @@ impl BackendManager {
         };
         if !confirmed {
             self.transition(
+                id,
                 "failed",
                 None,
                 Some(BackendError::new(
@@ -369,7 +439,7 @@ impl BackendManager {
                     ),
                 )),
             );
-            // Preserve ownership and observation capability; never enable retry.
+            // Preserve ownership and keep retry disabled until both observations agree.
             loop {
                 thread::sleep(Duration::from_millis(250));
                 if matches!(process.wait_tree_empty(Duration::ZERO), Ok(true))
@@ -379,7 +449,7 @@ impl BackendManager {
                 }
             }
         }
-        self.finish(error);
+        self.finish(id, error);
     }
 }
 fn protocol(message: &str) -> BackendError {
