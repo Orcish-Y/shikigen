@@ -28,8 +28,13 @@ pub struct BackendSnapshot {
 }
 pub type Launcher =
     Arc<dyn Fn(&SpawnSpec) -> std::io::Result<Box<dyn ManagedProcess>> + Send + Sync>;
+struct ManagerState {
+    snapshot: BackendSnapshot,
+    shutdown_at: Option<Instant>,
+    released: bool,
+}
 pub struct BackendManager {
-    state: Mutex<BackendSnapshot>,
+    state: Mutex<ManagerState>,
     stop: AtomicBool,
     publish: Arc<dyn Fn(BackendSnapshot) + Send + Sync>,
 }
@@ -41,30 +46,68 @@ impl BackendManager {
         publish: Arc<dyn Fn(BackendSnapshot) + Send + Sync>,
     ) -> Arc<Self> {
         let manager = Arc::new(Self {
-            state: Mutex::new(BackendSnapshot {
-                state: "starting".into(),
-                revision: 1,
-                startup_id: Some(uuid::Uuid::new_v4().to_string()),
-                base_url: None,
-                can_retry: false,
-                error: None,
+            state: Mutex::new(ManagerState {
+                snapshot: BackendSnapshot {
+                    state: "starting".into(),
+                    revision: 1,
+                    startup_id: Some(uuid::Uuid::new_v4().to_string()),
+                    base_url: None,
+                    can_retry: false,
+                    error: None,
+                },
+                shutdown_at: None,
+                released: false,
             }),
             stop: AtomicBool::new(false),
             publish,
         });
         let worker = manager.clone();
         thread::spawn(move || match plan {
-            Err(error) => worker.transition("failed", None, Some(error)),
+            Err(error) => worker.finish(Some(error)),
             Ok(plan) => worker.run(plan, launcher),
         });
         manager
     }
     pub fn snapshot(&self) -> BackendSnapshot {
-        self.state.lock().unwrap().clone()
+        self.state.lock().unwrap().snapshot.clone()
     }
     pub fn request_shutdown(&self) {
-        let _state = self.state.lock().unwrap();
-        self.stop.store(true, Ordering::SeqCst);
+        let snapshot = {
+            let mut current = self.state.lock().unwrap();
+            if current.shutdown_at.is_some() {
+                return;
+            }
+            current.shutdown_at = Some(Instant::now());
+            self.stop.store(true, Ordering::SeqCst);
+            if current.released {
+                current.snapshot.state = "stopped".into();
+            } else if matches!(current.snapshot.state.as_str(), "starting" | "ready") {
+                current.snapshot.state = "stopping".into();
+            }
+            current.snapshot.base_url = None;
+            current.snapshot.revision += 1;
+            current.snapshot.clone()
+        };
+        (self.publish)(snapshot);
+    }
+    /// Only called when there were no resources or both observations confirmed
+    /// completion. Serialize completion with a possibly concurrent quit request.
+    fn finish(&self, error: Option<BackendError>) {
+        let snapshot = {
+            let mut current = self.state.lock().unwrap();
+            current.released = true;
+            current.snapshot.state = if current.shutdown_at.is_some() {
+                "stopped"
+            } else {
+                "failed"
+            }
+            .into();
+            current.snapshot.base_url = None;
+            current.snapshot.error = error;
+            current.snapshot.revision += 1;
+            current.snapshot.clone()
+        };
+        (self.publish)(snapshot);
     }
     fn transition(&self, state: &str, base_url: Option<String>, error: Option<BackendError>) {
         let snapshot = {
@@ -73,15 +116,19 @@ impl BackendManager {
             if state == "ready" && self.stop.load(Ordering::SeqCst) {
                 return;
             }
-            current.revision += 1;
-            current.state = state.into();
-            current.base_url = base_url;
-            current.error = error;
-            current.clone()
+            current.snapshot.revision += 1;
+            current.snapshot.state = state.into();
+            current.snapshot.base_url = base_url;
+            current.snapshot.error = error;
+            current.snapshot.clone()
         };
         (self.publish)(snapshot);
     }
     fn run(&self, plan: LaunchPlan, launcher: Launcher) {
+        if self.stop.load(Ordering::SeqCst) {
+            self.finish(None);
+            return;
+        }
         let started = Instant::now();
         let id = self.snapshot().startup_id.unwrap();
         let spec = SpawnSpec {
@@ -102,7 +149,7 @@ impl BackendManager {
         let mut process = match launcher(&spec) {
             Ok(value) => value,
             Err(error) => {
-                self.transition("failed", None, Some(BackendError::new("spawn", format!("无法启动项目 Python：{error}。请先在项目根目录运行 uv sync；移动项目后重新构建桌面应用"))));
+                self.finish(Some(BackendError::new("spawn", format!("无法启动项目 Python：{error}。请先在项目根目录运行 uv sync；移动项目后重新构建桌面应用"))));
                 return;
             }
         };
@@ -259,8 +306,14 @@ impl BackendManager {
         timeout: f64,
         error: Option<BackendError>,
     ) {
+        // One budget, including time already spent leaving a health probe.
+        let started = self
+            .state
+            .lock()
+            .unwrap()
+            .shutdown_at
+            .unwrap_or_else(Instant::now);
         self.transition("stopping", None, error.clone());
-        let started = Instant::now();
         let mut exited = matches!(process.wait_exit(Duration::ZERO), Ok(Some(_)));
         if !exited {
             if let Some(input) = input {
@@ -271,7 +324,11 @@ impl BackendManager {
                 );
             }
             while started.elapsed().as_secs_f64() < timeout {
-                match process.wait_exit(Duration::from_millis(20)) {
+                let remaining = timeout - started.elapsed().as_secs_f64();
+                if remaining <= 0.0 {
+                    break;
+                }
+                match process.wait_exit(Duration::from_secs_f64(remaining.min(0.02))) {
                     Ok(Some(_)) => {
                         exited = true;
                         break;
@@ -322,11 +379,7 @@ impl BackendManager {
                 }
             }
         }
-        if self.stop.load(Ordering::SeqCst) {
-            self.transition("stopped", None, error);
-        } else {
-            self.transition("failed", None, error);
-        }
+        self.finish(error);
     }
 }
 fn protocol(message: &str) -> BackendError {

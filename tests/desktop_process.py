@@ -1,5 +1,6 @@
 """运行真实桌面入口，仅以确定性 Agent 替代模型边界。"""
 
+import asyncio
 import os
 import socket
 import subprocess
@@ -10,12 +11,21 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from desktop_shutdown_fixtures import waiting_agent
 from runtime_fixtures import deterministic_agent
 
 from app import desktop
 
 
 async def agent(**kwargs):
+  if os.environ.get("DESKTOP_TEST_BLOCK_INIT"):
+    Path("initializing").touch()
+    try:
+      await asyncio.Event().wait()
+    finally:
+      Path("initialization-cancelled").touch()
+  if os.environ.get("DESKTOP_TEST_EXECUTING"):
+    return await waiting_agent(**kwargs)
   print("fixture ordinary stdout")
   subprocess.run(
     [sys.executable, "-c", "print('fixture child stdout')"],

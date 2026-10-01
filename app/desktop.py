@@ -9,11 +9,15 @@ import socket
 import sys
 from contextlib import suppress
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from dotenv import load_dotenv
 from shikigen.app_config import AppConfig, load_app_config
 
 from app.desktop_control import ControlChannel
+
+if TYPE_CHECKING:
+  from shikigen.runtime import Runtime
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 logger = logging.getLogger(__name__)
@@ -44,45 +48,69 @@ def bind_listener(start_port: int) -> socket.socket:
 async def serve_backend(
   config: AppConfig, listener: socket.socket, control: ControlChannel
 ) -> None:
-  import uvicorn
   from shikigen.runtime import open_runtime
+
+  async def lifetime() -> None:
+    # 初始化、运行与资源释放始终由同一个任务持有。
+    async with open_runtime(config) as runtime:
+      if not control.stopping.is_set():
+        await _serve_runtime(runtime, listener, control)
+
+  if control.stopping.is_set():
+    return
+  active = asyncio.create_task(lifetime())
+  stopping = asyncio.create_task(control.stopping.wait())
+  try:
+    await asyncio.wait({active, stopping}, return_when=asyncio.FIRST_COMPLETED)
+  finally:
+    stopping.cancel()
+    with suppress(asyncio.CancelledError):
+      await stopping
+    # 无论收到停止请求还是调用方取消，都请求结束生命周期并等待收尾。
+    if not active.done():
+      active.cancel()
+    with suppress(asyncio.CancelledError):
+      await active
+
+
+async def _serve_runtime(
+  runtime: "Runtime", listener: socket.socket, control: ControlChannel
+) -> None:
+  import uvicorn
 
   from app.server import create_app
 
-  async with open_runtime(config) as runtime:
+  app = create_app(runtime=runtime)
+
+  @app.get("/health/ready")
+  async def ready():
+    from fastapi.responses import JSONResponse
+
     if control.stopping.is_set():
-      return
-    app = create_app(runtime=runtime)
+      return JSONResponse({"status": "stopping"}, status_code=503)
+    return {"version": 1, "startup_id": control.startup_id, "status": "ready"}
 
-    @app.get("/health/ready")
-    async def ready():
-      from fastapi.responses import JSONResponse
-
-      if control.stopping.is_set():
-        return JSONResponse({"status": "stopping"}, status_code=503)
-      return {"version": 1, "startup_id": control.startup_id, "status": "ready"}
-
-    server = uvicorn.Server(
-      uvicorn.Config(
-        app,
-        host="127.0.0.1",
-        reload=False,
-        workers=1,
-        log_config=None,
-      )
+  server = uvicorn.Server(
+    uvicorn.Config(
+      app,
+      host="127.0.0.1",
+      reload=False,
+      workers=1,
+      log_config=None,
     )
-    serving = asyncio.create_task(server.serve(sockets=[listener]))
-    stopping = asyncio.create_task(control.stopping.wait())
+  )
+  serving = asyncio.create_task(server.serve(sockets=[listener]))
+  try:
+    # 取消生命周期时进入 finally，HTTP 服务仍需完成正常关闭。
+    await asyncio.shield(serving)
+  finally:
+    server.should_exit = True
     try:
-      await asyncio.wait({serving, stopping}, return_when=asyncio.FIRST_COMPLETED)
-    finally:
-      server.should_exit = True
-      # 先开始 runtime 清理，执行完成后 SSE 才能结束。
+      # Stop admission and executions immediately, so persistent SSE can finish.
       await runtime.lifecycle.shutdown()
+    finally:
+      # Keep storage and data locks alive until HTTP requests have also ended.
       await serving
-      stopping.cancel()
-      with suppress(asyncio.CancelledError):
-        await stopping
 
 
 async def run(control: ControlChannel, config_path: Path, port: int) -> int:

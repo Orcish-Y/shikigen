@@ -121,7 +121,13 @@ export default function App() {
         <img src="/logo.svg" alt="" width="40" height="40" />
         <h1>{backend.error ? "无法读取后端状态" : labels[state?.state ?? "starting"]}</h1>
         <p>{backend.error ?? state?.error?.message ?? "正在准备运行环境，请稍候。"}</p>
-        {state?.state === "failed" && <p>修正问题后请关闭并重新打开应用。</p>}
+        {state?.state === "failed" && (
+          <p>
+            {state.error?.code === "reclamation_unconfirmed"
+              ? "正在继续确认退出状态，请保持此窗口打开。"
+              : "修正问题后请关闭并重新打开应用。"}
+          </p>
+        )}
       </main>
     );
   }

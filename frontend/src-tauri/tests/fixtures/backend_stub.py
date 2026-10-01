@@ -8,6 +8,7 @@ import subprocess
 import sys
 import threading
 import time
+from pathlib import Path
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--config")
@@ -40,6 +41,9 @@ if mode == "timeout":
 
 class Handler(http.server.BaseHTTPRequestHandler):
   def do_GET(self):
+    if mode == "late_ready":
+      Path(os.environ["BACKEND_TEST_PROBE_STARTED"]).touch()
+      time.sleep(0.7)
     if mode == "slow_health":
       time.sleep(3)
     if mode == "unready":
@@ -89,5 +93,7 @@ if mode in ("exit_after_ready", "old_flood_exit"):
   sys.exit(7)
 for line in sys.stdin:
   if json.loads(line)["type"] == "shutdown":
+    if mode == "late_ready":
+      time.sleep(60)
     break
 server.server_close()

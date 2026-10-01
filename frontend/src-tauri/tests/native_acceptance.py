@@ -91,16 +91,25 @@ class NativeAcceptance(unittest.TestCase):
     app.mkdir()
     (app / "__init__.py").write_text(f"__path__.append({str(REPO / 'app')!r})\n")
     bootstrap = f"""
-import json, os, pathlib, runpy, subprocess, sys, site
+import asyncio, json, os, pathlib, runpy, subprocess, sys, site, time
 site.addsitedir({str(REPO / ".venv/Lib/site-packages")!r})
 from unittest.mock import patch
 from runtime_fixtures import deterministic_agent
+from desktop_shutdown_fixtures import waiting_agent
 async def agent(**kwargs):
     child = subprocess.Popen(
         [sys.executable, "-c", "import time; time.sleep(120)"],
         stdin=subprocess.DEVNULL,
     )
     pathlib.Path("pids.json").write_text(json.dumps([os.getpid(), child.pid]))
+    if os.environ.get("DESKTOP_TEST_SYNC_INIT"):
+        pathlib.Path("initializing").touch()
+        time.sleep(120)
+    if os.environ.get("DESKTOP_TEST_BLOCK_INIT"):
+        pathlib.Path("initializing").touch()
+        await asyncio.Event().wait()
+    if os.environ.get("DESKTOP_TEST_EXECUTING"):
+        return await waiting_agent(**kwargs)
     return await deterministic_agent(**kwargs)
 with patch("shikigen.runtime.composition.create_lead_agent", new=agent):
     runpy.run_path({str(REPO / "app/desktop.py")!r}, run_name="__main__")
@@ -238,6 +247,94 @@ with patch("shikigen.runtime.composition.create_lead_agent", new=deterministic_a
     failed = host.state("failed")
     self.assertIsNone(failed["base_url"])
     self.assertEqual(win32event.WaitForSingleObject(tool, 5000), win32con.WAIT_OBJECT_0)
+
+  def wait_marker(self, name):
+    deadline = time.monotonic() + 20
+    while not (self.root / name).exists():
+      self.assertLess(time.monotonic(), deadline, name)
+      time.sleep(0.02)
+
+  def assert_reclaimed(self, handles, port=None):
+    for handle in handles:
+      self.assertEqual(
+        win32event.WaitForSingleObject(handle, 5000), win32con.WAIT_OBJECT_0
+      )
+    if port is not None:
+      import socket
+
+      with socket.socket() as probe:
+        probe.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        probe.bind(("127.0.0.1", port))
+    # A fresh real runtime reclaims the same data after both normal and forced exit.
+    self.env.pop("DESKTOP_TEST_BLOCK_INIT", None)
+    self.env.pop("DESKTOP_TEST_SYNC_INIT", None)
+    self.env.pop("DESKTOP_TEST_EXECUTING", None)
+    self.env.pop("DESKTOP_TEST_STUCK_CLEANUP", None)
+    self.config["backend"]["startup_timeout_seconds"] = 20
+    self.write_config()
+    successor = self.host()
+    successor.state("ready")
+    successor.close()
+
+  def test_quit_during_cancellable_initialization_reclaims_descendants(self):
+    self.env["DESKTOP_TEST_BLOCK_INIT"] = "1"
+    host = self.host()
+    self.wait_marker("initializing")
+    handles = self.process_handles()
+    started = time.monotonic()
+    host.process.stdin.write("shutdown\n")
+    host.process.stdin.flush()
+    host.state("stopping")
+    host.state("reclaiming")  # The test's deliberately persistent tool remains.
+    host.state("stopped")
+    host.process.wait(timeout=5)
+    self.assertLess(time.monotonic() - started, 3)
+    self.assert_reclaimed(handles)
+
+  def test_startup_timeout_forces_stuck_initialization_and_preserves_reason(self):
+    self.env["DESKTOP_TEST_SYNC_INIT"] = "1"
+    self.config["backend"]["startup_timeout_seconds"] = 6
+    self.config["backend"]["shutdown_timeout_seconds"] = 0.5
+    self.write_config()
+    started = time.monotonic()
+    host = self.host()
+    self.wait_marker("initializing")
+    handles = self.process_handles()
+    stopping = host.state("stopping")
+    self.assertEqual(stopping["error"]["code"], "startup_timeout")
+    host.state("reclaiming")
+    failed = host.state("failed")
+    self.assertEqual(failed["error"]["code"], "startup_timeout")
+    self.assertLess(time.monotonic() - started, 9)
+    self.assert_reclaimed(handles)
+
+  def test_quit_during_execution_with_persistent_sse_and_stuck_cleanup(self):
+    self.env["DESKTOP_TEST_EXECUTING"] = "1"
+    self.env["DESKTOP_TEST_STUCK_CLEANUP"] = "1"
+    self.config["backend"]["shutdown_timeout_seconds"] = 1
+    self.write_config()
+    host = self.host()
+    ready = host.state("ready")
+    base = ready["base_url"]
+    handles = self.process_handles()
+    with httpx.Client(trust_env=False) as client:
+      thread_id = client.post(base + "/api/threads").json()["thread_id"]
+      with client.stream(
+        "POST", base + f"/api/threads/{thread_id}/stream", json={"message": "wait"}
+      ) as response:
+        self.assertEqual(response.status_code, 200)
+        self.wait_marker("executing")
+        started = time.monotonic()
+        host.process.stdin.write("shutdown\n")
+        host.process.stdin.flush()
+        self.assertIsNone(host.state("stopping")["base_url"])
+        self.wait_marker("cleaning")
+        host.state("reclaiming")
+        host.state("stopped")
+        host.process.wait(timeout=5)
+        self.assertGreaterEqual(time.monotonic() - started, 0.9)
+        self.assertLess(time.monotonic() - started, 4)
+    self.assert_reclaimed(handles, int(base.rsplit(":", 1)[1]))
 
 
 if __name__ == "__main__":
