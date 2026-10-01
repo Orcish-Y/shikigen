@@ -9,7 +9,7 @@ use std::{
 #[test]
 fn invalid_environment_is_a_visible_failure_without_an_address() {
     let manager = BackendManager::start(
-        LaunchPlan::from_root(std::path::Path::new("Z:/missing shikigen project")),
+        Arc::new(|| LaunchPlan::from_root(std::path::Path::new("Z:/missing shikigen project"))),
         Arc::new(shikigen_desktop_lib::process::spawn),
         Arc::new(|_| {}),
     );
@@ -21,7 +21,7 @@ fn invalid_environment_is_a_visible_failure_without_an_address() {
     let state = manager.snapshot();
     assert_eq!(state.state, "failed");
     assert!(state.base_url.is_none());
-    assert!(!state.can_retry);
+    assert!(state.can_retry);
     assert_eq!(state.error.unwrap().code, "project_path");
 }
 
@@ -31,7 +31,7 @@ fn fixture_manager(mode: &str, timeout: f64) -> Arc<BackendManager> {
     plan.config.shutdown_timeout_seconds = 0.1;
     let mode = mode.to_string();
     BackendManager::start(
-        Ok(plan),
+        Arc::new(move || Ok(plan.clone())),
         Arc::new(move |spec| {
             let mut args = spec.args.clone();
             args.splice(
@@ -83,7 +83,7 @@ fn bound_is_probed_before_publishing_ready_and_shutdown_revokes_address() {
 #[test]
 fn shutdown_after_resource_free_failure_completes_without_cleanup_phases() {
     let manager = BackendManager::start(
-        LaunchPlan::from_root(std::path::Path::new("Z:/missing shikigen project")),
+        Arc::new(|| LaunchPlan::from_root(std::path::Path::new("Z:/missing shikigen project"))),
         Arc::new(shikigen_desktop_lib::process::spawn),
         Arc::new(|_| {}),
     );
@@ -109,7 +109,7 @@ fn health_protocol_and_timeout_failures_never_publish_an_address() {
         let manager = fixture_manager(mode, 0.6);
         let state = wait_state(&manager, "failed");
         assert!(state.base_url.is_none(), "{mode}");
-        assert!(!state.can_retry);
+        assert!(state.can_retry);
         assert_eq!(state.error.unwrap().code, code, "{mode}");
     }
 }
@@ -128,7 +128,7 @@ fn unexpected_exit_revokes_ready_address() {
     wait_state(&manager, "ready");
     let failed = wait_state(&manager, "failed");
     assert!(failed.base_url.is_none());
-    assert!(!failed.can_retry);
+    assert!(failed.can_retry);
 }
 
 #[test]

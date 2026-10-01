@@ -1,7 +1,7 @@
 //! Console host for native acceptance: same manager and Job adapter as Tauri.
 //! An optional absolute project root lets tests use isolated data and environment.
 use shikigen_desktop_lib::{
-    backend::{BackendManager, LaunchPlan},
+    backend::{BackendManager, LaunchPlan, PlanLoader},
     process,
 };
 use std::{
@@ -12,9 +12,9 @@ use std::{
     time::Duration,
 };
 fn main() {
-    let plan = match std::env::args_os().nth(1) {
-        Some(root) => LaunchPlan::from_root(&PathBuf::from(root)),
-        None => LaunchPlan::development(),
+    let plan: PlanLoader = match std::env::args_os().nth(1) {
+        Some(root) => Arc::new(move || LaunchPlan::from_root(&PathBuf::from(&root))),
+        None => Arc::new(LaunchPlan::development),
     };
     let manager = BackendManager::start(
         plan,

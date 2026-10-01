@@ -67,7 +67,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
 if mode == "old_message":
-  print(json.dumps(dict(version=99, startup_id="old", type="unknown")), flush=True)
+  print(
+    json.dumps(
+      dict(
+        version=99,
+        startup_id=os.environ.get("BACKEND_TEST_OLD_ID", "old"),
+        type="unknown",
+      )
+    ),
+    flush=True,
+  )
 print(
   json.dumps(
     dict(version=1, startup_id=args.startup_id, type="bound", port=server.server_port)

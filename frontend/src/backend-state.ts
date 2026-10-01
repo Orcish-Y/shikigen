@@ -9,6 +9,16 @@ export interface BackendSnapshot {
 export interface BackendBridge {
   listen: (receive: (snapshot: BackendSnapshot) => void) => Promise<() => void>;
   query: () => Promise<BackendSnapshot>;
+  retry: () => Promise<RetryResult>;
+}
+export interface RetryResult {
+  accepted: boolean;
+  reason: string | null;
+  snapshot: BackendSnapshot;
+}
+export interface BackendSubscription {
+  dispose: () => void;
+  retry: () => Promise<RetryResult | null>;
 }
 
 /** A page observes one existing host; subscribing never creates a backend. */
@@ -16,7 +26,7 @@ export function subscribeBackendState(
   bridge: BackendBridge,
   receive: (snapshot: BackendSnapshot) => void,
   onError: (error: unknown) => void,
-): () => void {
+): BackendSubscription {
   let cancelled = false;
   let revision = -1;
   let unlisten: (() => void) | undefined;
@@ -34,5 +44,15 @@ export function subscribeBackendState(
       if (!cancelled) onError(error);
     }
   })();
-  return () => { cancelled = true; unlisten?.(); };
+  return {
+    dispose: () => { cancelled = true; unlisten?.(); },
+    retry: async () => {
+      if (cancelled) return null;
+      const result = await bridge.retry();
+      // Events, queries and command replies share the host's revision order.
+      if (cancelled || result.snapshot.revision < revision) return null;
+      accept(result.snapshot);
+      return result;
+    },
+  };
 }

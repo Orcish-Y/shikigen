@@ -133,4 +133,4 @@ impl LaunchPlan {
 }
 
 mod manager;
-pub use manager::{BackendManager, BackendSnapshot, Launcher};
+pub use manager::{BackendManager, BackendSnapshot, Launcher, PlanLoader, RetryResult};
