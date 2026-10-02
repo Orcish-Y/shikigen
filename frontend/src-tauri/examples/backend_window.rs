@@ -30,13 +30,22 @@ impl ManagedProcess for QueryFault {
 fn main() {
     let root = PathBuf::from(std::env::args_os().nth(1).expect("isolated project path"));
     let release = root.join("allow-observation");
+    let mut context = tauri::generate_context!();
+    // Acceptance windows must never notify or block a user's real application.
+    context.config_mut().identifier = "dev.shikigen.desktop.acceptance".into();
     shikigen_desktop_lib::run_with_backend(
-        Arc::new(move || LaunchPlan::from_root(&root)),
+        Arc::new(move || {
+            let starts = root.join("host-starts");
+            std::fs::create_dir_all(&starts).unwrap();
+            std::fs::write(starts.join(std::process::id().to_string()), "").unwrap();
+            LaunchPlan::from_root(&root)
+        }),
         Arc::new(move |spec: &SpawnSpec| {
             Ok(Box::new(QueryFault {
                 child: process::spawn(spec)?,
                 release: release.clone(),
             }))
         }),
+        context,
     );
 }

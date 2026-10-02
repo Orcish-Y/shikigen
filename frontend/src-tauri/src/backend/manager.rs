@@ -127,6 +127,11 @@ impl BackendManager {
     pub fn snapshot(&self) -> BackendSnapshot {
         self.state.lock().unwrap().snapshot.clone()
     }
+    /// Exit intent survives failed/unconfirmed reclamation; state alone cannot
+    /// decide whether another desktop launch may activate the window.
+    pub fn is_shutting_down(&self) -> bool {
+        self.stop.load(Ordering::SeqCst)
+    }
     pub fn request_shutdown(&self) {
         let snapshot = {
             let mut current = self.state.lock().unwrap();

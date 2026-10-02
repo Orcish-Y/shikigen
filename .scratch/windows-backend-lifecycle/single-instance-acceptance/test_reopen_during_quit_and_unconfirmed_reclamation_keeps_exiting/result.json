@@ -1,0 +1,20 @@
+{
+  "counts": [
+    1,
+    1
+  ],
+  "snapshot": {
+    "state": "failed",
+    "revision": 5,
+    "startup_id": "dde7c952-4b4e-4742-b671-f44dc3f64e22",
+    "base_url": null,
+    "can_retry": false,
+    "error": {
+      "code": "reclamation_unconfirmed",
+      "message": "无法确认后端已完全退出"
+    }
+  },
+  "host_pid": 11156,
+  "stayed_hidden": true,
+  "quit_completed": true
+}
