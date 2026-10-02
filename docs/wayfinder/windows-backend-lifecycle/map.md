@@ -27,6 +27,7 @@ status: closed
 - [确定平台、生命周期归属与故障行为](tickets/001-behavior.md) — Windows 优先，Tauri 拥有后端及所属进程树，正常退出先清理，异常退出回收，失败后手动重试。
 - [验证后端托管与数据独占的底层机制](tickets/003-mechanism-research.md) — 已核实创建时关联 Job、保留 socket、初始化与 SSE 清理协调及原生数据锁的机制依据，列明接口约束和待实施验收项。
 - [确定 Windows 后端托管接口与状态转换](tickets/002-runtime-contract.md) — 已确认启动、协议、状态、托盘、回收、数据独占及 macOS 替换接口，形成最终契约与实现验收清单。
+- [补齐 Windows 单实例插件初始化期间的竞争保护](tickets/004-single-instance-startup-race.md) — 第 07 票实施时确认插件通知窗口发布存在间隙，以宿主启动互斥保护初始化；窗口通知在执行时检查退出意图，产品契约不变。
 
 ## Not yet specified
 
