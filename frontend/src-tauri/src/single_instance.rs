@@ -1,33 +1,3 @@
-use crate::backend::BackendManager;
-use std::sync::Arc;
-use tauri::Manager;
-
-pub(crate) fn activate(app: &tauri::AppHandle) {
-    let app = app.clone();
-    // Never perform window operations inside the plugin's synchronous Windows
-    // IPC callback. Recheck intent when the queued action actually executes.
-    // run_on_main_thread executes inline when already on the main thread; hop
-    // through the async executor so the IPC callback can return first.
-    tauri::async_runtime::spawn(async move {
-        let handle = app.clone();
-        let _ = app.run_on_main_thread(move || {
-            let Some(manager) = handle.try_state::<Arc<BackendManager>>() else {
-                // An early notification can arrive while Tauri creates the initial
-                // visible window, before setup installs the manager.
-                return;
-            };
-            if manager.is_shutting_down() {
-                return;
-            }
-            if let Some(window) = handle.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.unminimize();
-                let _ = window.set_focus();
-            }
-        });
-    });
-}
-
 #[cfg(windows)]
 pub(crate) use windows::{owns_notification_window, StartupGuard};
 

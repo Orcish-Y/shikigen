@@ -33,6 +33,9 @@ fn main() {
     let mut context = tauri::generate_context!();
     // Acceptance windows must never notify or block a user's real application.
     context.config_mut().identifier = "dev.shikigen.desktop.acceptance".into();
+    if root.join("missing-tray-icon").exists() {
+        context.set_default_window_icon(None);
+    }
     shikigen_desktop_lib::run_with_backend(
         Arc::new(move || {
             let starts = root.join("host-starts");

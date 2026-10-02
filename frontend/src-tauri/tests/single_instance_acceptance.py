@@ -1,229 +1,20 @@
-"""Real Windows single-instance, window activation and backend ownership checks.
+"""Real Windows single-instance, activation and backend ownership acceptance."""
 
-Build backend_window and frontend/dist first. Run in a desktop session with
-ports 5173 and 9238 free. Uses the example's separate application identifier.
-"""
-
-import base64
-import itertools
-import json
-import subprocess
-import sys
 import threading
 import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 
-import httpx
-import native_acceptance as native
 import win32con
 import win32event
 import win32gui
-import win32process
-from websockets.sync.client import connect
-
-REPO = native.REPO
-WINDOW = REPO / "frontend/src-tauri/target/debug/examples/backend_window.exe"
-ARTIFACTS = REPO / ".scratch/windows-backend-lifecycle/single-instance-acceptance"
+from window_acceptance import REPO, WindowAcceptance, wait_until
 
 
-def wait_until(probe, timeout=30):
-  deadline = time.monotonic() + timeout
-  while time.monotonic() < deadline:
-    result = probe()
-    if result:
-      return result
-    time.sleep(0.05)
-  raise AssertionError(f"condition did not become true: {probe}")
-
-
-class SingleInstanceAcceptance(unittest.TestCase):
-  @classmethod
-  def setUpClass(cls):
-    cls.server = subprocess.Popen(
-      [
-        sys._base_executable,
-        "-m",
-        "http.server",
-        "5173",
-        "--bind",
-        "127.0.0.1",
-        "--directory",
-        str(REPO / "frontend/dist"),
-      ],
-      stdout=subprocess.DEVNULL,
-      stderr=subprocess.DEVNULL,
-      creationflags=subprocess.CREATE_NO_WINDOW,
-    )
-
-    def stop_server():
-      if cls.server.poll() is None:
-        cls.server.kill()
-      cls.server.wait(timeout=10)
-
-    cls.addClassCleanup(stop_server)
-    with httpx.Client(trust_env=False) as client:
-
-      def reachable():
-        assert cls.server.poll() is None, "port 5173 is occupied"
-        try:
-          return client.get("http://127.0.0.1:5173").status_code == 200
-        except httpx.HTTPError:
-          return False
-
-      wait_until(reachable)
-
-  def setUp(self):
-    self.fixture = native.NativeAcceptance()
-    self.fixture.setUp()
-    self.addCleanup(self.fixture.doCleanups)
-    self.root = self.fixture.root
-    (self.root / "allow-observation").touch()
-    self.fixture.config["backend"]["startup_timeout_seconds"] = 60
-    self.fixture.write_config()
-    self.hosts = []
-    self.launch_numbers = itertools.count()
-    self.artifacts = ARTIFACTS / self._testMethodName
-    self.artifacts.mkdir(parents=True, exist_ok=True)
-    self.ws = None
-    self.sequence = 0
-    self.addCleanup(self.stop_hosts)
-    self.client = httpx.Client(trust_env=False, timeout=1)
-    self.addCleanup(self.client.close)
-    # Count real Python entry invocations, including attempts rejected by data
-    # ownership. A database lock must not conceal duplicate backend creation.
-    entry = self.root / "app/desktop.py"
-    entry.write_text(
-      "import os, pathlib\n"
-      "pathlib.Path('python-starts').mkdir(exist_ok=True)\n"
-      "pathlib.Path('python-starts', str(os.getpid())).touch()\n"
-      + entry.read_text(encoding="utf-8"),
-      encoding="utf-8",
-    )
-
-  def stop_hosts(self):
-    if self.ws is not None:
-      self.ws.close()
-    for host in self.hosts:
-      if host.poll() is None:
-        host.kill()
-      host.wait(timeout=10)
-    # Kill-on-close reclaims owned Python and WebView teardown releases files.
-    time.sleep(0.5)
-
-  def launch(self):
-    log = (self.artifacts / f"host-{next(self.launch_numbers)}.log").open("wb")
-    self.addCleanup(log.close)
-    host = subprocess.Popen(
-      [str(WINDOW), str(self.root)],
-      cwd=REPO.parent,
-      env=dict(
-        self.fixture.env,
-        WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS="--remote-debugging-port=9238",
-        WEBVIEW2_USER_DATA_FOLDER=str(self.root / "webview"),
-      ),
-      stdout=log,
-      stderr=log,
-    )
-    self.hosts.append(host)
-    return host
-
-  def connect(self):
-    def endpoint():
-      try:
-        targets = self.client.get("http://127.0.0.1:9238/json/list").json()
-        return next(
-          (t["webSocketDebuggerUrl"] for t in targets if t.get("type") == "page"), None
-        )
-      except (httpx.HTTPError, ValueError):
-        return None
-
-    self.ws = connect(wait_until(endpoint), proxy=None)
-    wait_until(lambda: self.evaluate("Boolean(window.__TAURI_INTERNALS__)"))
-
-  def call(self, method, **params):
-    self.sequence += 1
-    self.ws.send(
-      json.dumps(
-        dict(
-          id=self.sequence,
-          method=method,
-          params=params,
-        )
-      )
-    )
-    while True:
-      reply = json.loads(self.ws.recv(timeout=10))
-      if reply.get("id") == self.sequence:
-        self.assertNotIn("error", reply)
-        self.assertNotIn("exceptionDetails", reply["result"])
-        return reply["result"]
-
-  def evaluate(self, expression):
-    return (
-      self.call(
-        "Runtime.evaluate", expression=expression, returnByValue=True, awaitPromise=True
-      )
-      .get("result", {})
-      .get("value")
-    )
-
-  def record(self, **fields):
-    (self.artifacts / "result.json").write_text(
-      json.dumps(dict(counts=self.counts(), **fields), ensure_ascii=False, indent=2),
-      encoding="utf-8",
-    )
-
-  def screenshot(self):
-    data = self.call("Page.captureScreenshot", format="png")["data"]
-    (self.artifacts / "window.png").write_bytes(base64.b64decode(data))
-
-  def snapshot(self):
-    return self.evaluate("window.__TAURI_INTERNALS__.invoke('get_backend_state')")
-
-  def state(self, expected):
-    def matching():
-      snapshot = self.snapshot()
-      return snapshot if snapshot["state"] == expected else None
-
-    return wait_until(matching)
-
-  def window(self, host):
-    windows = []
-
-    def collect(hwnd, _):
-      if (
-        win32process.GetWindowThreadProcessId(hwnd)[1] == host.pid
-        and win32gui.GetClassName(hwnd) == "Tauri Window"
-      ):
-        windows.append(hwnd)
-
-    win32gui.EnumWindows(collect, None)
-    self.assertEqual(len(windows), 1, windows)
-    return windows[0]
-
-  def counts(self):
-    return tuple(
-      len(list((self.root / name).glob("*")))
-      for name in ("host-starts", "python-starts")
-    )
-
-  def reopen(self, first):
-    window = self.window(first)
-    win32gui.ShowWindow(window, win32con.SW_MINIMIZE)
-    win32gui.ShowWindow(window, win32con.SW_HIDE)
-    self.assertFalse(win32gui.IsWindowVisible(window))
-    second = self.launch()
-    # The secondary must leave before any plan load or Python spawn of its own.
-    self.assertEqual(second.wait(timeout=10), 0)
-    wait_until(
-      lambda: (
-        win32gui.IsWindowVisible(window)
-        and not win32gui.IsIconic(window)
-        and win32gui.GetForegroundWindow() == window
-      )
-    )
-    return second
+class SingleInstanceAcceptance(WindowAcceptance):
+  artifact_root = (
+    REPO / ".scratch/windows-backend-lifecycle/tray-single-instance-acceptance"
+  )
 
   def test_ready_reopen_restores_existing_window_and_session(self):
     first = self.launch()
@@ -238,7 +29,7 @@ class SingleInstanceAcceptance(unittest.TestCase):
     self.assertEqual(health["startup_id"], before["startup_id"])
     self.screenshot()
     self.record(snapshot=before, foreground_pid=first.pid, session_preserved=True)
-    win32gui.PostMessage(self.window(first), win32con.WM_CLOSE, 0, 0)
+    self.quit(first)
     self.assertEqual(first.wait(timeout=10), 0)
     self.ws.close()
     self.ws = None
@@ -266,7 +57,7 @@ class SingleInstanceAcceptance(unittest.TestCase):
     self.assertEqual(self.counts(), (1, 1))
     self.screenshot()
     self.record(snapshot=before, foreground_pid=first.pid)
-    win32gui.PostMessage(self.window(first), win32con.WM_CLOSE, 0, 0)
+    self.quit(first)
     self.assertEqual(first.wait(timeout=10), 0)
 
   def test_failed_reopen_does_not_retry_even_after_configuration_is_fixed(self):
@@ -283,7 +74,7 @@ class SingleInstanceAcceptance(unittest.TestCase):
     self.assertEqual(self.counts(), (1, 0))
     self.screenshot()
     self.record(snapshot=before, foreground_pid=first.pid, config_fixed=True)
-    win32gui.PostMessage(self.window(first), win32con.WM_CLOSE, 0, 0)
+    self.quit(first)
     self.assertEqual(first.wait(timeout=10), 0)
 
   def test_reopen_during_quit_and_unconfirmed_reclamation_keeps_exiting(self):
@@ -294,8 +85,9 @@ class SingleInstanceAcceptance(unittest.TestCase):
     wait_until(lambda: (self.root / "initializing").exists())
     before = self.state("starting")
     window = self.window(first)
-    win32gui.PostMessage(window, win32con.WM_CLOSE, 0, 0)
-    self.state("stopping")
+    self.quit(first)
+    # Native menu dismissal can finish after the short stopping phase.
+    wait_until(lambda: self.snapshot()["state"] in {"stopping", "reclaiming", "failed"})
     win32gui.ShowWindow(window, win32con.SW_HIDE)
     second = self.launch()
     self.assertEqual(second.wait(timeout=10), 0)
@@ -303,6 +95,11 @@ class SingleInstanceAcceptance(unittest.TestCase):
     self.assertEqual(unconfirmed["error"]["code"], "reclamation_unconfirmed")
     self.assertFalse(unconfirmed["can_retry"])
     self.assertEqual(unconfirmed["startup_id"], before["startup_id"])
+    # The external test hide can race the one-time fault notification. Check
+    # only single-instance activation here; ticket 08 tests reveal through X.
+    # Let any queued failure reveal settle before hiding for the next opener.
+    time.sleep(0.3)
+    win32gui.ShowWindow(window, win32con.SW_HIDE)
     # Failed is also a possible *exit* state: a state-string check is inadequate.
     third = self.launch()
     self.assertEqual(third.wait(timeout=10), 0)
@@ -342,7 +139,7 @@ class SingleInstanceAcceptance(unittest.TestCase):
       owner_pid=owner.pid,
       secondary_exit_codes=[p.returncode for p in hosts if p is not owner],
     )
-    win32gui.PostMessage(self.window(owner), win32con.WM_CLOSE, 0, 0)
+    self.quit(owner)
     self.assertEqual(owner.wait(timeout=10), 0)
 
   def test_departed_notification_owner_cannot_leave_a_second_unprotected_host(self):
@@ -365,7 +162,7 @@ class SingleInstanceAcceptance(unittest.TestCase):
     self.assertEqual(self.snapshot(), ready)
     self.assertEqual(self.counts(), (1, 1))
     self.record(snapshot=ready, owner_pid=owner.pid, orphaned_exit=0)
-    win32gui.PostMessage(self.window(owner), win32con.WM_CLOSE, 0, 0)
+    self.quit(owner)
     self.assertEqual(owner.wait(timeout=10), 0)
 
 

@@ -1,4 +1,5 @@
 pub mod backend;
+mod desktop;
 pub mod process;
 mod single_instance;
 use backend::{BackendManager, BackendSnapshot, LaunchPlan};
@@ -13,6 +14,11 @@ fn get_backend_state(manager: tauri::State<'_, Arc<BackendManager>>) -> BackendS
 #[tauri::command]
 fn retry_backend(manager: tauri::State<'_, Arc<BackendManager>>) -> backend::RetryResult {
     manager.inner().retry()
+}
+
+#[tauri::command]
+fn get_tray_error(desktop: tauri::State<'_, desktop::Desktop>) -> Option<String> {
+    desktop.tray_error.clone()
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -39,30 +45,28 @@ pub fn run_with_backend(
     let builder = tauri::Builder::default();
     #[cfg(desktop)]
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _, _| {
-        single_instance::activate(app);
+        desktop::activate(app);
     }));
     let app = builder
-        .invoke_handler(tauri::generate_handler![get_backend_state, retry_backend])
+        .invoke_handler(tauri::generate_handler![
+            get_backend_state,
+            retry_backend,
+            get_tray_error
+        ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                let manager = window.state::<Arc<BackendManager>>();
-                if manager.snapshot().state != "stopped" {
-                    // Keep the last window alive while cleanup is unconfirmed.
-                    api.prevent_close();
-                    manager.request_shutdown();
-                }
+                desktop::close_requested(window, api);
             }
         })
         .setup(move |app| {
             let handle = app.handle().clone();
+            app.manage(desktop::Desktop::install(&handle));
             let manager = BackendManager::start(
                 load_plan,
                 launcher,
                 Arc::new(move |snapshot| {
                     let _ = handle.emit("backend-state-changed", &snapshot);
-                    if snapshot.state == "stopped" {
-                        handle.exit(0);
-                    }
+                    desktop::backend_changed(&handle, snapshot);
                 }),
             );
             app.manage(manager);
@@ -86,7 +90,7 @@ pub fn run_with_backend(
             let manager = handle.state::<Arc<BackendManager>>();
             if manager.snapshot().state != "stopped" {
                 api.prevent_exit();
-                manager.request_shutdown();
+                desktop::request_exit(handle);
             }
         }
     });
