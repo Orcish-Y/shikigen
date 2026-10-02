@@ -1,0 +1,15 @@
+{
+  "counts": [
+    1,
+    1
+  ],
+  "snapshot": {
+    "state": "starting",
+    "revision": 1,
+    "startup_id": "deb0607a-af04-444a-a154-8060c11e8c91",
+    "base_url": null,
+    "can_retry": false,
+    "error": null
+  },
+  "foreground_pid": 412
+}

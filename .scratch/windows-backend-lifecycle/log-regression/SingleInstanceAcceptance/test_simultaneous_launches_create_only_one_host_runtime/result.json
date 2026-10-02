@@ -1,0 +1,24 @@
+{
+  "counts": [
+    1,
+    1
+  ],
+  "snapshot": {
+    "state": "ready",
+    "revision": 2,
+    "startup_id": "a1c97288-43fd-412f-998b-cbf668271f20",
+    "base_url": "http://127.0.0.1:45200",
+    "can_retry": false,
+    "error": null
+  },
+  "owner_pid": 30064,
+  "secondary_exit_codes": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ]
+}

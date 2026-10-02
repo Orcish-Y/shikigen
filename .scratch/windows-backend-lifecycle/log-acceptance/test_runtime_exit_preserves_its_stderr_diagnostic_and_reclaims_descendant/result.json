@@ -1,0 +1,18 @@
+{
+  "counts": [
+    1,
+    1
+  ],
+  "failed": {
+    "state": "failed",
+    "revision": 5,
+    "startup_id": "a34fcb57-da8e-4c71-b1cd-8c8b923b98c2",
+    "base_url": null,
+    "can_retry": true,
+    "error": {
+      "code": "backend_exit",
+      "message": "后端输出管道已关闭。请查看本次启动日志；缺少依赖时请在项目根目录运行 uv sync。"
+    }
+  },
+  "body": "后端启动或运行失败\n\n后端输出管道已关闭。请查看本次启动日志；缺少依赖时请在项目根目录运行 uv sync。\n\n修正问题后，可以手动重试启动后端。\n\n重试启动后端\n刷新日志\n\n启动标识：a34fcb57-da8e-4c71-b1cd-8c8b923b98c2\n\n本次启动的日志快照。 退出应用后不保留。\n\nINFO:uvicorn.error:Started server process [16072]\r\nINFO:uvicorn.error:Waiting for application startup.\r\nINFO:uvicorn.error:Application startup complete.\r\nINFO:uvicorn.access:127.0.0.1:61951 - \"GET /health/ready HTTP/1.1\" 200\r\nINFO:uvicorn.access:127.0.0.1:53697 - \"GET /api/threads HTTP/1.1\" 200\r\n运行异常诊断：测试触发退出 73\n"
+}

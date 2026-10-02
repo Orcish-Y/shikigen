@@ -1,0 +1,16 @@
+{
+  "counts": [
+    1,
+    1
+  ],
+  "snapshot": {
+    "state": "ready",
+    "revision": 2,
+    "startup_id": "707aec34-8141-43fa-87d0-dbb4e7afcc79",
+    "base_url": "http://127.0.0.1:45200",
+    "can_retry": false,
+    "error": null
+  },
+  "owner_pid": 30656,
+  "orphaned_exit": 0
+}

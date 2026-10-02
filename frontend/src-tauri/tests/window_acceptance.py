@@ -285,6 +285,10 @@ class WindowAcceptance(unittest.TestCase):
       USER32.GetMenuItemRect(0, menu, labels.index(label), ctypes.byref(rect))
     )
     left, top, right, bottom = rect.left, rect.top, rect.right, rect.bottom
+    # Repeated menus can reopen directly beneath the unchanged cursor. Move
+    # within the item first so Windows delivers a fresh hover notification.
+    win32api.SetCursorPos((left + 2, top + 2))
+    time.sleep(0.05)
     win32api.SetCursorPos(((left + right) // 2, (top + bottom) // 2))
     time.sleep(0.1)  # Let the native popup process the pointer move before click.
     self.assertEqual(

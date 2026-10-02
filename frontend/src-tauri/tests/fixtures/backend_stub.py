@@ -86,6 +86,18 @@ print(
 if mode == "stderr_flood":
   sys.stderr.buffer.write(b"log" * 1000000)
   sys.stderr.flush()
+if mode == "log_tail":
+  sys.stderr.buffer.write(
+    b"discard" * 200000 + "界".encode() + b"x" * 1048574 + b"\xff"
+  )
+  sys.stderr.flush()
+if mode == "continuous_logs":
+
+  def flood():
+    while True:
+      os.write(2, b"continuous stderr\n" * 512)
+
+  threading.Thread(target=flood, daemon=True).start()
 threading.Thread(target=server.serve_forever, daemon=True).start()
 if mode == "old_flood_exit":
   subprocess.Popen(

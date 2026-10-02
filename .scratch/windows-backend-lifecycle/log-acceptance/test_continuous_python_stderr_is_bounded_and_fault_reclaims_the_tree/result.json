@@ -1,0 +1,19 @@
+{
+  "counts": [
+    1,
+    1
+  ],
+  "failed": {
+    "state": "failed",
+    "revision": 4,
+    "startup_id": "35763ebb-41cc-4aa1-b9cd-895d9b15d08f",
+    "base_url": null,
+    "can_retry": true,
+    "error": {
+      "code": "RuntimeError",
+      "message": "日志洪泛中的初始化故障"
+    }
+  },
+  "retained_bytes": 1048576,
+  "truncated": true
+}

@@ -1,0 +1,286 @@
+test_late_real_history_cannot_replace_new_startup_thread (client_acceptance.ClientAcceptance.test_late_real_history_cannot_replace_new_startup_thread) ... ok
+test_page_reads_persisted_messages_and_run_then_sends_only_on_click (client_acceptance.ClientAcceptance.test_page_reads_persisted_messages_and_run_then_sends_only_on_click) ... ok
+test_replayed_pause_cannot_override_current_resumed_run_status (client_acceptance.ClientAcceptance.test_replayed_pause_cannot_override_current_resumed_run_status) ... ok
+test_running_sse_survives_page_reload_and_recovers_on_new_port_without_resend (client_acceptance.ClientAcceptance.test_running_sse_survives_page_reload_and_recovers_on_new_port_without_resend) ... ok
+test_continuous_python_stderr_is_bounded_and_fault_reclaims_the_tree (log_acceptance.LogAcceptance.test_continuous_python_stderr_is_bounded_and_fault_reclaims_the_tree) ... ok
+test_failed_and_pending_log_queries_do_not_block_retry_or_exit (log_acceptance.LogAcceptance.test_failed_and_pending_log_queries_do_not_block_retry_or_exit) ... FAIL
+test_late_query_and_wrong_startup_cannot_replace_the_current_error_logs (log_acceptance.LogAcceptance.test_late_query_and_wrong_startup_cannot_replace_the_current_error_logs) ... FAIL
+test_runtime_exit_preserves_its_stderr_diagnostic_and_reclaims_descendant (log_acceptance.LogAcceptance.test_runtime_exit_preserves_its_stderr_diagnostic_and_reclaims_descendant) ... FAIL
+test_startup_error_has_on_demand_traceback_and_retry_clears_logs (log_acceptance.LogAcceptance.test_startup_error_has_on_demand_traceback_and_retry_clears_logs) ... FAIL
+test_independent_entry_contention_reports_original_ownership_error (native_acceptance.NativeAcceptance.test_independent_entry_contention_reports_original_ownership_error) ... ERROR
+test_killing_only_host_reclaims_backend_and_tool_but_not_external_service (native_acceptance.NativeAcceptance.test_killing_only_host_reclaims_backend_and_tool_but_not_external_service) ... ok
+test_killing_python_reclaims_the_remaining_tool (native_acceptance.NativeAcceptance.test_killing_python_reclaims_the_remaining_tool) ... ok
+test_quit_during_cancellable_initialization_reclaims_descendants (native_acceptance.NativeAcceptance.test_quit_during_cancellable_initialization_reclaims_descendants) ... ok
+test_quit_during_execution_with_persistent_sse_and_stuck_cleanup (native_acceptance.NativeAcceptance.test_quit_during_execution_with_persistent_sse_and_stuck_cleanup) ... ok
+test_startup_timeout_forces_stuck_initialization_and_preserves_reason (native_acceptance.NativeAcceptance.test_startup_timeout_forces_stuck_initialization_and_preserves_reason) ... ok
+test_departed_notification_owner_cannot_leave_a_second_unprotected_host (single_instance_acceptance.SingleInstanceAcceptance.test_departed_notification_owner_cannot_leave_a_second_unprotected_host) ... FAIL
+test_failed_reopen_does_not_retry_even_after_configuration_is_fixed (single_instance_acceptance.SingleInstanceAcceptance.test_failed_reopen_does_not_retry_even_after_configuration_is_fixed) ... FAIL
+test_ready_reopen_restores_existing_window_and_session (single_instance_acceptance.SingleInstanceAcceptance.test_ready_reopen_restores_existing_window_and_session) ... FAIL
+test_reopen_during_quit_and_unconfirmed_reclamation_keeps_exiting (single_instance_acceptance.SingleInstanceAcceptance.test_reopen_during_quit_and_unconfirmed_reclamation_keeps_exiting) ... FAIL
+test_simultaneous_launches_create_only_one_host_runtime (single_instance_acceptance.SingleInstanceAcceptance.test_simultaneous_launches_create_only_one_host_runtime) ... FAIL
+test_starting_reopen_only_shows_current_initialization (single_instance_acceptance.SingleInstanceAcceptance.test_starting_reopen_only_shows_current_initialization) ... FAIL
+test_agent_task_completes_and_persists_after_close (tray_acceptance.TrayAcceptance.test_agent_task_completes_and_persists_after_close) ... FAIL
+test_agent_task_failure_does_not_activate_window_or_fail_backend (tray_acceptance.TrayAcceptance.test_agent_task_failure_does_not_activate_window_or_fail_backend) ... FAIL
+test_hidden_backend_failure_is_shown_once_until_next_attempt (tray_acceptance.TrayAcceptance.test_hidden_backend_failure_is_shown_once_until_next_attempt) ... FAIL
+test_hidden_initialization_completes_and_tray_restores_same_attempt (tray_acceptance.TrayAcceptance.test_hidden_initialization_completes_and_tray_restores_same_attempt) ... FAIL
+test_idle_close_keeps_same_backend_and_renderer (tray_acceptance.TrayAcceptance.test_idle_close_keeps_same_backend_and_renderer) ... ok
+test_missing_tray_keeps_window_and_explains_close_will_quit (tray_acceptance.TrayAcceptance.test_missing_tray_keeps_window_and_explains_close_will_quit) ... ok
+test_tray_quit_during_initialization_retains_unconfirmed_error_then_exits (tray_acceptance.TrayAcceptance.test_tray_quit_during_initialization_retains_unconfirmed_error_then_exits) ... FAIL
+test_tray_quit_during_task_and_sse_cleans_up_owned_processes (tray_acceptance.TrayAcceptance.test_tray_quit_during_task_and_sse_cleans_up_owned_processes) ... FAIL
+
+======================================================================
+ERROR: test_independent_entry_contention_reports_original_ownership_error (native_acceptance.NativeAcceptance.test_independent_entry_contention_reports_original_ownership_error)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\shutil.py", line 633, in _rmtree_unsafe
+    os.unlink(fullname)
+PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\Orcs0\\AppData\\Local\\Temp\\shikigen native acceptance wu5ssnj3\\project with spaces\\chat.db'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\tempfile.py", line 954, in cleanup
+    self._rmtree(self.name, ignore_errors=self._ignore_cleanup_errors)
+  File "C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\tempfile.py", line 934, in _rmtree
+    _shutil.rmtree(name, onexc=onexc)
+  File "C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\shutil.py", line 781, in rmtree
+    return _rmtree_unsafe(path, onexc)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\shutil.py", line 635, in _rmtree_unsafe
+    onexc(os.unlink, fullname, err)
+  File "C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\tempfile.py", line 909, in onexc
+    _os.unlink(path)
+PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\Orcs0\\AppData\\Local\\Temp\\shikigen native acceptance wu5ssnj3\\project with spaces\\chat.db'
+
+======================================================================
+FAIL: test_failed_and_pending_log_queries_do_not_block_retry_or_exit (log_acceptance.LogAcceptance.test_failed_and_pending_log_queries_do_not_block_retry_or_exit)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\log_acceptance.py", line 144, in test_failed_and_pending_log_queries_do_not_block_retry_or_exit
+    self.quit(host)
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 311, in quit
+    self.tray_menu(host, "退出应用")
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 295, in tray_menu
+    wait_until(
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 54, in wait_until
+    raise AssertionError(f"condition did not become true: {probe}")
+AssertionError: condition did not become true: <function WindowAcceptance.tray_menu.<locals>.<lambda> at 0x00000272333C5260>
+
+======================================================================
+FAIL: test_late_query_and_wrong_startup_cannot_replace_the_current_error_logs (log_acceptance.LogAcceptance.test_late_query_and_wrong_startup_cannot_replace_the_current_error_logs)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\log_acceptance.py", line 122, in test_late_query_and_wrong_startup_cannot_replace_the_current_error_logs
+    self.quit(host)
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 311, in quit
+    self.tray_menu(host, "退出应用")
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 295, in tray_menu
+    wait_until(
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 54, in wait_until
+    raise AssertionError(f"condition did not become true: {probe}")
+AssertionError: condition did not become true: <function WindowAcceptance.tray_menu.<locals>.<lambda> at 0x00000272333C4F40>
+
+======================================================================
+FAIL: test_runtime_exit_preserves_its_stderr_diagnostic_and_reclaims_descendant (log_acceptance.LogAcceptance.test_runtime_exit_preserves_its_stderr_diagnostic_and_reclaims_descendant)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\log_acceptance.py", line 238, in test_runtime_exit_preserves_its_stderr_diagnostic_and_reclaims_descendant
+    self.quit(host)
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 311, in quit
+    self.tray_menu(host, "退出应用")
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 295, in tray_menu
+    wait_until(
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 54, in wait_until
+    raise AssertionError(f"condition did not become true: {probe}")
+AssertionError: condition did not become true: <function WindowAcceptance.tray_menu.<locals>.<lambda> at 0x00000272333C7100>
+
+======================================================================
+FAIL: test_startup_error_has_on_demand_traceback_and_retry_clears_logs (log_acceptance.LogAcceptance.test_startup_error_has_on_demand_traceback_and_retry_clears_logs)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\log_acceptance.py", line 90, in test_startup_error_has_on_demand_traceback_and_retry_clears_logs
+    self.quit(host)
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 311, in quit
+    self.tray_menu(host, "退出应用")
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 295, in tray_menu
+    wait_until(
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 54, in wait_until
+    raise AssertionError(f"condition did not become true: {probe}")
+AssertionError: condition did not become true: <function WindowAcceptance.tray_menu.<locals>.<lambda> at 0x00000272333C6D40>
+
+======================================================================
+FAIL: test_departed_notification_owner_cannot_leave_a_second_unprotected_host (single_instance_acceptance.SingleInstanceAcceptance.test_departed_notification_owner_cannot_leave_a_second_unprotected_host)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\single_instance_acceptance.py", line 165, in test_departed_notification_owner_cannot_leave_a_second_unprotected_host
+    self.quit(owner)
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 311, in quit
+    self.tray_menu(host, "退出应用")
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 295, in tray_menu
+    wait_until(
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 54, in wait_until
+    raise AssertionError(f"condition did not become true: {probe}")
+AssertionError: condition did not become true: <function WindowAcceptance.tray_menu.<locals>.<lambda> at 0x00000272333C49A0>
+
+======================================================================
+FAIL: test_failed_reopen_does_not_retry_even_after_configuration_is_fixed (single_instance_acceptance.SingleInstanceAcceptance.test_failed_reopen_does_not_retry_even_after_configuration_is_fixed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\single_instance_acceptance.py", line 77, in test_failed_reopen_does_not_retry_even_after_configuration_is_fixed
+    self.quit(first)
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 311, in quit
+    self.tray_menu(host, "退出应用")
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 295, in tray_menu
+    wait_until(
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 54, in wait_until
+    raise AssertionError(f"condition did not become true: {probe}")
+AssertionError: condition did not become true: <function WindowAcceptance.tray_menu.<locals>.<lambda> at 0x00000272333C56C0>
+
+======================================================================
+FAIL: test_ready_reopen_restores_existing_window_and_session (single_instance_acceptance.SingleInstanceAcceptance.test_ready_reopen_restores_existing_window_and_session)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\single_instance_acceptance.py", line 32, in test_ready_reopen_restores_existing_window_and_session
+    self.quit(first)
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 311, in quit
+    self.tray_menu(host, "退出应用")
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 295, in tray_menu
+    wait_until(
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 54, in wait_until
+    raise AssertionError(f"condition did not become true: {probe}")
+AssertionError: condition did not become true: <function WindowAcceptance.tray_menu.<locals>.<lambda> at 0x00000272333C68E0>
+
+======================================================================
+FAIL: test_reopen_during_quit_and_unconfirmed_reclamation_keeps_exiting (single_instance_acceptance.SingleInstanceAcceptance.test_reopen_during_quit_and_unconfirmed_reclamation_keeps_exiting)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\single_instance_acceptance.py", line 88, in test_reopen_during_quit_and_unconfirmed_reclamation_keeps_exiting
+    self.quit(first)
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 311, in quit
+    self.tray_menu(host, "退出应用")
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 295, in tray_menu
+    wait_until(
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 54, in wait_until
+    raise AssertionError(f"condition did not become true: {probe}")
+AssertionError: condition did not become true: <function WindowAcceptance.tray_menu.<locals>.<lambda> at 0x00000272333C71A0>
+
+======================================================================
+FAIL: test_simultaneous_launches_create_only_one_host_runtime (single_instance_acceptance.SingleInstanceAcceptance.test_simultaneous_launches_create_only_one_host_runtime)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\single_instance_acceptance.py", line 142, in test_simultaneous_launches_create_only_one_host_runtime
+    self.quit(owner)
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 311, in quit
+    self.tray_menu(host, "退出应用")
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 295, in tray_menu
+    wait_until(
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 54, in wait_until
+    raise AssertionError(f"condition did not become true: {probe}")
+AssertionError: condition did not become true: <function WindowAcceptance.tray_menu.<locals>.<lambda> at 0x00000272337E4540>
+
+======================================================================
+FAIL: test_starting_reopen_only_shows_current_initialization (single_instance_acceptance.SingleInstanceAcceptance.test_starting_reopen_only_shows_current_initialization)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\single_instance_acceptance.py", line 60, in test_starting_reopen_only_shows_current_initialization
+    self.quit(first)
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 311, in quit
+    self.tray_menu(host, "退出应用")
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 295, in tray_menu
+    wait_until(
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 54, in wait_until
+    raise AssertionError(f"condition did not become true: {probe}")
+AssertionError: condition did not become true: <function WindowAcceptance.tray_menu.<locals>.<lambda> at 0x00000272333C6520>
+
+======================================================================
+FAIL: test_agent_task_completes_and_persists_after_close (tray_acceptance.TrayAcceptance.test_agent_task_completes_and_persists_after_close)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\tray_acceptance.py", line 179, in test_agent_task_completes_and_persists_after_close
+    self.run_hidden_task(failure=False)
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\tray_acceptance.py", line 175, in run_hidden_task
+    self.quit(host)
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 311, in quit
+    self.tray_menu(host, "退出应用")
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 295, in tray_menu
+    wait_until(
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 54, in wait_until
+    raise AssertionError(f"condition did not become true: {probe}")
+AssertionError: condition did not become true: <function WindowAcceptance.tray_menu.<locals>.<lambda> at 0x00000272337E4B80>
+
+======================================================================
+FAIL: test_agent_task_failure_does_not_activate_window_or_fail_backend (tray_acceptance.TrayAcceptance.test_agent_task_failure_does_not_activate_window_or_fail_backend)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\tray_acceptance.py", line 182, in test_agent_task_failure_does_not_activate_window_or_fail_backend
+    self.run_hidden_task(failure=True)
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\tray_acceptance.py", line 175, in run_hidden_task
+    self.quit(host)
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 311, in quit
+    self.tray_menu(host, "退出应用")
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 295, in tray_menu
+    wait_until(
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 54, in wait_until
+    raise AssertionError(f"condition did not become true: {probe}")
+AssertionError: condition did not become true: <function WindowAcceptance.tray_menu.<locals>.<lambda> at 0x00000272337E4A40>
+
+======================================================================
+FAIL: test_hidden_backend_failure_is_shown_once_until_next_attempt (tray_acceptance.TrayAcceptance.test_hidden_backend_failure_is_shown_once_until_next_attempt)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\tray_acceptance.py", line 96, in test_hidden_backend_failure_is_shown_once_until_next_attempt
+    self.quit(host)
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 311, in quit
+    self.tray_menu(host, "退出应用")
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 295, in tray_menu
+    wait_until(
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 54, in wait_until
+    raise AssertionError(f"condition did not become true: {probe}")
+AssertionError: condition did not become true: <function WindowAcceptance.tray_menu.<locals>.<lambda> at 0x00000272337E49A0>
+
+======================================================================
+FAIL: test_hidden_initialization_completes_and_tray_restores_same_attempt (tray_acceptance.TrayAcceptance.test_hidden_initialization_completes_and_tray_restores_same_attempt)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\tray_acceptance.py", line 132, in test_hidden_initialization_completes_and_tray_restores_same_attempt
+    self.quit(host)
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 311, in quit
+    self.tray_menu(host, "退出应用")
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 295, in tray_menu
+    wait_until(
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 54, in wait_until
+    raise AssertionError(f"condition did not become true: {probe}")
+AssertionError: condition did not become true: <function WindowAcceptance.tray_menu.<locals>.<lambda> at 0x00000272337E5580>
+
+======================================================================
+FAIL: test_tray_quit_during_initialization_retains_unconfirmed_error_then_exits (tray_acceptance.TrayAcceptance.test_tray_quit_during_initialization_retains_unconfirmed_error_then_exits)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\tray_acceptance.py", line 194, in test_tray_quit_during_initialization_retains_unconfirmed_error_then_exits
+    self.quit(host)
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 311, in quit
+    self.tray_menu(host, "退出应用")
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 295, in tray_menu
+    wait_until(
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 54, in wait_until
+    raise AssertionError(f"condition did not become true: {probe}")
+AssertionError: condition did not become true: <function WindowAcceptance.tray_menu.<locals>.<lambda> at 0x00000272333C56C0>
+
+======================================================================
+FAIL: test_tray_quit_during_task_and_sse_cleans_up_owned_processes (tray_acceptance.TrayAcceptance.test_tray_quit_during_task_and_sse_cleans_up_owned_processes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\tray_acceptance.py", line 240, in test_tray_quit_during_task_and_sse_cleans_up_owned_processes
+    self.quit(host)
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 311, in quit
+    self.tray_menu(host, "退出应用")
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 295, in tray_menu
+    wait_until(
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 54, in wait_until
+    raise AssertionError(f"condition did not become true: {probe}")
+AssertionError: condition did not become true: <function WindowAcceptance.tray_menu.<locals>.<lambda> at 0x00000272337E58A0>
+
+----------------------------------------------------------------------
+Ran 29 tests in 238.542s
+
+FAILED (failures=16, errors=1)

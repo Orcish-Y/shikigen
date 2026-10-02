@@ -1,0 +1,19 @@
+{
+  "counts": [
+    1,
+    1
+  ],
+  "snapshot": {
+    "state": "failed",
+    "revision": 5,
+    "startup_id": "21ea528f-7210-49f5-ac85-b86f12c379ec",
+    "base_url": null,
+    "can_retry": false,
+    "error": {
+      "code": "reclamation_unconfirmed",
+      "message": "无法确认后端已完全退出"
+    }
+  },
+  "continued_exit": true,
+  "processes_reclaimed": true
+}

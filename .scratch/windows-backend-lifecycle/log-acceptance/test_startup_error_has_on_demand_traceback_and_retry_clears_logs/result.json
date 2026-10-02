@@ -1,0 +1,32 @@
+{
+  "counts": [
+    1,
+    2
+  ],
+  "failed": {
+    "state": "failed",
+    "revision": 4,
+    "startup_id": "ea7c5ee8-fe11-4a84-9746-478a94d3dbe6",
+    "base_url": null,
+    "can_retry": true,
+    "error": {
+      "code": "AppConfigError",
+      "message": "Invalid config file: C:\\Users\\Orcs0\\AppData\\Local\\Temp\\shikigen native acceptance d4a755mj\\project with spaces\\config.json\nvalidation errors:\nmcp.servers.broken: Invalid transport; expected 'http' or 'stdio'"
+    }
+  },
+  "ready": {
+    "state": "ready",
+    "revision": 6,
+    "startup_id": "f6d1ed58-6ef8-45c3-b16d-b55bd96bc568",
+    "base_url": "http://127.0.0.1:45200",
+    "can_retry": false,
+    "error": null
+  },
+  "logs": {
+    "startup_id": "f6d1ed58-6ef8-45c3-b16d-b55bd96bc568",
+    "text": "INFO:uvicorn.error:Started server process [27380]\r\nINFO:uvicorn.error:Waiting for application startup.\r\nINFO:uvicorn.error:Application startup complete.\r\nINFO:uvicorn.access:127.0.0.1:53322 - \"GET /health/ready HTTP/1.1\" 200\r\nINFO:uvicorn.access:127.0.0.1:50906 - \"GET /api/threads HTTP/1.1\" 200\r\n",
+    "retained_bytes": 297,
+    "truncated": false,
+    "read_error": null
+  }
+}

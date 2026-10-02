@@ -1,0 +1,50 @@
+{
+  "counts": [
+    1,
+    2
+  ],
+  "first": {
+    "state": "ready",
+    "revision": 2,
+    "startup_id": "e014e987-9133-439d-9eb7-7fa0fd5b51af",
+    "base_url": "http://127.0.0.1:45200",
+    "can_retry": false,
+    "error": null
+  },
+  "retried": {
+    "state": "ready",
+    "revision": 7,
+    "startup_id": "7f86a03e-58e6-43fc-9ae6-fca5191687d1",
+    "base_url": "http://127.0.0.1:45201",
+    "can_retry": false,
+    "error": null
+  },
+  "body": "shikigen\n后端已就绪\n命令面板\nCtrl K\n工作空间\n会话与对话\n工具与技能编排\n待开放\n知识库与向量空间\n待开放\n提示词与评估\n待开放\n运行日志与追踪\n待开放\n后端已就绪\n快捷命令面板\n系统设置\nLocal Developer\n个人工作空间\n会话历史\n新建\n\n历史\n\n会话 a9dc023f\n2026-10-02T08:55:22.630880+00:00\n会话 5ed8b978\n2026-10-02T08:55:22.522183+00:00\n当前 Run 用量\n\n暂无用量数据\n\n用量信息见运行详情\n会话 a9dc023f\ncompleted\n导出\n运行详情\n刷新数据\nME\nLocal Developer\n\n新启动选择的持久事实\n\nshikigen Agent\n\nadd({\"a\":1,\"b\":2})\n\nshikigen Agent\n\nadd\n工具结果\ncall-1\n\n3\n\nshikigen Agent\n\n3\n\n后端已就绪 · 可编辑草稿\n发送\n草稿仅保留在当前页面\nCtrl K\n命令面板",
+  "requests": [
+    {
+      "url": "http://127.0.0.1:45200/api/threads",
+      "method": "GET",
+      "aborted": true
+    },
+    {
+      "url": "http://127.0.0.1:45200/api/threads/5ed8b97879c24599a03024485fbdbe8b/messages",
+      "method": "GET",
+      "aborted": true
+    },
+    {
+      "url": "http://127.0.0.1:45201/api/threads",
+      "method": "GET",
+      "aborted": false
+    },
+    {
+      "url": "http://127.0.0.1:45201/api/threads/a9dc023fc58f479893186540133fc467/messages",
+      "method": "GET",
+      "aborted": false
+    },
+    {
+      "url": "http://127.0.0.1:45201/api/threads/a9dc023fc58f479893186540133fc467/runs/213e4dfc5cbb4641befa3bd5471bddbb/stream",
+      "method": "GET",
+      "aborted": false
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "counts": [
+    1,
+    2
+  ],
+  "failed": {
+    "state": "failed",
+    "revision": 4,
+    "startup_id": "ef30aad4-9e89-466a-8909-a43f7b9d6708",
+    "base_url": null,
+    "can_retry": true,
+    "error": {
+      "code": "AppConfigError",
+      "message": "Invalid config file: C:\\Users\\Orcs0\\AppData\\Local\\Temp\\shikigen native acceptance yws9sx33\\project with spaces\\config.json\nvalidation errors:\nmcp.servers.broken: Invalid transport; expected 'http' or 'stdio'"
+    }
+  },
+  "retried": {
+    "state": "failed",
+    "revision": 8,
+    "startup_id": "03741c40-64a2-4a68-9f79-d67e4213de03",
+    "base_url": null,
+    "can_retry": true,
+    "error": {
+      "code": "AppConfigError",
+      "message": "Invalid config file: C:\\Users\\Orcs0\\AppData\\Local\\Temp\\shikigen native acceptance yws9sx33\\project with spaces\\config.json\nvalidation errors:\nmcp.servers.broken: Invalid transport; expected 'http' or 'stdio'"
+    }
+  },
+  "body": "后端启动或运行失败\n\nInvalid config file: C:\\Users\\Orcs0\\AppData\\Local\\Temp\\shikigen native acceptance yws9sx33\\project with spaces\\config.json\nvalidation errors:\nmcp.servers.broken: Invalid transport; expected 'http' or 'stdio'\n\n修正问题后，可以手动重试启动后端。\n\n重试启动后端\n正在读取日志…"
+}

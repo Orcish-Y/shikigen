@@ -1,5 +1,6 @@
 import { useBackendState } from "./useBackendState";
 import { TrayNotice } from "./TrayNotice";
+import { BackendLogs } from "./BackendLogs";
 import { useEffect, useState } from "react";
 import {
   IconContext,
@@ -59,6 +60,7 @@ export default function App() {
           </button>
         )}
         {backend.retryError && <p role="alert">{backend.retryError}</p>}
+        {state?.startup_id && state.error && <BackendLogs key={state.startup_id} startupId={state.startup_id} />}
       </main>
     );
   }

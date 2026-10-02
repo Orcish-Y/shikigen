@@ -132,5 +132,7 @@ impl LaunchPlan {
     }
 }
 
+mod logs;
 mod manager;
+pub use logs::BackendLogs;
 pub use manager::{BackendManager, BackendSnapshot, Launcher, PlanLoader, RetryResult};

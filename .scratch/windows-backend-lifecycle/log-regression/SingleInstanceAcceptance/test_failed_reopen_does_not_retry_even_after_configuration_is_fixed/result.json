@@ -1,0 +1,19 @@
+{
+  "counts": [
+    1,
+    0
+  ],
+  "snapshot": {
+    "state": "failed",
+    "revision": 2,
+    "startup_id": "7b63116d-1388-40f6-a2e6-e43a00d3c79c",
+    "base_url": null,
+    "can_retry": true,
+    "error": {
+      "code": "config",
+      "message": "backend.port: 类型或取值无效"
+    }
+  },
+  "foreground_pid": 11936,
+  "config_fixed": true
+}

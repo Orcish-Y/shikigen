@@ -1,0 +1,29 @@
+{
+  "counts": [
+    1,
+    2
+  ],
+  "first": {
+    "state": "failed",
+    "revision": 4,
+    "startup_id": "ef53e98c-982e-4a5f-bb86-13e5eda8fe9a",
+    "base_url": null,
+    "can_retry": true,
+    "error": {
+      "code": "AppConfigError",
+      "message": "Invalid config file: C:\\Users\\Orcs0\\AppData\\Local\\Temp\\shikigen native acceptance q3bdxswx\\project with spaces\\config.json\nvalidation errors:\nmcp.servers.broken: Invalid transport; expected 'http' or 'stdio'"
+    }
+  },
+  "second": {
+    "state": "failed",
+    "revision": 8,
+    "startup_id": "d805371d-e1da-4ff9-b7eb-48770ba375db",
+    "base_url": null,
+    "can_retry": true,
+    "error": {
+      "code": "AppConfigError",
+      "message": "Invalid config file: C:\\Users\\Orcs0\\AppData\\Local\\Temp\\shikigen native acceptance q3bdxswx\\project with spaces\\config.json\nvalidation errors:\nmodel.default: Input should be a valid string"
+    }
+  },
+  "body": "后端启动或运行失败\n\nInvalid config file: C:\\Users\\Orcs0\\AppData\\Local\\Temp\\shikigen native acceptance q3bdxswx\\project with spaces\\config.json\nvalidation errors:\nmodel.default: Input should be a valid string\n\n修正问题后，可以手动重试启动后端。\n\n重试启动后端\n刷新日志\n\n启动已变化，请重新读取日志。"
+}
