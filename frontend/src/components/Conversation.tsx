@@ -50,16 +50,18 @@ function CodeBlock({ code }: { code: NonNullable<Message["code"]> }) {
 export function Conversation({
   session,
   onSuggestion,
+  preview = false,
 }: {
   session: Session;
   onSuggestion: (text: string) => void;
+  preview?: boolean;
 }) {
   return (
     <div className="timeline" key={session.id}>
       <div className="message-container">
         {session.messages.length ? (
           <>
-            <div className="timeline-caption">示例对话 · 仅用于布局预览</div>
+            {preview && <div className="timeline-caption">示例对话 · 仅用于布局预览</div>}
             {session.messages.map((message) => (
               <article className={`message ${message.role}`} key={message.id}>
                 <div
@@ -78,7 +80,7 @@ export function Conversation({
                         ? "Local Developer"
                         : "shikigen Agent"}
                     </strong>
-                    {message.role === "assistant" && (
+                    {preview && message.role === "assistant" && (
                       <span className="badge">示例</span>
                     )}
                   </div>
@@ -95,7 +97,7 @@ export function Conversation({
                         <strong>{message.tool.name}</strong>
                         <span className="success">
                           <Check size={12} />
-                          示例结果
+                          {preview ? "示例结果" : message.tool.status === "error" ? "工具失败" : "工具结果"}
                         </span>
                       </summary>
                       <div className="tool-content">
@@ -138,12 +140,18 @@ export function Composer({
   onChange,
   onCommands,
   shortcut,
+  canSend = false,
+  sending = false,
+  onSend,
 }: {
   backendReady: boolean;
   draft: string;
   onChange: (text: string) => void;
   onCommands: () => void;
   shortcut: string;
+  canSend?: boolean;
+  sending?: boolean;
+  onSend: () => void;
 }) {
   return (
     <div className="composer-area">
@@ -163,10 +171,10 @@ export function Composer({
           </span>
           <button
             className="primary-button"
-            disabled
-            title="当前为界面预览，暂不支持发送消息"
+            disabled={!canSend || !draft.trim()}
+            onClick={onSend}
           >
-            发送
+            {sending ? "运行中…" : "发送"}
             <ArrowUp size={16} />
           </button>
         </div>

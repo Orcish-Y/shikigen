@@ -77,10 +77,18 @@ async def _serve_runtime(
   runtime: "Runtime", listener: socket.socket, control: ControlChannel
 ) -> None:
   import uvicorn
+  from fastapi.middleware.cors import CORSMiddleware
 
   from app.server import create_app
 
   app = create_app(runtime=runtime)
+  # Desktop WebView origins; ordinary HTTP/CLI entry points keep their policy.
+  app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://127.0.0.1:5173", "http://tauri.localhost"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
+  )
 
   @app.get("/health/ready")
   async def ready():

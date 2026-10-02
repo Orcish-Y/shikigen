@@ -960,3 +960,9 @@ textarea::placeholder {
 }
 .backend-screen h1 { font-size: 24px; font-weight: 500; }
 .backend-screen p { max-width: 760px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
+.business-notice {
+  margin: 8px 20px;
+  color: #8b401f;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}

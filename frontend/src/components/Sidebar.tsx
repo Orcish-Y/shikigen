@@ -95,6 +95,7 @@ export function History({
   onQuery,
   onSelect,
   onCreate,
+  creating = false,
 }: {
   sessions: Session[];
   activeId: string;
@@ -102,6 +103,7 @@ export function History({
   onQuery: (value: string) => void;
   onSelect: (id: string) => void;
   onCreate: () => void;
+  creating?: boolean;
 }) {
   const filtered = sessions.filter((session) =>
     session.title.toLowerCase().includes(query.toLowerCase()),
@@ -110,7 +112,7 @@ export function History({
     <aside className="history" aria-label="会话历史">
       <div className="history-heading">
         <h2>会话历史</h2>
-        <button className="secondary-button" onClick={onCreate}>
+        <button className="secondary-button" onClick={onCreate} disabled={creating}>
           <Plus size={14} />
           新建
         </button>
@@ -125,13 +127,13 @@ export function History({
         />
       </label>
       <nav className="session-list" aria-label="历史会话">
-        {(["今天", "昨天"] as const).map((group) => {
+        {(["今天", "昨天", "历史"] as const).map((group) => {
           const entries = filtered.filter((session) => session.group === group);
           return (
             entries.length > 0 && (
               <div key={group}>
                 <p className="group-label">
-                  {group} / {group === "今天" ? "Today" : "Yesterday"}
+                  {group}
                 </p>
                 {entries.map((session) => (
                   <button
@@ -163,7 +165,7 @@ export function History({
           当前 Run 用量
         </span>
         <p>暂无用量数据</p>
-        <small>运行用量将在连接后展示</small>
+        <small>用量信息见运行详情</small>
       </div>
     </aside>
   );
