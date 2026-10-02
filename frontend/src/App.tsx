@@ -1,4 +1,5 @@
 import { useBackendState } from "./useBackendState";
+import { TrayNotice } from "./TrayNotice";
 import { useEffect, useState } from "react";
 import {
   IconContext,
@@ -118,6 +119,7 @@ export default function App() {
     };
     return (
       <main className="backend-screen" aria-live="polite">
+        <TrayNotice />
         <img src="/logo.svg" alt="" width="40" height="40" />
         <h1>{backend.error ? "无法读取后端状态" : labels[state?.state ?? "starting"]}</h1>
         <p>{backend.error ?? state?.error?.message ?? "正在准备运行环境，请稍候。"}</p>
@@ -165,6 +167,7 @@ export default function App() {
             <kbd>{shortcut} K</kbd>
           </button>
         </header>
+        <TrayNotice />
         <div className="workspace">
           {mobilePanel && (
             <button

@@ -1,0 +1,44 @@
+$ tsc --noEmit && vite build
+vite v7.3.6 building client environment for production...
+transforming...
+✓ 4584 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                                   0.40 kB │ gzip:  0.27 kB
+dist/assets/geist-vietnamese-600-normal-BFUgqsz8.woff2            4.16 kB
+dist/assets/jetbrains-mono-greek-400-normal-C190GLew.woff2        4.23 kB
+dist/assets/geist-cyrillic-ext-400-normal-ChfpGzr5.woff           4.29 kB
+dist/assets/geist-cyrillic-ext-600-normal-PR76dHFV.woff           4.33 kB
+dist/assets/geist-cyrillic-ext-500-normal-BXrH8YSv.woff           4.33 kB
+dist/assets/jetbrains-mono-cyrillic-400-normal-BEIGL1Tu.woff2     5.33 kB
+dist/assets/jetbrains-mono-vietnamese-400-normal-CqNFfHCs.woff    5.37 kB
+dist/assets/geist-vietnamese-400-normal-C8xY9-dI.woff             5.66 kB
+dist/assets/jetbrains-mono-greek-400-normal-B9oWc5Lo.woff         5.66 kB
+dist/assets/geist-vietnamese-500-normal-_b1ojCbH.woff             5.72 kB
+dist/assets/geist-vietnamese-600-normal-B5MZcNo4.woff             5.76 kB
+dist/assets/geist-cyrillic-400-normal-DXusLSnH.woff2              6.12 kB
+dist/assets/geist-cyrillic-500-normal-NWpm63d5.woff2              6.33 kB
+dist/assets/geist-cyrillic-600-normal-BeW5VFD_.woff2              6.36 kB
+dist/assets/jetbrains-mono-cyrillic-400-normal-ugxPyKxw.woff      6.98 kB
+dist/assets/jetbrains-mono-latin-ext-400-normal-Bc8Ftmh3.woff2    7.34 kB
+dist/assets/geist-latin-ext-400-normal-CND6cjiG.woff2             7.83 kB
+dist/assets/geist-cyrillic-400-normal-DkrqoNl2.woff               7.92 kB
+dist/assets/geist-latin-ext-500-normal-BovoTgeE.woff2             7.94 kB
+dist/assets/geist-latin-ext-600-normal-CVFbg5dS.woff2             8.00 kB
+dist/assets/geist-cyrillic-500-normal-BboVsk8R.woff               8.08 kB
+dist/assets/geist-cyrillic-600-normal-CnEeIcMC.woff               8.10 kB
+dist/assets/jetbrains-mono-latin-ext-400-normal-fXTG6kC5.woff    10.13 kB
+dist/assets/geist-latin-ext-400-normal-Bz1pQMyt.woff             10.68 kB
+dist/assets/geist-latin-ext-500-normal-C9fx-R30.woff             10.80 kB
+dist/assets/geist-latin-ext-600-normal-TmIUreF9.woff             10.87 kB
+dist/assets/geist-latin-400-normal-B40WzpMT.woff2                12.96 kB
+dist/assets/geist-latin-500-normal-CTWBw9NS.woff2                13.30 kB
+dist/assets/geist-latin-600-normal-CSETrqM2.woff2                13.37 kB
+dist/assets/geist-latin-400-normal-akEymXtG.woff                 16.76 kB
+dist/assets/geist-latin-500-normal-BDXIbFrL.woff                 17.10 kB
+dist/assets/geist-latin-600-normal-DsPlZH-9.woff                 17.15 kB
+dist/assets/jetbrains-mono-latin-400-normal-V6pRDFza.woff2       21.17 kB
+dist/assets/jetbrains-mono-latin-400-normal-6-qcROiO.woff        27.50 kB
+dist/assets/index-B3lM6QnA.css                                   58.26 kB │ gzip: 30.12 kB
+dist/assets/index-BgD-2z7G.js                                   295.19 kB │ gzip: 90.49 kB
+✓ built in 46.99s

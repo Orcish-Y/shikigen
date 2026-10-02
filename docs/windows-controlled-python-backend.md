@@ -6,7 +6,7 @@
 
 第 03 票完成的是 Python 一侧。Tauri 自动启动后端、Windows Job 管理进程树、超时强制回收等能力仍由后续票实现。本文中的测试结果引用本轮实施记录，编写说明时没有重新运行测试。
 
-后续进度（2026-10-02）：第 04～07 票现已实现桌面托管、初始化取消、有界退出、故障后的手动重试及桌面单实例。本文保留第 03 票的实施背景及历史测试结果；当前退出行为见[第 05 票记录](../.scratch/windows-backend-lifecycle/issues/05-bounded-shutdown-reclamation.md)，重试接口与隔离见[第 06 票记录](../.scratch/windows-backend-lifecycle/issues/06-manual-retry-isolation.md)，重复打开、窗口恢复及竞争保护见[第 07 票记录](../.scratch/windows-backend-lifecycle/issues/07-single-desktop-instance.md)。
+后续进度（2026-10-02）：第 04～08 票现已实现桌面托管、初始化取消、有界退出、故障后的手动重试、桌面单实例及托盘驻留。本文保留第 03 票的实施背景及历史测试结果；回收规则见[第 05 票记录](../.scratch/windows-backend-lifecycle/issues/05-bounded-shutdown-reclamation.md)，重试接口与隔离见[第 06 票记录](../.scratch/windows-backend-lifecycle/issues/06-manual-retry-isolation.md)，重复打开、窗口恢复及竞争保护见[第 07 票记录](../.scratch/windows-backend-lifecycle/issues/07-single-desktop-instance.md)，关窗驻留、托盘退出及后台故障提示见[第 08 票记录](../.scratch/windows-backend-lifecycle/issues/08-tray-residency-exit.md)。
 
 ## 1 为什么需要独立的桌面入口
 
@@ -249,7 +249,7 @@ flowchart TD
 
 第 05 票让 `serve_backend()` 同时等待 runtime 生命周期任务和控制停止事件。初始化期间可取消上下文进入并释放已有资源；运行期间先停止执行，再等待 HTTP 收尾。同步阻塞或不响应取消的路径由 Rust 的总期限与 Job 强制回收处理。
 
-桌面宿主启动、就绪探测、Windows Job、统一期限、进程树强制回收、手动重试和单实例已实现。后续仍有托盘、业务客户端切换和日志查询；当前没有 macOS 原生验收。
+桌面宿主启动、就绪探测、Windows Job、统一期限、进程树强制回收、手动重试、单实例和托盘已实现。正常关窗只隐藏，托盘“退出应用”执行受控回收。后续仍有业务客户端切换和日志查询；当前没有 macOS 原生验收。
 
 建议按以下顺序阅读代码：
 

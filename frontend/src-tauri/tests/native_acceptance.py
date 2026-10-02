@@ -96,6 +96,7 @@ site.addsitedir({str(REPO / ".venv/Lib/site-packages")!r})
 from unittest.mock import patch
 from runtime_fixtures import deterministic_agent
 from desktop_shutdown_fixtures import waiting_agent
+from desktop_tray_fixtures import resident_agent
 async def agent(**kwargs):
     child = subprocess.Popen(
         [sys.executable, "-c", "import time; time.sleep(120)"],
@@ -108,6 +109,12 @@ async def agent(**kwargs):
     if os.environ.get("DESKTOP_TEST_BLOCK_INIT"):
         pathlib.Path("initializing").touch()
         await asyncio.Event().wait()
+    if os.environ.get("DESKTOP_TEST_PAUSE_INIT"):
+        pathlib.Path("initializing").touch()
+        while not pathlib.Path("continue-init").exists():
+            await asyncio.sleep(0.05)
+    if os.environ.get("DESKTOP_TEST_RESIDENT_TASK"):
+        return await resident_agent(**kwargs)
     if os.environ.get("DESKTOP_TEST_EXECUTING"):
         return await waiting_agent(**kwargs)
     return await deterministic_agent(**kwargs)

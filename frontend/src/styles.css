@@ -939,6 +939,16 @@ textarea::placeholder {
   }
 }
 
+.tray-notice {
+  flex-shrink: 0;
+  padding: 12px 20px;
+  background: #fff3d6;
+  color: #654a1a;
+  border-bottom: 1px solid #e7d5ac;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
 .backend-screen {
   min-height: 100dvh;
   display: flex;

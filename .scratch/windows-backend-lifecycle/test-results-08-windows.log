@@ -1,0 +1,51 @@
+test_independent_entry_contention_reports_original_ownership_error (native_acceptance.NativeAcceptance.test_independent_entry_contention_reports_original_ownership_error) ... ok
+test_killing_only_host_reclaims_backend_and_tool_but_not_external_service (native_acceptance.NativeAcceptance.test_killing_only_host_reclaims_backend_and_tool_but_not_external_service) ... ok
+test_killing_python_reclaims_the_remaining_tool (native_acceptance.NativeAcceptance.test_killing_python_reclaims_the_remaining_tool) ... ok
+test_quit_during_cancellable_initialization_reclaims_descendants (native_acceptance.NativeAcceptance.test_quit_during_cancellable_initialization_reclaims_descendants) ... ok
+test_quit_during_execution_with_persistent_sse_and_stuck_cleanup (native_acceptance.NativeAcceptance.test_quit_during_execution_with_persistent_sse_and_stuck_cleanup) ... ok
+test_startup_timeout_forces_stuck_initialization_and_preserves_reason (native_acceptance.NativeAcceptance.test_startup_timeout_forces_stuck_initialization_and_preserves_reason) ... ok
+test_departed_notification_owner_cannot_leave_a_second_unprotected_host (single_instance_acceptance.SingleInstanceAcceptance.test_departed_notification_owner_cannot_leave_a_second_unprotected_host) ... ok
+test_failed_reopen_does_not_retry_even_after_configuration_is_fixed (single_instance_acceptance.SingleInstanceAcceptance.test_failed_reopen_does_not_retry_even_after_configuration_is_fixed) ... ok
+test_ready_reopen_restores_existing_window_and_session (single_instance_acceptance.SingleInstanceAcceptance.test_ready_reopen_restores_existing_window_and_session) ... ok
+test_reopen_during_quit_and_unconfirmed_reclamation_keeps_exiting (single_instance_acceptance.SingleInstanceAcceptance.test_reopen_during_quit_and_unconfirmed_reclamation_keeps_exiting) ... FAIL
+test_simultaneous_launches_create_only_one_host_runtime (single_instance_acceptance.SingleInstanceAcceptance.test_simultaneous_launches_create_only_one_host_runtime) ... ok
+test_starting_reopen_only_shows_current_initialization (single_instance_acceptance.SingleInstanceAcceptance.test_starting_reopen_only_shows_current_initialization) ... ok
+test_agent_task_completes_and_persists_after_close (tray_acceptance.TrayAcceptance.test_agent_task_completes_and_persists_after_close) ... ERROR
+test_agent_task_failure_does_not_activate_window_or_fail_backend (tray_acceptance.TrayAcceptance.test_agent_task_failure_does_not_activate_window_or_fail_backend) ... ok
+test_hidden_backend_failure_is_shown_once_until_next_attempt (tray_acceptance.TrayAcceptance.test_hidden_backend_failure_is_shown_once_until_next_attempt) ... ok
+test_hidden_initialization_completes_and_tray_restores_same_attempt (tray_acceptance.TrayAcceptance.test_hidden_initialization_completes_and_tray_restores_same_attempt) ... ok
+test_idle_close_keeps_same_backend_and_renderer (tray_acceptance.TrayAcceptance.test_idle_close_keeps_same_backend_and_renderer) ... ok
+test_missing_tray_keeps_window_and_explains_close_will_quit (tray_acceptance.TrayAcceptance.test_missing_tray_keeps_window_and_explains_close_will_quit) ... ok
+test_tray_quit_during_initialization_retains_unconfirmed_error_then_exits (tray_acceptance.TrayAcceptance.test_tray_quit_during_initialization_retains_unconfirmed_error_then_exits) ... ok
+test_tray_quit_during_task_and_sse_cleans_up_owned_processes (tray_acceptance.TrayAcceptance.test_tray_quit_during_task_and_sse_cleans_up_owned_processes) ... ok
+
+======================================================================
+ERROR: test_agent_task_completes_and_persists_after_close (tray_acceptance.TrayAcceptance.test_agent_task_completes_and_persists_after_close)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\tray_acceptance.py", line 179, in test_agent_task_completes_and_persists_after_close
+    self.run_hidden_task(failure=False)
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\tray_acceptance.py", line 176, in run_hidden_task
+    self.assertEqual(host.wait(timeout=10), 0)
+                     ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\subprocess.py", line 1264, in wait
+    return self._wait(timeout=timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Orcs0\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\subprocess.py", line 1593, in _wait
+    raise TimeoutExpired(self.args, timeout)
+subprocess.TimeoutExpired: Command '['C:\\code\\shikigen-agent\\frontend\\src-tauri\\target\\debug\\examples\\backend_window.exe', 'C:\\Users\\Orcs0\\AppData\\Local\\Temp\\shikigen native acceptance t5rjgxuj\\project with spaces']' timed out after 10 seconds
+
+======================================================================
+FAIL: test_reopen_during_quit_and_unconfirmed_reclamation_keeps_exiting (single_instance_acceptance.SingleInstanceAcceptance.test_reopen_during_quit_and_unconfirmed_reclamation_keeps_exiting)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\single_instance_acceptance.py", line 95, in test_reopen_during_quit_and_unconfirmed_reclamation_keeps_exiting
+    wait_until(lambda: win32gui.IsWindowVisible(window))
+  File "C:\code\shikigen-agent\frontend\src-tauri\tests\window_acceptance.py", line 55, in wait_until
+    raise AssertionError(f"condition did not become true: {probe}")
+AssertionError: condition did not become true: <function SingleInstanceAcceptance.test_reopen_during_quit_and_unconfirmed_reclamation_keeps_exiting.<locals>.<lambda> at 0x00000175FB8394E0>
+
+----------------------------------------------------------------------
+Ran 20 tests in 153.731s
+
+FAILED (failures=1, errors=1)
