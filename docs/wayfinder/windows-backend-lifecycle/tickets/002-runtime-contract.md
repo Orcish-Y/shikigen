@@ -30,10 +30,10 @@ blocked_by: [windows-lifecycle-behavior, windows-lifecycle-mechanism-research]
 
 完成标准：记录选定接口、状态转换、失败处理、时间上限及选择原因，使实现者不必自行猜测产品行为。遇到需要外部技术调查的问题时，再创建对应研究票据与依赖，不以未经验证的猜测关闭本票据。
 
-上下文：[实施规划](../../../windows-backend-lifecycle-plan.md)。
+上下文：[实施规划](../../../windows-backend-lifecycle.md)。
 
 最终结论：[托管接口与状态转换契约](002-runtime-contract.resolution.md)。
 
-历史讨论：[逐项确认记录](002-runtime-contract.discussion.md)。以最终契约为实施依据。
+历史讨论：[逐项确认记录](../../../archive/README.md#windows-历史与验收)。以最终契约为实施依据。
 
 底层技术依据由[验证后端托管与数据独占的底层机制](003-mechanism-research.md)补齐，见[研究结论](003-mechanism-research.resolution.md)。本票已汇总确认的接口、状态转换、失败处理、期限及验收项；关闭表示决策完成，不表示代码实现或平台验证完成。

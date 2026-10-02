@@ -1,8 +1,0 @@
-test_independent_entry_contention_reports_original_ownership_error (__main__.NativeAcceptance.test_independent_entry_contention_reports_original_ownership_error) ... ok
-test_killing_only_host_reclaims_backend_and_tool_but_not_external_service (__main__.NativeAcceptance.test_killing_only_host_reclaims_backend_and_tool_but_not_external_service) ... ok
-test_killing_python_reclaims_the_remaining_tool (__main__.NativeAcceptance.test_killing_python_reclaims_the_remaining_tool) ... ok
-
-----------------------------------------------------------------------
-Ran 3 tests in 19.346s
-
-OK

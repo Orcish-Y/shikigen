@@ -38,7 +38,7 @@ pnpm tauri dev
 ```
 
 项目使用 `pnpm-lock.yaml` 锁定前端依赖，并在 `package.json` 中固定 pnpm 版本。
-现有 Tauri 壳不会自动启动后端；生命周期管理仍按既有规划另行实现。
+当前 Tauri 壳会自动启动受托管 Python 后端。桌面开发时无需另开 Uvicorn；手动 HTTP 与桌面若使用同一运行数据会争用独占锁。托管模式关闭 reload，Python 修改后从托盘退出并重新启动。详见 [Windows 生命周期](windows-backend-lifecycle.md)。
 
 ## 兼容性说明
 

@@ -1,6 +1,0 @@
-test_reopen_during_quit_and_unconfirmed_reclamation_keeps_exiting (single_instance_acceptance.SingleInstanceAcceptance.test_reopen_during_quit_and_unconfirmed_reclamation_keeps_exiting) ... ok
-
-----------------------------------------------------------------------
-Ran 1 test in 6.829s
-
-OK

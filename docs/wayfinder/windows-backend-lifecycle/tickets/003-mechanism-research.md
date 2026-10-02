@@ -13,7 +13,7 @@ resolution: 003-mechanism-research.resolution.md
 
 ## Question
 
-在[托管接口讨论记录](002-runtime-contract.discussion.md)已确认的行为下，哪些具体 API、调用顺序和失败处理能支撑 Windows 后端托管，并为未来 macOS 保留一致接口？
+在[托管接口讨论记录](../../../archive/README.md#windows-历史与验收)已确认的行为下，哪些具体 API、调用顺序和失败处理能支撑 Windows 后端托管，并为未来 macOS 保留一致接口？
 
 需要使用官方文档、上游源码和本地版本信息回答以下技术问题：
 

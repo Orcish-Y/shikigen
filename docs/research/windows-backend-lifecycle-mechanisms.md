@@ -1,7 +1,7 @@
 # Windows 后端托管与运行数据独占：机制调查
 
 日期：2026-09-28。范围：[验证后端托管与数据独占的底层机制](../wayfinder/windows-backend-lifecycle/tickets/003-mechanism-research.md)。
-产品行为依据：[托管接口讨论记录](../wayfinder/windows-backend-lifecycle/tickets/002-runtime-contract.discussion.md)。
+产品行为依据：[托管接口讨论记录](../archive/README.md#windows-历史与验收)。
 本报告只记录文档、源码事实和设计建议；未实现产品代码、未安装锁库、未运行 Windows 行为测试，也未验证 macOS 托管实现。
 
 ## 结论与版本边界

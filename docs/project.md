@@ -242,9 +242,9 @@ HTTP 已由 JSONL 改为 SSE，删除 output_index、旧完成事件及 v2 版�
 
 ## 前端工作台阶段进度
 
-2026-09-24 已完成基于两份 HTML demo 的设计规范与 React/Tauri 页面框架，覆盖双侧栏、导航折叠、示例消息、输入草稿、命令面板、运行详情空态与响应式布局。TypeScript/Vite 构建及四种窗口尺寸的 Chromium 检查通过；Tauri 原生启动与打包未验收。
+2026-09-24 已完成基于两份 HTML demo 的设计规范与 React/Tauri 页面框架，覆盖双侧栏、导航折叠、示例消息、输入草稿、命令面板、运行详情空态与响应式布局。TypeScript/Vite 构建及四种窗口尺寸的 Chromium 检查通过；这是页面框架阶段的验收；后续 Windows 原生开发态验收见下述收尾记录，安装包尚未验收。
 
-当前未连接后端，真实发送、SSE 状态投影、审批、取消、恢复观察和用量展示仍待接入。设计与组件边界见 [frontend/design.md](../frontend/design.md)，完成项、验证范围与截图见 [前端工作台工作记录](../frontend/work-records/2026-09-24-workbench.md)。
+截至 2026-10-02，Windows 桌面 ready 后已接入真实会话、发送、HTTP/SSE、Run 状态和用量展示；刷新与重试只恢复观察。审批提交界面仍待接入，完整审批/取消交互不在第 09 票交付范围。当前桌面能力与验收见 [Windows 生命周期收尾](windows-backend-lifecycle.md)。设计与组件边界见 [frontend/design.md](../frontend/design.md)，完成项、验证范围与截图见 [前端工作台工作记录](../frontend/work-records/2026-09-24-workbench.md)。
 
 ## 后续任务
 
@@ -330,5 +330,5 @@ Goal 的 Graph 内续跑也不等于跨进程长时调度器，task 等待返回
 后续修改的 review 材料应说明完成项、接口契约、正常与失败／竞争路径、实际测试及未验证范围，
 并确认应用只走一条执行／持久化链路。建议顺序仍为做得好的、需要修的、值得讨论的。
 
-设计背景可查阅[持久化职责调查](research/agent-persistence-ownership-research.md)、
-[运行边界对照](research/agent-runtime-boundary-comparison.md)和[研究索引](research/README.md)。
+设计背景可查阅[持久化职责调查](research/persistence-and-runtime.md)、
+[运行边界对照](research/persistence-and-runtime.md)和[研究索引](research/README.md)。

@@ -1,6 +1,0 @@
-test_agent_task_completes_and_persists_after_close (__main__.TrayAcceptance.test_agent_task_completes_and_persists_after_close) ... ok
-
-----------------------------------------------------------------------
-Ran 1 test in 6.058s
-
-OK

@@ -1,35 +1,17 @@
 # 调查与技术参考
 
-集中保存原 `docs/` 与 `learning-records/temp/` 中的调查资料，保留原有日期、来源与技术论证。
-以下结论对应各自调查时点，本次归档未重新核验外部项目。当前采用的设计见[项目开发参考](../project.md)。
+原调查合并为三个主题。这里浓缩历史证据，不重新核验上游；使用具体 API 前按所用版本复核。已经采用的项目契约见 [project.md](../project.md)，完整原文、调查日期及全部来源保留在 [归档](../archive/README.md)。
 
-## 持久化与运行边界
+| 主题 | 入口 | 适用开发问题 |
+| --- | --- | --- |
+| 持久化与运行边界 | [persistence-and-runtime.md](persistence-and-runtime.md) | checkpoint、消息事实、run 协调、审批恢复、SSE 重连由谁负责 |
+| 子 Agent 与多会话 | [subagents-and-sessions.md](subagents-and-sessions.md) | agent-as-tool、独立 child 身份、控制工具、后台执行和跨重启恢复 |
+| MCP 配置与启动 | [mcp.md](mcp.md) | 配置校验、工具发现、启动延迟、稳定工具快照和失败隔离 |
 
-- [Agent / Harness 的持久化职责归属](agent-persistence-ownership-research.md)
-- [Run 与持久化边界对照](agent-runtime-boundary-comparison.md)
-- [DeepSeek Harness 持久化](deepseek-harness-persistence-research.md)
-- [消息状态与流式事件](agent-message-state-research.md)
-- [Interrupt / Approval / Resume API](interrupt-resume-api-research.md)
+以下是开发指导与机制依据，保留原文：
 
-## LangGraph 技术参考
-
-- [标识机制：名称、标签、命名空间与 Run ID](langgraph-identifiers.md)
-- [状态存储位置选择](runtime-context-and-storage-strategy.md)
-
-## 子 Agent 与多会话
-
-- [子 Agent 注册与运行时创建](01-subagent-construction-and-runtime.md)
-- [多会话能力对照](02-multi-session-agent-landscape.md)
-- [父子会话生命周期编排](03-child-session-lifecycle-control.md)
-
-## MCP
-
-- [DeerFlow MCP 配置](deerflow-mcp-config.md)
-- [DeerFlow MCP 空值处理](deerflow-mcp-null-handling.md)
-- [主流 Agent 的 MCP 启动延迟处理](mcp-startup-latency-mainstream-agents.md)
-
-## 桌面后端生命周期
-
-- [Windows 后端托管与运行数据独占机制](windows-backend-lifecycle-mechanisms.md)
+- [LangGraph 标识：run_name / tags / metadata / namespace / run_id](langgraph-identifiers.md)
+- [状态存储：State / Runtime Context / Messages / Middleware / Store / 外部缓存](runtime-context-and-storage-strategy.md)
+- [Windows 托管与数据独占机制](windows-backend-lifecycle-mechanisms.md)
 
 [返回文档导航](../README.md)

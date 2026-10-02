@@ -1,3 +1,0 @@
-{"check": "unconfirmed_keeps_error_window", "host_pid": 29332, "snapshot": {"state": "failed", "revision": 6, "startup_id": "6215cbed-60f0-4284-b55e-bb3b27f850cf", "base_url": null, "can_retry": false, "error": {"code": "reclamation_unconfirmed", "message": "\u65e0\u6cd5\u786e\u8ba4\u540e\u7aef\u5df2\u5b8c\u5168\u9000\u51fa"}}, "text": "\u540e\u7aef\u542f\u52a8\u6216\u8fd0\u884c\u5931\u8d25\n\n\u65e0\u6cd5\u786e\u8ba4\u540e\u7aef\u5df2\u5b8c\u5168\u9000\u51fa\n\n\u6b63\u5728\u7ee7\u7eed\u786e\u8ba4\u9000\u51fa\u72b6\u6001\uff0c\u8bf7\u4fdd\u6301\u6b64\u7a97\u53e3\u6253\u5f00\u3002"}
-{"check": "repeated_close_keeps_window", "passed": true}
-{"check": "later_confirmation_exits_and_releases_process_port_and_data", "passed": true}

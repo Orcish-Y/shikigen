@@ -1,8 +1,0 @@
-test_late_real_history_cannot_replace_new_startup_thread (client_acceptance.ClientAcceptance.test_late_real_history_cannot_replace_new_startup_thread) ... ok
-test_page_reads_persisted_messages_and_run_then_sends_only_on_click (client_acceptance.ClientAcceptance.test_page_reads_persisted_messages_and_run_then_sends_only_on_click) ... ok
-test_running_sse_survives_page_reload_and_recovers_on_new_port_without_resend (client_acceptance.ClientAcceptance.test_running_sse_survives_page_reload_and_recovers_on_new_port_without_resend) ... ok
-
-----------------------------------------------------------------------
-Ran 3 tests in 19.371s
-
-OK

@@ -1,7 +1,0 @@
-   Compiling shikigen-desktop v0.1.0 (C:\code\shikigen-agent\frontend\src-tauri)
-warning: linker stdout: 正在创建库 C:\code\shikigen-agent\frontend\src-tauri\target\debug\deps\shikigen_desktop_lib.dll.lib 和对象 C:\code\shikigen-agent\frontend\src-tauri\target\debug\deps\shikigen_desktop_lib.dll.exp
-  |
-  = note: `#[warn(linker_messages)]` on by default
-
-warning: `shikigen-desktop` (lib) generated 1 warning
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 17.06s

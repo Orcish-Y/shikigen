@@ -1,0 +1,2072 @@
+[
+  {
+    "path": "docs/research/01-subagent-construction-and-runtime.md",
+    "archive": "research-originals.zip",
+    "bytes": 16948,
+    "sha256": "71fad3dd59a081ea886ee1ac88236ada2d2dfde584eab184eb348c347f67cc9f"
+  },
+  {
+    "path": "docs/research/02-multi-session-agent-landscape.md",
+    "archive": "research-originals.zip",
+    "bytes": 11877,
+    "sha256": "5a780fb8e01009580359b6458ab06049c771d861b39033bbf9c09ca7c14df8be"
+  },
+  {
+    "path": "docs/research/03-child-session-lifecycle-control.md",
+    "archive": "research-originals.zip",
+    "bytes": 11106,
+    "sha256": "bda519d10e213a4dcc616e4a03af643ec6bc9828ad7f7e25a85ddbf23490f5a8"
+  },
+  {
+    "path": "docs/research/agent-message-state-research.md",
+    "archive": "research-originals.zip",
+    "bytes": 5197,
+    "sha256": "e0cc015cc8d9f742359dc4722980818e349dee867046525b73dc8d81e2b6a356"
+  },
+  {
+    "path": "docs/research/agent-persistence-ownership-research.md",
+    "archive": "research-originals.zip",
+    "bytes": 18127,
+    "sha256": "80d15b5652809bf9d800d6e2a0fc26791d1d3f1282ba1f470221eafeff27d29a"
+  },
+  {
+    "path": "docs/research/agent-runtime-boundary-comparison.md",
+    "archive": "research-originals.zip",
+    "bytes": 9141,
+    "sha256": "3a6c3ad30b5d0740de139fa9de219740c15f9fdaee43b0e99a2b94f9b01bda52"
+  },
+  {
+    "path": "docs/research/deepseek-harness-persistence-research.md",
+    "archive": "research-originals.zip",
+    "bytes": 5076,
+    "sha256": "fbe9ae14ce564464c76184b2c1b2db6dc56f724c0c6d4754b2005d899b556656"
+  },
+  {
+    "path": "docs/research/deerflow-mcp-config.md",
+    "archive": "research-originals.zip",
+    "bytes": 18173,
+    "sha256": "4d5ab5c9fb21bf7266f1c293018c8d516256d169e5f12c9b9f55c9d0e5fd48ef"
+  },
+  {
+    "path": "docs/research/deerflow-mcp-null-handling.md",
+    "archive": "research-originals.zip",
+    "bytes": 3995,
+    "sha256": "76668980d799ff4e55d71ccc204050e73ff5b92e9b4a1dccdd39befd821bad14"
+  },
+  {
+    "path": "docs/research/interrupt-resume-api-research.md",
+    "archive": "research-originals.zip",
+    "bytes": 14576,
+    "sha256": "9dfe9d3d3b3e7b4b32bd508bfc9d5bbc4ac82b703631a9a5290e11d0dc49b7bf"
+  },
+  {
+    "path": "docs/research/mcp-startup-latency-mainstream-agents.md",
+    "archive": "research-originals.zip",
+    "bytes": 21496,
+    "sha256": "84c2e296212550ff48a99ada7d87ef7dc6638f1ef9dddc7f92368fdd311641b1"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/acceptance_retry_ui.py",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 8168,
+    "sha256": "ae702de2afb6632015a0b606be03c33c453754ca128e71eab9fe2eaecbae8aff"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/acceptance_shutdown_ui.py",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 5288,
+    "sha256": "2c56d02f8658d429a344ab41ffbd9903929d8d44bcf8c98f2f52af035f00e179"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/acceptance_ui.py",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 11808,
+    "sha256": "f42316f7d6bec5fe75f546735cb182717d8a04c043270f77ef1f624f74d33494"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-acceptance/test_late_real_history_cannot_replace_new_startup_thread/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "ed94520387d6c0d3d81affb340735f3613d59ee77a9e31e5682c24a2b78ad236"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-acceptance/test_late_real_history_cannot_replace_new_startup_thread/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 2076,
+    "sha256": "6209430a575268b47f80906f79ec2a88078b5987c686bce210cca372afd51df7"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-acceptance/test_page_reads_persisted_messages_and_run_then_sends_only_on_click/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "f0bcad34e1e6a97dee03d79759db80344441b3cab99e7552c9eecf8f1c9d63aa"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-acceptance/test_page_reads_persisted_messages_and_run_then_sends_only_on_click/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 3261,
+    "sha256": "dd86f8c86552cef1458e56d9d10187bc00265979a105ab652ac3450dd064f8e1"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-acceptance/test_page_reads_persisted_messages_and_run_then_sends_only_on_click/window.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 224376,
+    "sha256": "e6026bf4734e32cefcc1ad6486c428401d4e3e59234b357827eecc72be737353"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-acceptance/test_replayed_pause_cannot_override_current_resumed_run_status/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "f012f1b4a4cd19492cef4a257a63187dc6e9b96cdee6104d366601663474493d"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-acceptance/test_replayed_pause_cannot_override_current_resumed_run_status/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 1142,
+    "sha256": "770b6e2d486e4f679e13a5b735efcd420beb726322022e9911a6bef3c6cc010e"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-acceptance/test_running_sse_survives_page_reload_and_recovers_on_new_port_without_resend/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "190a4e07b73ed21bc8a01f95de9dd677492205b4c46d2d0981ab80d65fb93bed"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-acceptance/test_running_sse_survives_page_reload_and_recovers_on_new_port_without_resend/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 1961,
+    "sha256": "97ef7113e29c8856a1a0955addeb43f2216392888e944bd586dd7233302cebcc"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-acceptance/test_running_sse_survives_page_reload_and_recovers_on_new_port_without_resend/window.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 187066,
+    "sha256": "f5cfbf4b23ce5a125b7a4707f78ee5fc534c588a0937d6f2de1f98fc5ecdfcda"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/SingleInstanceAcceptance/test_departed_notification_owner_cannot_leave_a_second_unprotected_host/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 58,
+    "sha256": "4f64f87fb0b12cc4def455f4ce9ba562cb30e895fb238ca3bbe4a685bef86619"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/SingleInstanceAcceptance/test_departed_notification_owner_cannot_leave_a_second_unprotected_host/host-1.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "257ffd53288b1f4ab1698366de5a9f4c36a22a75e6119f149dc75620bf918818"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/SingleInstanceAcceptance/test_departed_notification_owner_cannot_leave_a_second_unprotected_host/host-2.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/SingleInstanceAcceptance/test_departed_notification_owner_cannot_leave_a_second_unprotected_host/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 297,
+    "sha256": "5c024981caa3d9388fd87e5ebe1c1aa144cf2519a1651721ce49b45c3ca47dcc"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/SingleInstanceAcceptance/test_failed_reopen_does_not_retry_even_after_configuration_is_fixed/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "7434c53c84ca9c30ddf5e8bf5ef7333b315d1aa97cbdec39cebd2e86bbd8d6f6"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/SingleInstanceAcceptance/test_failed_reopen_does_not_retry_even_after_configuration_is_fixed/host-1.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/SingleInstanceAcceptance/test_failed_reopen_does_not_retry_even_after_configuration_is_fixed/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 369,
+    "sha256": "57f02630024955500622a7b235de718e4844e7315f3901458f0319064e338257"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/SingleInstanceAcceptance/test_failed_reopen_does_not_retry_even_after_configuration_is_fixed/window.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 60194,
+    "sha256": "4c94b3bc5e951500f28d637aa6d45257b19662e1492230a85c8e96e1f99a5641"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/SingleInstanceAcceptance/test_ready_reopen_restores_existing_window_and_session/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "5da051ba70c930ee9b44159c9046929cccfb534d915450ab1fca7b2f4e28ee4b"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/SingleInstanceAcceptance/test_ready_reopen_restores_existing_window_and_session/host-1.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/SingleInstanceAcceptance/test_ready_reopen_restores_existing_window_and_session/host-2.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/SingleInstanceAcceptance/test_ready_reopen_restores_existing_window_and_session/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 553,
+    "sha256": "34d7d98d89adeab8d87557882d4262c20b6081d35e1d3696a53750056dc46ade"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/SingleInstanceAcceptance/test_ready_reopen_restores_existing_window_and_session/window.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 215113,
+    "sha256": "21198e243d02ef4eb4f378214dd45f9034e70f78e01391ee416c662287bf3836"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/SingleInstanceAcceptance/test_reopen_during_quit_and_unconfirmed_reclamation_keeps_exiting/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "abab38a085bfda53a3733b4217d50b0c842905178551c1f1d89ff076650a1ba7"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/SingleInstanceAcceptance/test_reopen_during_quit_and_unconfirmed_reclamation_keeps_exiting/host-1.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/SingleInstanceAcceptance/test_reopen_during_quit_and_unconfirmed_reclamation_keeps_exiting/host-2.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/SingleInstanceAcceptance/test_reopen_during_quit_and_unconfirmed_reclamation_keeps_exiting/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 407,
+    "sha256": "0ce233125ce482cd27e2a0f4565b449835fd520e2aa53569a0f07954ccdfd940"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/SingleInstanceAcceptance/test_simultaneous_launches_create_only_one_host_runtime/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/SingleInstanceAcceptance/test_simultaneous_launches_create_only_one_host_runtime/host-1.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "06a5bd2a8e97af7080f58590ed95c158bc426bf8382153a7da3ff7bf7df2a15c"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/SingleInstanceAcceptance/test_simultaneous_launches_create_only_one_host_runtime/host-2.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/SingleInstanceAcceptance/test_simultaneous_launches_create_only_one_host_runtime/host-3.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/SingleInstanceAcceptance/test_simultaneous_launches_create_only_one_host_runtime/host-4.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/SingleInstanceAcceptance/test_simultaneous_launches_create_only_one_host_runtime/host-5.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/SingleInstanceAcceptance/test_simultaneous_launches_create_only_one_host_runtime/host-6.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/SingleInstanceAcceptance/test_simultaneous_launches_create_only_one_host_runtime/host-7.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/SingleInstanceAcceptance/test_simultaneous_launches_create_only_one_host_runtime/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 364,
+    "sha256": "b5ecbbe1d292c17c4f3c5701a45351b3d1fe616e057b6cf7584d6904a25c99b0"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/SingleInstanceAcceptance/test_starting_reopen_only_shows_current_initialization/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "9738b0198d63f47eebd7dfa51800e7bf41f50b81a93a477ab5699fa0b3d3b8ce"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/SingleInstanceAcceptance/test_starting_reopen_only_shows_current_initialization/host-1.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/SingleInstanceAcceptance/test_starting_reopen_only_shows_current_initialization/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 262,
+    "sha256": "00a6763016bb66d2629a71a7ef0df3e77e09e5e8ccd0572fe5b943eb0f26e4d8"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/SingleInstanceAcceptance/test_starting_reopen_only_shows_current_initialization/window.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 38834,
+    "sha256": "c7cbbf3b42e5f052b41d1bd8e4c80dd0867b0b8275e5b9f7d5dcc1c5647865ed"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/TrayAcceptance/test_agent_task_completes_and_persists_after_close/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "faf07796d6c8f316643a5689f11c7cafe4eb855522a23e6955412c56f1afed89"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/TrayAcceptance/test_agent_task_completes_and_persists_after_close/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 3380,
+    "sha256": "9fdf8601bcf683fc99ca1e473ae70b71208ff94e90fbbcba58655d6414a375e4"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/TrayAcceptance/test_agent_task_failure_does_not_activate_window_or_fail_backend/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "837d9606ce9971a2736dea8c0b9c722911f0f3746024d32d5f042acae4c63b38"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/TrayAcceptance/test_agent_task_failure_does_not_activate_window_or_fail_backend/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 2340,
+    "sha256": "5f7f80abfd0aa930cb6c224460c4fa993ebe88bb1550f811f11a066100a57979"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/TrayAcceptance/test_hidden_backend_failure_is_shown_once_until_next_attempt/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "7b0f2718ef2ca24ac89164cad8e54604917aa374447e31d59537cdb91da4b6b3"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/TrayAcceptance/test_hidden_backend_failure_is_shown_once_until_next_attempt/host-1.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/TrayAcceptance/test_hidden_backend_failure_is_shown_once_until_next_attempt/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 2044,
+    "sha256": "2b3aceaae8ce3f75dcda65e9da5db36f39e71f5c1d190307ddc49f424f43197e"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/TrayAcceptance/test_hidden_backend_failure_is_shown_once_until_next_attempt/window.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 118137,
+    "sha256": "0f982676f99df3ca642f5bd9667f2935eefab96b780da8aa56aedb3bbae466d6"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/TrayAcceptance/test_hidden_initialization_completes_and_tray_restores_same_attempt/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "d99774bcf7dea7e2eb65f5701e4030a8feadd19ddb5dde33400c8d8566236241"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/TrayAcceptance/test_hidden_initialization_completes_and_tray_restores_same_attempt/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 480,
+    "sha256": "c5ff82894f266adb5958645ec19c4c80f7a72e380a9b478301eece00690d1b60"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/TrayAcceptance/test_idle_close_keeps_same_backend_and_renderer/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "15531ee051cf91001ec3931c7d7ef2e72b64215a2e17083231525d99bac831e9"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/TrayAcceptance/test_idle_close_keeps_same_backend_and_renderer/host-1.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/TrayAcceptance/test_idle_close_keeps_same_backend_and_renderer/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 322,
+    "sha256": "154b14434dc8ecd5e803fa530469832b5201d0867aac1ef00cdea565799af254"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/TrayAcceptance/test_missing_tray_keeps_window_and_explains_close_will_quit/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "524156012f73d7c745307e2289ff4ba92f4a535db813b7f84ea37ae4eb80b808"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/TrayAcceptance/test_missing_tray_keeps_window_and_explains_close_will_quit/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 392,
+    "sha256": "1b2cf123465aa6be98987e60718ca86b87825be4da739404e06d8953b306490d"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/TrayAcceptance/test_missing_tray_keeps_window_and_explains_close_will_quit/window.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 232282,
+    "sha256": "8d2709f0a3c867fbcdc42f8db49446f691ed1242394b3524a08a5cfc56ca2444"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/TrayAcceptance/test_tray_quit_during_initialization_retains_unconfirmed_error_then_exits/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "7adddcfdb30fbe65efbdc34fd5e2a93210f98641d2ba345188a352db3f08be47"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/TrayAcceptance/test_tray_quit_during_initialization_retains_unconfirmed_error_then_exits/host-1.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/TrayAcceptance/test_tray_quit_during_initialization_retains_unconfirmed_error_then_exits/host-2.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/TrayAcceptance/test_tray_quit_during_initialization_retains_unconfirmed_error_then_exits/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 391,
+    "sha256": "5fa0aa79cd2583410b8c57e060480cb80bd3b90760e3a9dcf9f9d8ff4f833feb"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/TrayAcceptance/test_tray_quit_during_initialization_retains_unconfirmed_error_then_exits/window.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 62069,
+    "sha256": "ec7858a8ab65816ee968810163dff2e32565a33a531043b307679017faf31fa6"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/TrayAcceptance/test_tray_quit_during_task_and_sse_cleans_up_owned_processes/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "ef415f3b77206f8b2defe8e82a61a70091c6c0936c48ac37cfb5a3274f02bb8d"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/client-regression/TrayAcceptance/test_tray_quit_during_task_and_sse_cleans_up_owned_processes/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 317,
+    "sha256": "8aabee450826818a64e66bd18cc12381ae4b984b12bc85f469934c15572165bf"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/issues/01-external-runtime-http.md",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 3433,
+    "sha256": "7e9e83ec3d1715b1379aed5428bda20db74f681dfcd82c019bb9ce9537781bab"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/issues/02-exclusive-runtime-data.md",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 5395,
+    "sha256": "fae0c4654e2450bfe7c2483e2959836b1cab39798191251a50bba284052d920f"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/issues/03-controlled-python-backend.md",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 6923,
+    "sha256": "09f74745328dc9b5857b4699a0d778070f8d4a3f6a118f95825d37167bb8f584"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/issues/04-desktop-managed-startup.md",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 10685,
+    "sha256": "28c955a029ab4b7c75a0f87a6f123abfca00fef9645926f6ab9d7afc3675fa3a"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/issues/05-bounded-shutdown-reclamation.md",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 7968,
+    "sha256": "ffe7ed641384ac15ab16758a0428ee2ca666fb36f8cd3208e000a065e26479a2"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/issues/06-manual-retry-isolation.md",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 9724,
+    "sha256": "2d65733a53a09eb5a390ced0c1e57f2892c528bad52217ebc7606383439437a6"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/issues/07-single-desktop-instance.md",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 9794,
+    "sha256": "94676c78056542067e549baea44ad8fd3ccb8b7f012082026f60d58b90a36363"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/issues/08-tray-residency-exit.md",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 12024,
+    "sha256": "50b2ffdad1c5e700f9e6ff80bf303ab733382bc494210eb808a03d7cbe6f775c"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/issues/09-client-backend-switch.md",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 12176,
+    "sha256": "f5f2815b8db849b43783f13b7bf3d158f065e8cb3eebe2ab35d8ab895a01ebf9"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/issues/10-startup-log-view.md",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 13400,
+    "sha256": "b5780ecf99b640c32f634ba598577659a2cc50078de50d0f39db8fb6308ff3ca"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-acceptance/test_continuous_python_stderr_is_bounded_and_fault_reclaims_the_tree/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "af16fc430ac5e8094bbd260c8f9cdd63960326d313240f23c4524353cbc25ff3"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-acceptance/test_continuous_python_stderr_is_bounded_and_fault_reclaims_the_tree/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 370,
+    "sha256": "cce5a305b6bb3aa72851fd1f08ee328fb646cc559793d649b9f36e6e5b4c34cc"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-acceptance/test_failed_and_pending_log_queries_do_not_block_retry_or_exit/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "d2639224e3d5a1d6d16958646ffd954460a331de3a091acace15c2c4b560e353"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-acceptance/test_failed_and_pending_log_queries_do_not_block_retry_or_exit/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 1333,
+    "sha256": "df8a96ff3af83ec5d5d57eb295ac68ecd33ca17ec62d6f29dca7baffbc392e41"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-acceptance/test_late_query_and_wrong_startup_cannot_replace_the_current_error_logs/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "7761159ddb5a886bb4f90aa282b0c62ba67946df9e9bc7ae72bcd88fe8e1b199"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-acceptance/test_late_query_and_wrong_startup_cannot_replace_the_current_error_logs/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 1328,
+    "sha256": "da1d194ccaa947735277b52a3736b5a1bf7f7a5e20086bebd3f986839c1902df"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-acceptance/test_runtime_exit_preserves_its_stderr_diagnostic_and_reclaims_descendant/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "85a370bee38513da06f29553af6ae8ab4b30c4090390975d6a21e789f81a0dda"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-acceptance/test_runtime_exit_preserves_its_stderr_diagnostic_and_reclaims_descendant/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 1124,
+    "sha256": "05ff5194ea158d84eb099ec01d816c3780d6a518ce84d152638e48b53c428bec"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-acceptance/test_runtime_exit_preserves_its_stderr_diagnostic_and_reclaims_descendant/window.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 152971,
+    "sha256": "ec90a3eaeebca2f53b9253a496eda842ebc61c0f840adef930a2b4e10440a1c4"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-acceptance/test_startup_error_has_on_demand_traceback_and_retry_clears_logs/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "4b79011c50593e84e571a4adfb8b17e047c032dc00b5301417fe3ad6505eaf82"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-acceptance/test_startup_error_has_on_demand_traceback_and_retry_clears_logs/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 1196,
+    "sha256": "c3bae2b31c1c65bb3ace8d9de5a9dfcfd741089ceced5bda6c61c5f2b32f8a58"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-acceptance/test_startup_error_has_on_demand_traceback_and_retry_clears_logs/window.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 196201,
+    "sha256": "5c8b93b00e3f6ea79a71690314357c7797015ab03a1a4ceff2aadc5cc8c78d44"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/ClientAcceptance/test_late_real_history_cannot_replace_new_startup_thread/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "64357ea53c4d8152e446bdb33d5900094873b2cb24b84f13bdc2ac0c56cce3c7"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/ClientAcceptance/test_late_real_history_cannot_replace_new_startup_thread/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 2079,
+    "sha256": "fdd7b595e38673de34da66eae0aa0488762913314bd011b5032d32a752a73f36"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/ClientAcceptance/test_page_reads_persisted_messages_and_run_then_sends_only_on_click/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "676a8f5375e84a6e76ab1f6a84e618fb853a7c9fdcd624efec017092d3a1611e"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/ClientAcceptance/test_page_reads_persisted_messages_and_run_then_sends_only_on_click/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 3261,
+    "sha256": "780f37bca43d33b361cb2f85f3fe1a87baf4614ed2d6c508b7dc5d536f3b44c1"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/ClientAcceptance/test_page_reads_persisted_messages_and_run_then_sends_only_on_click/window.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 222082,
+    "sha256": "9df9337b580ac4f7470ec184dee21fb0adba82d161b03df462aea03e2e32ecc4"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/ClientAcceptance/test_replayed_pause_cannot_override_current_resumed_run_status/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "cc9354df89ce7660732f32efcf1068da6c5754c94e53f84e322a248cbf64f53d"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/ClientAcceptance/test_replayed_pause_cannot_override_current_resumed_run_status/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 1142,
+    "sha256": "42bb96dc66556057e3af4056d8a309b92dd47e0cbba8a044334535810a8491dd"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/ClientAcceptance/test_running_sse_survives_page_reload_and_recovers_on_new_port_without_resend/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "c650d411845cfb3121821e4c446e27ae997738caff227eb90f7d1c6d60d1eef0"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/ClientAcceptance/test_running_sse_survives_page_reload_and_recovers_on_new_port_without_resend/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 1961,
+    "sha256": "a78377bbfe20fce28ec9753c503f24c3028f8d00f9a6a7d514c25cc5921c805a"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/ClientAcceptance/test_running_sse_survives_page_reload_and_recovers_on_new_port_without_resend/window.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 187559,
+    "sha256": "64ad43b26d5f99d0fc1029b6148db044d318c5530e117814bb24b71fdaeca6c0"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/SingleInstanceAcceptance/test_departed_notification_owner_cannot_leave_a_second_unprotected_host/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 58,
+    "sha256": "4f64f87fb0b12cc4def455f4ce9ba562cb30e895fb238ca3bbe4a685bef86619"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/SingleInstanceAcceptance/test_departed_notification_owner_cannot_leave_a_second_unprotected_host/host-1.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "56c31134ee227b285475fc72e311568924128da331cf556ebdebd03e525eddb6"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/SingleInstanceAcceptance/test_departed_notification_owner_cannot_leave_a_second_unprotected_host/host-2.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/SingleInstanceAcceptance/test_departed_notification_owner_cannot_leave_a_second_unprotected_host/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 297,
+    "sha256": "7e2d82a196c2b38168fb6c26f17dab79757b930efb875c75e0f0361c723e3c15"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/SingleInstanceAcceptance/test_failed_reopen_does_not_retry_even_after_configuration_is_fixed/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "04fba59ca5d2c9b9ce69ebc39bfafded74e7b57207c0767d24d27ca14fb572df"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/SingleInstanceAcceptance/test_failed_reopen_does_not_retry_even_after_configuration_is_fixed/host-1.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/SingleInstanceAcceptance/test_failed_reopen_does_not_retry_even_after_configuration_is_fixed/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 369,
+    "sha256": "957a72434a53242450b2dd22fa6760b35269840960966742103db6db000739e4"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/SingleInstanceAcceptance/test_failed_reopen_does_not_retry_even_after_configuration_is_fixed/window.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 65517,
+    "sha256": "147f80d91c4c584a42abc2a965890f1e6fcf2161f80c54e1572c5dd3da51cbf3"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/SingleInstanceAcceptance/test_ready_reopen_restores_existing_window_and_session/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "f448cd2303143d18984b3547aa8b90c940d475a9a9ec5092bccb536bd77aa54e"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/SingleInstanceAcceptance/test_ready_reopen_restores_existing_window_and_session/host-1.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/SingleInstanceAcceptance/test_ready_reopen_restores_existing_window_and_session/host-2.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/SingleInstanceAcceptance/test_ready_reopen_restores_existing_window_and_session/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 555,
+    "sha256": "f0888116bfcc141723362457f31c8f48ceea66a4ebff315aee5894910cdfd2bf"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/SingleInstanceAcceptance/test_ready_reopen_restores_existing_window_and_session/window.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 215113,
+    "sha256": "21198e243d02ef4eb4f378214dd45f9034e70f78e01391ee416c662287bf3836"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/SingleInstanceAcceptance/test_reopen_during_quit_and_unconfirmed_reclamation_keeps_exiting/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "77ac80e5ac0ed676dd15f2b5a79688fb74cebeebf9bae6700fd8ce7660d09d1e"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/SingleInstanceAcceptance/test_reopen_during_quit_and_unconfirmed_reclamation_keeps_exiting/host-1.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/SingleInstanceAcceptance/test_reopen_during_quit_and_unconfirmed_reclamation_keeps_exiting/host-2.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/SingleInstanceAcceptance/test_reopen_during_quit_and_unconfirmed_reclamation_keeps_exiting/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 407,
+    "sha256": "fe73bf2d70b05be7a4ea8df5dc61eab663b4dbb696b51875cb96df7a3ec4d61c"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/SingleInstanceAcceptance/test_simultaneous_launches_create_only_one_host_runtime/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "4b5ae75559c0fe9f816de0a20bb46fd588b429ae660e66e05ce3fc8a361ad78f"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/SingleInstanceAcceptance/test_simultaneous_launches_create_only_one_host_runtime/host-1.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/SingleInstanceAcceptance/test_simultaneous_launches_create_only_one_host_runtime/host-2.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/SingleInstanceAcceptance/test_simultaneous_launches_create_only_one_host_runtime/host-3.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/SingleInstanceAcceptance/test_simultaneous_launches_create_only_one_host_runtime/host-4.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/SingleInstanceAcceptance/test_simultaneous_launches_create_only_one_host_runtime/host-5.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/SingleInstanceAcceptance/test_simultaneous_launches_create_only_one_host_runtime/host-6.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/SingleInstanceAcceptance/test_simultaneous_launches_create_only_one_host_runtime/host-7.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/SingleInstanceAcceptance/test_simultaneous_launches_create_only_one_host_runtime/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 364,
+    "sha256": "60bb9b0b284c3f6abf79921a13163312d2451378b21cff3e821803de01d87817"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/SingleInstanceAcceptance/test_starting_reopen_only_shows_current_initialization/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "305b14ef23caaba959b26c5f16650b5dd0f05b69db233f2688da84ea828014ac"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/SingleInstanceAcceptance/test_starting_reopen_only_shows_current_initialization/host-1.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/SingleInstanceAcceptance/test_starting_reopen_only_shows_current_initialization/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 260,
+    "sha256": "31194e6b6056856f830578494d6dd139b905031d73cddf37bb5593dae3a2b2c5"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/SingleInstanceAcceptance/test_starting_reopen_only_shows_current_initialization/window.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 38834,
+    "sha256": "c7cbbf3b42e5f052b41d1bd8e4c80dd0867b0b8275e5b9f7d5dcc1c5647865ed"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/TrayAcceptance/test_agent_task_completes_and_persists_after_close/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "b5f5f86f6b933c9681c8ed2231ebc1e55fb09181b76e7f57146884544ac286ca"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/TrayAcceptance/test_agent_task_completes_and_persists_after_close/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 3380,
+    "sha256": "92e43415d7c0c52b46624e5a82e525cca414a8fc9f39a432126e108db758f084"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/TrayAcceptance/test_agent_task_failure_does_not_activate_window_or_fail_backend/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "bc48767b775750adb8814d7516253f0b5f68db8bcbd1a61ce553e50b73fa9367"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/TrayAcceptance/test_agent_task_failure_does_not_activate_window_or_fail_backend/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 2340,
+    "sha256": "d29a2d852e4b82a6762b62a31dd7b06fe1fd77dabfb8603269e38256a16da525"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/TrayAcceptance/test_hidden_backend_failure_is_shown_once_until_next_attempt/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "a17fc0cbf3c9f68591dc11157f3f4be2d5c0cc62ab63bff98d5d5240200d2207"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/TrayAcceptance/test_hidden_backend_failure_is_shown_once_until_next_attempt/host-1.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/TrayAcceptance/test_hidden_backend_failure_is_shown_once_until_next_attempt/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 1196,
+    "sha256": "8a4cee0b781bfa90dc3d6ea36536a1fed7d40154c4d992d3b08ca108324cc2ab"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/TrayAcceptance/test_hidden_backend_failure_is_shown_once_until_next_attempt/window.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 77367,
+    "sha256": "cf4865c4c87110f08109efd1c539125c9c30c26917b5e281a852ed1ea99bc582"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/TrayAcceptance/test_hidden_initialization_completes_and_tray_restores_same_attempt/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "71cec76404c6f666abe6055c10e425e245637da4bee0c7d42a364abcee7fd86a"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/TrayAcceptance/test_hidden_initialization_completes_and_tray_restores_same_attempt/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 480,
+    "sha256": "72a645e1d4f643c1926d3de58eb891dc4f79a67e8bfa383709f2ce49d35dbd43"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/TrayAcceptance/test_idle_close_keeps_same_backend_and_renderer/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "62fa3500098918adca325638cebab6eab6cffb8f08ebb9bb4e13f3e75bf32ce2"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/TrayAcceptance/test_idle_close_keeps_same_backend_and_renderer/host-1.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/TrayAcceptance/test_idle_close_keeps_same_backend_and_renderer/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 322,
+    "sha256": "21812e1f6269a4b1ac2422788ae9f44a21fbc7794d36eca3d03fe0be89f87382"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/TrayAcceptance/test_missing_tray_keeps_window_and_explains_close_will_quit/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "04df92eb24a0f99e34796e9cca8b6a6fa1c442353553910f1e71409b0ecfab43"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/TrayAcceptance/test_missing_tray_keeps_window_and_explains_close_will_quit/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 392,
+    "sha256": "941265d7ad70bcfb3b2deaec2e508b0d628275a4c6aff50d9739ff0061150769"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/TrayAcceptance/test_missing_tray_keeps_window_and_explains_close_will_quit/window.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 232282,
+    "sha256": "8d2709f0a3c867fbcdc42f8db49446f691ed1242394b3524a08a5cfc56ca2444"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/TrayAcceptance/test_tray_quit_during_initialization_retains_unconfirmed_error_then_exits/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "b2f1d0ae0e6ddfc84bcfa538e5cc2803d7435bd8306745b4e43f0b226ea4a9a1"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/TrayAcceptance/test_tray_quit_during_initialization_retains_unconfirmed_error_then_exits/host-1.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/TrayAcceptance/test_tray_quit_during_initialization_retains_unconfirmed_error_then_exits/host-2.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/TrayAcceptance/test_tray_quit_during_initialization_retains_unconfirmed_error_then_exits/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 391,
+    "sha256": "080be9589ab77574924424f09fcbed11b41211f61ab4211040c523f1edd89445"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/TrayAcceptance/test_tray_quit_during_initialization_retains_unconfirmed_error_then_exits/window.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 67467,
+    "sha256": "9b6ac173a7c46e4758aa65d143b1dfac7ce21c319dde0feea06649ffb73cd284"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/TrayAcceptance/test_tray_quit_during_task_and_sse_cleans_up_owned_processes/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "6ad472d556a75b9b0d3136173c4bd54e44f2bf8c03aee494c3129822e4fb9ffd"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/log-regression/TrayAcceptance/test_tray_quit_during_task_and_sse_cleans_up_owned_processes/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 304,
+    "sha256": "8745e36a34ef6e9bfb00b7171e6c54708cb14129ee433baa4ce8215fdd7479c9"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/PRD.md",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 24224,
+    "sha256": "a2a15eb4c08c96069c362d24c791ef0b454328f38651ab00712023156dc03c8d"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/retry-ui-acceptance/01-unconfirmed-retry-disabled.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 53458,
+    "sha256": "312dac1d615418e67d043c24909c1ffbcff33aa24cb849c04352696a4ac59b82"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/retry-ui-acceptance/02-confirmed-manual-retry.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 46847,
+    "sha256": "e2fb586b04e6f57b359b60f0f2dce2144ce8aa89e757be64d5f22e6bd6f0ea82"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/retry-ui-acceptance/03-recovered-ready.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 188647,
+    "sha256": "c71bd53fffdcdd3a9ee42d2d0a3700dc5a754164a32c11fd87bbc244213659dc"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/retry-ui-acceptance/frontend.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 995,
+    "sha256": "144d606b9cff1b44448c0ad9e8b8c42e1234b438ee624d81e104517aa0340bfd"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/retry-ui-acceptance/host.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "d38aa2a0ac2ec59d7695a1001e052ac6559719c43a829145dda5ecd0598c4837"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/retry-ui-acceptance/results.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 1706,
+    "sha256": "6975da3fa4dc90a4662defbee270e8c26c4cfeba08f91d4085e77eaf6d71420a"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/run-09-windows.py",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 802,
+    "sha256": "a42c43296f39112ceceedc8c8219dd55f6c8fd81238796244bd673c903965e38"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/shutdown-ui-acceptance/01-unconfirmed-window.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 32078,
+    "sha256": "bf6feae966429e7f9b507154b5b6f5181495a251e9f0f32d4e788c1b477454dd"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/shutdown-ui-acceptance/frontend.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 934,
+    "sha256": "de468f164ad23514feb2453059032cd8b051a1a5126afa00d4f47d6ec44be74a"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/shutdown-ui-acceptance/host.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "a1e2b2330c0c3ea03e347f8a08191ff2c7760c1c3be57506ad216ad6cd95b121"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/shutdown-ui-acceptance/results.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 729,
+    "sha256": "6a4bcbed253671a4d49e7d7e8e0f61a8249386527ae19f1e77283c87d1aabcac"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/single-instance-acceptance/test_departed_notification_owner_cannot_leave_a_second_unprotected_host/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 58,
+    "sha256": "4f64f87fb0b12cc4def455f4ce9ba562cb30e895fb238ca3bbe4a685bef86619"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/single-instance-acceptance/test_departed_notification_owner_cannot_leave_a_second_unprotected_host/host-1.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "9ff768b440b4001647d6174bb5c4dbccf615bc9a92b1bb2505b365dfa487c304"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/single-instance-acceptance/test_departed_notification_owner_cannot_leave_a_second_unprotected_host/host-2.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/single-instance-acceptance/test_departed_notification_owner_cannot_leave_a_second_unprotected_host/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 297,
+    "sha256": "87e62e35ae83f87fcf6dceba746bd206fac623e1bae8a6cc6aa61b35518cf9c9"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/single-instance-acceptance/test_failed_reopen_does_not_retry_even_after_configuration_is_fixed/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "2183425a847c33606c2bb08fe1bde138e05fad02f98be54812bb800609ff6b0a"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/single-instance-acceptance/test_failed_reopen_does_not_retry_even_after_configuration_is_fixed/host-1.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/single-instance-acceptance/test_failed_reopen_does_not_retry_even_after_configuration_is_fixed/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 369,
+    "sha256": "f3534dcc238521ee8d4758011399e934dc04fd4b6141da4fc8604aac22d949c7"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/single-instance-acceptance/test_failed_reopen_does_not_retry_even_after_configuration_is_fixed/window.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 34987,
+    "sha256": "af6066e03888344b18a23d3b26fd1ac8497ef73619098bca62ad6671a683db2a"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/single-instance-acceptance/test_ready_reopen_restores_existing_window_and_session/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "9b96310dea05a3e6ece066efca89428f04bec89f5325688de2e894bd133d86b7"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/single-instance-acceptance/test_ready_reopen_restores_existing_window_and_session/host-1.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/single-instance-acceptance/test_ready_reopen_restores_existing_window_and_session/host-2.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/single-instance-acceptance/test_ready_reopen_restores_existing_window_and_session/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 554,
+    "sha256": "24433117744aee4d56091aa10c4a818734bfbf8114062d07310f205c06d3ed4a"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/single-instance-acceptance/test_ready_reopen_restores_existing_window_and_session/window.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 188647,
+    "sha256": "c71bd53fffdcdd3a9ee42d2d0a3700dc5a754164a32c11fd87bbc244213659dc"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/single-instance-acceptance/test_reopen_during_quit_and_unconfirmed_reclamation_keeps_exiting/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "f0c0a9de3237460e18747ce4bfaa159842e6d40832a467c2a2e2fb443433247c"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/single-instance-acceptance/test_reopen_during_quit_and_unconfirmed_reclamation_keeps_exiting/host-1.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/single-instance-acceptance/test_reopen_during_quit_and_unconfirmed_reclamation_keeps_exiting/host-2.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/single-instance-acceptance/test_reopen_during_quit_and_unconfirmed_reclamation_keeps_exiting/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 407,
+    "sha256": "f07df98a2792a67e77ee75f8ee1ca7d220b0a590bf071dfb842b4edc70ac7048"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/single-instance-acceptance/test_simultaneous_launches_create_only_one_host_runtime/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/single-instance-acceptance/test_simultaneous_launches_create_only_one_host_runtime/host-1.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/single-instance-acceptance/test_simultaneous_launches_create_only_one_host_runtime/host-2.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "42edceee460b87e38349a981d6c49ac63e53811d092a5abcb7100235fa2848a4"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/single-instance-acceptance/test_simultaneous_launches_create_only_one_host_runtime/host-3.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/single-instance-acceptance/test_simultaneous_launches_create_only_one_host_runtime/host-4.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/single-instance-acceptance/test_simultaneous_launches_create_only_one_host_runtime/host-5.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/single-instance-acceptance/test_simultaneous_launches_create_only_one_host_runtime/host-6.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/single-instance-acceptance/test_simultaneous_launches_create_only_one_host_runtime/host-7.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/single-instance-acceptance/test_simultaneous_launches_create_only_one_host_runtime/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 364,
+    "sha256": "3688cc06d983466a8a1cc74d1df354a637cd3b84fde480251737e4c89ed43f2f"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/single-instance-acceptance/test_starting_reopen_only_shows_current_initialization/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "e5b8aad771d7f06bdd74edf3387bc81085f41d1382d8bab5893c0b349f9d80e0"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/single-instance-acceptance/test_starting_reopen_only_shows_current_initialization/host-1.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/single-instance-acceptance/test_starting_reopen_only_shows_current_initialization/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 262,
+    "sha256": "2d7f86198f1b9f96eb0c7d23cefa491525c2ca7d5a7389902266f5b92669bbaf"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/single-instance-acceptance/test_starting_reopen_only_shows_current_initialization/window.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 23218,
+    "sha256": "abecd9108877e60ffd1ff0e1b4bbc6563267de45ac9fcbb3c2ef3282fcd3fac8"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-01.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 17107,
+    "sha256": "e610adb7fef6371b1c0410848f3f6e87d249dcfd21976fb7b1837bb4f17fb147"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-02.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 46824,
+    "sha256": "e992c9e139c37d505a0459996f6c33d3c8ba06c5b148b81c9677ab33736fb0aa"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-03.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 47338,
+    "sha256": "93cb9687d660ad815768393d42645d053cca2d3791e4cd067916f7efe9c19907"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-04-client.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 286,
+    "sha256": "4c647707e67fb532e39d4090b2d591ae0126635a4db7b2737bd73a8816005292"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-04-native.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 590,
+    "sha256": "22fb72b83ed0adc538f5f2750de6ae0993c1e76d152582c165a6d677c7ad9dff"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-04-python.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 52803,
+    "sha256": "b3eb24edfaebc3ee92330512ff36588fe9ec790c52d011e3793aeacc22e2abf3"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-04-rust.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 2468,
+    "sha256": "5abcfcf23afa560cd3d2e4f871041950b2aabf0814339615a322d5b2ad7942a1"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-04-ui.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 2737,
+    "sha256": "db4ac1871ca4d4500f06491c8aac2a30e0f147ac903201cc7b23286ebc8d84de"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-05-client.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 284,
+    "sha256": "7c5a08b39940b5379826776e11d5f1f9bae9aa5773119722b275351a9918f0f6"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-05-native.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 1098,
+    "sha256": "bcdb52f40e313f8d3e43b534656d78e04316325bf296f70f53aba08217cda99a"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-05-python.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 47862,
+    "sha256": "54bf4d52ad23f283f18d41d9b8d0eaf4983e7047253feed41db717de4e7fa5f3"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-05-rust.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 3104,
+    "sha256": "732b063ece7c3e64c649ea5985bd26dd185c4df0dfdd3207b97f95c73d14b6a1"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-05-ui.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 739,
+    "sha256": "89534bc59f3e6a713ead61d657dc6cb3b82d4a7ec4c2edcab8424879a7e1257e"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-06-client.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 557,
+    "sha256": "7675e09daf1ce4bf7add241327b88204b368f7787f4874f83f72116a14fb7276"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-06-native.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 1098,
+    "sha256": "debee986f256a8c0921aadf4a11496e77c7633fb683dedfc725381565ee35934"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-06-python.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 50876,
+    "sha256": "a69c9bc942b3658dd767f210c2f0df8a39aa4e916dacbb2384f74bc4bbb5184f"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-06-rust.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 3566,
+    "sha256": "6c4d3615d255ff93200f642b7db24449b4611441606224598f97913f092ee893"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-06-typing-baseline.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 6514,
+    "sha256": "b09a6103b3d05cbfdad4c9c080e3b1d9e25c7caa82e4cfe94392da6d1519aac3"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-06-ui.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 1488,
+    "sha256": "c1da276437fd6bd0f8dc1b3c52bb255e4cf5859efffe9a79398ca43a206cc358"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-07-build.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 3035,
+    "sha256": "34cdc3aeb93b99aeef8aaa10261db579023c2022d38eb0c01f7053a938fdd2a4"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-07-client.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 557,
+    "sha256": "0273eacb1536cae61cc763dbeeac85b85be43b384b73a102cbe77f3c73728b96"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-07-native.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 1098,
+    "sha256": "62f70eb0c4284d2481140e9c8b1920800af10c9cb0e74699f9d9ba1dd33935b8"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-07-python.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 50860,
+    "sha256": "b68b23ec6e98543d1c4318bfe1749915e7fa311c513a6ff8a6c95f9b94f986db"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-07-rust.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 3568,
+    "sha256": "02b689a32187d4ffa31c07ba8636a65f039a8088976a656957802eb7f122fd3b"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-07-single-instance.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 1112,
+    "sha256": "8a6f8af30b05aa60c6b0690fb9e2c8e8c4f3eebddc3a4352ad9c8fd7c3535470"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-08-build.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 3035,
+    "sha256": "a7754e8343f1a610f87846f406a1866bb2caf24fabe17404fa82970475e161de"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-08-client.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 556,
+    "sha256": "cc022efc0e1664b1e2a577aeacdcb424a691ecaf18c3d4a4dde207a7929eaca4"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-08-python.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 51314,
+    "sha256": "7a70e246f969221be44bc8b7fa9df97fd3bb1384817a65ddbf6d14950046231d"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-08-reopen-quit.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 296,
+    "sha256": "08829bf574c10c6db3b6fc253726e97c3282f718f6a450671f8a203b07a284ec"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-08-rust-serial.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 3485,
+    "sha256": "f1f159e97670c18a85840d55dc2c5ddb47136b59a3e5fd5e41f3433507cb9f19"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-08-rust.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 2605,
+    "sha256": "9831454a6e021c274a3e702ac530b22e88ad158fbe97934d33c9f66e9d44260d"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-08-task-residency.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 238,
+    "sha256": "86c3296c92ee8e0db0395f5ed849fd4c2a5e0c05e8aee4ab4ef6e285934471cc"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-08-tray.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 2159,
+    "sha256": "7ebcaec080b094ab47248019d2d4086c2483a1f1cafd68b66aa01adc9d7c4fec"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-08-windows.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 5906,
+    "sha256": "65b5323d5f1b8350ddc75df0657a62d2767cc91c689b9fa6af17b3b68a2547d0"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-09-build.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 3034,
+    "sha256": "b2cf026ca59d93b4113a89678df8f79fdcd01cd059e379d139a085698e9d1fe6"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-09-client.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 869,
+    "sha256": "d423ede9db99e644add8877dc67fad03a1ec1246635d361089c72dc0c9441f11"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-09-python.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 53302,
+    "sha256": "f2c9a42ca2e1b0d883242cca98d39fb2f53dd056b18bf44c81958ebda11cdbb7"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-09-replay-red.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 1820,
+    "sha256": "2a4b7914f3f94826d3f6a40326fe087b380ab03edc7438787246e1aa5b7b84ed"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-09-rust.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 3486,
+    "sha256": "d51b2caa2b0387cad3616b51fe4403b3673173849b8bef7625f15f3f0f15c519"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-09-windows-all.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 4286,
+    "sha256": "7ea657a360db20dd6c1023c0513c8067ff6533a5da21c86d3d992bb6e21b3562"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-09-windows.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 645,
+    "sha256": "651b9345a39bc18087c6ebd1ad10ebf6bccfa51e50fbb2aae4515817940cbf75"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-10-build.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 3034,
+    "sha256": "924d74496086fbe9b0ded103027e2c8959d63b4f61ad4cb5aa92035fa210fd27"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-10-client.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 868,
+    "sha256": "1ccd2fab313b1a4eef98d1b81743c2640dfe9bef0cc50a8923cd1a7e360eb6a5"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-10-native-build.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 499,
+    "sha256": "3749d9c5b70229227358d9daa820506a716337aafea37ad39cb25755ae897766"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-10-python.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 47752,
+    "sha256": "f4a1f826eeeb75b507c093937e7dca8002b3df4537e01d4364d285c5dc0bfc18"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-10-rust.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 4122,
+    "sha256": "22cf50d0fccddf704c3d19bfbcb88ea224f80219475b06411ef20e91f3375551"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-10-windows-all.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 5167,
+    "sha256": "b9bd7d0029fc46f7bac2b3241e64067be0f2cb8edb5c0abafdeb1981b83ed247"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/test-results-10-windows-initial.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 24941,
+    "sha256": "247de4abeb902c5e6eafd934d98626212f87318c54c96b60e809bda5539eb9b2"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-acceptance/test_agent_task_completes_and_persists_after_close/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "73b3675d250e287ea8a461c0961a136febcfeb981e8ac5db31193d7e4b3502e9"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-acceptance/test_agent_task_completes_and_persists_after_close/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 3380,
+    "sha256": "6482e6d0c7ef15fe9200c4e9c7b55b8022be39ec5a405bb5aac6c034cccc5913"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-acceptance/test_agent_task_failure_does_not_activate_window_or_fail_backend/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "def34702d04b843226fec07c4068d0ba30c1d382f0e2437ad85e660d673129af"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-acceptance/test_agent_task_failure_does_not_activate_window_or_fail_backend/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 2340,
+    "sha256": "4ad7a3f1ab7c3e36a417dafb750e34a5240f430286e96300caa95ec15e951176"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-acceptance/test_hidden_backend_failure_is_shown_once_until_next_attempt/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "a243ba7d8f7dc92546280ebe3f577d874f0c6036ef12398d9c36d363eae82355"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-acceptance/test_hidden_backend_failure_is_shown_once_until_next_attempt/host-1.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-acceptance/test_hidden_backend_failure_is_shown_once_until_next_attempt/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 1820,
+    "sha256": "d7625d81edb8c615ca651eff2bf53745f0818de12df45bbb20bf7c3243245c2d"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-acceptance/test_hidden_backend_failure_is_shown_once_until_next_attempt/window.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 66001,
+    "sha256": "b5184e7f1ccb30e367196582553268485c205e31993506c0ebe504df45d880b9"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-acceptance/test_hidden_initialization_completes_and_tray_restores_same_attempt/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "3078e135c4013fc43e4b7bb883efd4f80b1c88f756c43df67a42d7f79753a13b"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-acceptance/test_hidden_initialization_completes_and_tray_restores_same_attempt/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 480,
+    "sha256": "6254126fcf71664a4e5f31b03ef8cd4f91f485d0638fa9250243589ddfc4e04f"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-acceptance/test_idle_close_keeps_same_backend_and_renderer/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "d94e41b3e7d0b22e3c9d3d330f1f8dd478851f29c6685dd9aaa97fc148600a5d"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-acceptance/test_idle_close_keeps_same_backend_and_renderer/host-1.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-acceptance/test_idle_close_keeps_same_backend_and_renderer/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 322,
+    "sha256": "645d19f21b966c321792e29c11aaf95ff8acd2f2c2a890ac13eed671bd822905"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-acceptance/test_missing_tray_keeps_window_and_explains_close_will_quit/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "abe1304f62af69de1e7211c98cfed3bfaadcf0d542397f868d8d6dd31ea49362"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-acceptance/test_missing_tray_keeps_window_and_explains_close_will_quit/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 392,
+    "sha256": "baf5352e56ac8df4b645549e27a2d6eb51084397e72818ccf9fdf5ebf781d45c"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-acceptance/test_missing_tray_keeps_window_and_explains_close_will_quit/window.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 193467,
+    "sha256": "ff1a7ffd07d4ec5cc6dd0abf2d14a669ceb4bbaf1eb6cf4e679c81741b651bab"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-acceptance/test_tray_quit_during_initialization_retains_unconfirmed_error_then_exits/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "b67a17815f8f0cc5921dc1f2cf8331179589ab1f93ec926a35f875a4c8cab2a2"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-acceptance/test_tray_quit_during_initialization_retains_unconfirmed_error_then_exits/host-1.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-acceptance/test_tray_quit_during_initialization_retains_unconfirmed_error_then_exits/host-2.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-acceptance/test_tray_quit_during_initialization_retains_unconfirmed_error_then_exits/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 391,
+    "sha256": "84e9c0eb74016c7dbdd8653f7a35c84ddd00e8af40bf088ec8daa2bf511fb816"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-acceptance/test_tray_quit_during_initialization_retains_unconfirmed_error_then_exits/window.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 34179,
+    "sha256": "16229580a27765c2b3b9435ed6fcd1021419dec6deec5432c1647952ee9bdd3b"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-acceptance/test_tray_quit_during_task_and_sse_cleans_up_owned_processes/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "242cb11dff8b873ce508f1a1dea9d638e7ab2d937bcb794e30092cf5a75357d2"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-acceptance/test_tray_quit_during_task_and_sse_cleans_up_owned_processes/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 317,
+    "sha256": "87653bd4d6077bacda72284da138eed8b4e0620c930a2e5dabf8faec1c994bd1"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-single-instance-acceptance/test_departed_notification_owner_cannot_leave_a_second_unprotected_host/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 58,
+    "sha256": "4f64f87fb0b12cc4def455f4ce9ba562cb30e895fb238ca3bbe4a685bef86619"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-single-instance-acceptance/test_departed_notification_owner_cannot_leave_a_second_unprotected_host/host-1.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "e95f544e21f04780a82067c1e9cddfaa469cee8ee6d7391acb957230f09978e4"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-single-instance-acceptance/test_departed_notification_owner_cannot_leave_a_second_unprotected_host/host-2.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-single-instance-acceptance/test_departed_notification_owner_cannot_leave_a_second_unprotected_host/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 297,
+    "sha256": "7313c4e7f868891e73c3cb9023d681a06d07749f597094e9c688d947fb006e71"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-single-instance-acceptance/test_failed_reopen_does_not_retry_even_after_configuration_is_fixed/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "170f6e5e6976f6ab07cd25cd501b233aaee3dfb622e1d0ee446ae46b7d3ea26c"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-single-instance-acceptance/test_failed_reopen_does_not_retry_even_after_configuration_is_fixed/host-1.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-single-instance-acceptance/test_failed_reopen_does_not_retry_even_after_configuration_is_fixed/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 369,
+    "sha256": "b446107b6932ec8c8cf3c0e6d7af0276d7aa9fe3b355b8228d260dd67d0b2921"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-single-instance-acceptance/test_failed_reopen_does_not_retry_even_after_configuration_is_fixed/window.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 34987,
+    "sha256": "af6066e03888344b18a23d3b26fd1ac8497ef73619098bca62ad6671a683db2a"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-single-instance-acceptance/test_ready_reopen_restores_existing_window_and_session/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "cc433c47afd1bc9218a24e2cccbf8a8539700702e3d6f22cd21982c3ca6cbbb1"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-single-instance-acceptance/test_ready_reopen_restores_existing_window_and_session/host-1.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-single-instance-acceptance/test_ready_reopen_restores_existing_window_and_session/host-2.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-single-instance-acceptance/test_ready_reopen_restores_existing_window_and_session/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 555,
+    "sha256": "6af5f810002b5403f17a7d0ae16f926c95220f2fbc7fcda87bf4f228a5b3d417"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-single-instance-acceptance/test_ready_reopen_restores_existing_window_and_session/window.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 188647,
+    "sha256": "c71bd53fffdcdd3a9ee42d2d0a3700dc5a754164a32c11fd87bbc244213659dc"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-single-instance-acceptance/test_reopen_during_quit_and_unconfirmed_reclamation_keeps_exiting/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "96bba4aac2270172ac88a90ba5cf8c26eb97ffd6371507edcc74e105bec40a7c"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-single-instance-acceptance/test_reopen_during_quit_and_unconfirmed_reclamation_keeps_exiting/host-1.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-single-instance-acceptance/test_reopen_during_quit_and_unconfirmed_reclamation_keeps_exiting/host-2.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-single-instance-acceptance/test_reopen_during_quit_and_unconfirmed_reclamation_keeps_exiting/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 407,
+    "sha256": "a0a24967adb417abe079c82b44a39b58194b1a9012bf13c9a8f7149822100c85"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-single-instance-acceptance/test_simultaneous_launches_create_only_one_host_runtime/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "5a2e256fb7e9a96d6ca55a7e7ddfddae20a28f145b2974de713918300ce36b8b"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-single-instance-acceptance/test_simultaneous_launches_create_only_one_host_runtime/host-1.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-single-instance-acceptance/test_simultaneous_launches_create_only_one_host_runtime/host-2.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-single-instance-acceptance/test_simultaneous_launches_create_only_one_host_runtime/host-3.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-single-instance-acceptance/test_simultaneous_launches_create_only_one_host_runtime/host-4.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-single-instance-acceptance/test_simultaneous_launches_create_only_one_host_runtime/host-5.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-single-instance-acceptance/test_simultaneous_launches_create_only_one_host_runtime/host-6.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-single-instance-acceptance/test_simultaneous_launches_create_only_one_host_runtime/host-7.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-single-instance-acceptance/test_simultaneous_launches_create_only_one_host_runtime/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 364,
+    "sha256": "0929c956b85be0cd757f95866c74fc88bf526d4ef7f65c6073aed2d3ac93ac36"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-single-instance-acceptance/test_starting_reopen_only_shows_current_initialization/host-0.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 115,
+    "sha256": "16f618425393d1d7f88dfb7fa1a52ecb91e900a210f04486944249296d2c9d81"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-single-instance-acceptance/test_starting_reopen_only_shows_current_initialization/host-1.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-single-instance-acceptance/test_starting_reopen_only_shows_current_initialization/result.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 262,
+    "sha256": "3658709476bfff7a68fca3257b28624b23cdb9ea3438a34d9d218977a80014f1"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/tray-single-instance-acceptance/test_starting_reopen_only_shows_current_initialization/window.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 23218,
+    "sha256": "abecd9108877e60ffd1ff0e1b4bbc6563267de45ac9fcbb3c2ef3282fcd3fac8"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/ui-acceptance/00-starting-9237.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 38834,
+    "sha256": "c7cbbf3b42e5f052b41d1bd8e4c80dd0867b0b8275e5b9f7d5dcc1c5647865ed"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/ui-acceptance/00-starting-9238.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 38834,
+    "sha256": "c7cbbf3b42e5f052b41d1bd8e4c80dd0867b0b8275e5b9f7d5dcc1c5647865ed"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/ui-acceptance/00-starting-9239.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 38834,
+    "sha256": "c7cbbf3b42e5f052b41d1bd8e4c80dd0867b0b8275e5b9f7d5dcc1c5647865ed"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/ui-acceptance/01-ready.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 367076,
+    "sha256": "c99cb4f82612c223a6bc237484fb5b08db5c5415f17deca09d60c2cb1d36b5d4"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/ui-acceptance/02-after-refresh.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 367076,
+    "sha256": "c99cb4f82612c223a6bc237484fb5b08db5c5415f17deca09d60c2cb1d36b5d4"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/ui-acceptance/03-data-in-use.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 59384,
+    "sha256": "8ecae46e7c48008dcf7aef3149f0a37c72e02da5618aede961ccb4823353b38a"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/ui-acceptance/04-reopened.png",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 367076,
+    "sha256": "c99cb4f82612c223a6bc237484fb5b08db5c5415f17deca09d60c2cb1d36b5d4"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/ui-acceptance/contender.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/ui-acceptance/frontend-server.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 4727,
+    "sha256": "8215f546d8a6192b3b4146f7aa83c882326e91a14575e6ba9a5a01e84f359013"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/ui-acceptance/host-kill.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/ui-acceptance/primary.log",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/ui-acceptance/README.md",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 2891,
+    "sha256": "069386b10a8d5ca28e027f5697a193e8162841927ea3d81964677ad2c72e6e3f"
+  },
+  {
+    "path": ".scratch/windows-backend-lifecycle/ui-acceptance/results.json",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 3635,
+    "sha256": "8c244a6fa598eaef7c258f72dddaf9253d8e245600418602fc677227c90591d2"
+  },
+  {
+    "path": "docs/temp.md",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 127,
+    "sha256": "83a89e19b648c0a9e1dcba9d8ecb7211dcf8c48664029c2301724853cd976450"
+  },
+  {
+    "path": "docs/wayfinder/windows-backend-lifecycle/tickets/002-runtime-contract.discussion.md",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 39566,
+    "sha256": "149e895b78b931c1f4f7acc2967d38218248de3c0977a883e00a9dd5230cb569"
+  },
+  {
+    "path": "docs/windows-backend-lifecycle-plan.md",
+    "archive": "windows-history-and-evidence.zip",
+    "bytes": 9637,
+    "sha256": "7d05499b695154908e5ff4952794468af3990e440dbcca51c171d41d770d832a"
+  },
+  {
+    "path": "design/chat-ui-20260924/a-calm-light.png",
+    "archive": "visual-explorations.zip",
+    "bytes": 1065289,
+    "sha256": "d853892cd89bae85b4587daeda4e4e9950e0b4f921aa5b0fbe8e73244ef114cd"
+  },
+  {
+    "path": "design/chat-ui-20260924/b-graphite-dark.png",
+    "archive": "visual-explorations.zip",
+    "bytes": 1145987,
+    "sha256": "b980dbdba0359ca4eaa16f93f515524078b53795058af5831886fef55ef2903e"
+  },
+  {
+    "path": "design/chat-ui-20260924/c-swiss-minimal.png",
+    "archive": "visual-explorations.zip",
+    "bytes": 1067447,
+    "sha256": "a6d8a0e967a994edab634ad815174a8d54fd7ed703df809368832f62cf2729bd"
+  },
+  {
+    "path": "design/chat-ui-20260924/exploration-v2/a-quiet-canvas.png",
+    "archive": "visual-explorations.zip",
+    "bytes": 969486,
+    "sha256": "c6ae190ab1554277dc303d792be827464a18ce02291f431ca8da375547158dc9"
+  },
+  {
+    "path": "design/chat-ui-20260924/exploration-v2/b-signal-console.png",
+    "archive": "visual-explorations.zip",
+    "bytes": 1011565,
+    "sha256": "6454bcf6672f05ba18193763aed4d4b0bd1c8bf2dc0ab576a6b345f3607cf35b"
+  },
+  {
+    "path": "design/chat-ui-20260924/exploration-v2/c-dialogue-desk.png",
+    "archive": "visual-explorations.zip",
+    "bytes": 1059512,
+    "sha256": "d9fd21d232c4d53a62f7a9adc77cbc9dcb9c1633f7740e8e8a938fb107a53c07"
+  },
+  {
+    "path": "design/chat-ui-20260924/exploration-v2/prompts.md",
+    "archive": "visual-explorations.zip",
+    "bytes": 8932,
+    "sha256": "6f5e63ee5558ac8e97559fcfb704374acca5036fc2d3e2da88057ea3f81e2eb1"
+  },
+  {
+    "path": "design/chat-ui-20260924/prompts.md",
+    "archive": "visual-explorations.zip",
+    "bytes": 11434,
+    "sha256": "35ea3e0cda85c002fba6d33d6748f39a92e8d43bb6bdf92e32716a96277810f9"
+  },
+  {
+    "path": "design/logo_smooth.svgZone.Identifier",
+    "archive": "visual-explorations.zip",
+    "bytes": 25,
+    "sha256": "b952d24cf701bc4e7a7d21e1ae85c611824e80579a89836c0cb49b193446ccfe"
+  },
+  {
+    "path": "design/shikigen-ui/01-hero.png",
+    "archive": "visual-explorations.zip",
+    "bytes": 1987146,
+    "sha256": "04effb18fc63fac9b3b62ec336ff6fee99e862e8dee4f18769387ccc7d92f4dd"
+  },
+  {
+    "path": "design/shikigen-ui/02-runtime-cockpit.png",
+    "archive": "visual-explorations.zip",
+    "bytes": 1261514,
+    "sha256": "e4287cf7bafddf414da39afe933491f1338a315c49d09682db61cec18c4ef0bd"
+  },
+  {
+    "path": "design/shikigen-ui/03-execution-anatomy.png",
+    "archive": "visual-explorations.zip",
+    "bytes": 1628455,
+    "sha256": "ad13ba568fffc2080a051ff9d3c546d0e981447407a1f95b73d5fa24c55ee02f"
+  },
+  {
+    "path": "design/shikigen-ui/04-checkpoint-recovery.png",
+    "archive": "visual-explorations.zip",
+    "bytes": 1717675,
+    "sha256": "91afd81138b934dc661f4f133dc01075467ee41aabfffdc94f523da1b03b4bfe"
+  },
+  {
+    "path": "design/shikigen-ui/05-tools-delegation.png",
+    "archive": "visual-explorations.zip",
+    "bytes": 1699640,
+    "sha256": "f0b5e0c00aeef25d8cdb829708c896bd0d3e1bea56c71aa9b767c241908d0f52"
+  },
+  {
+    "path": "design/shikigen-ui/06-final-cta.png",
+    "archive": "visual-explorations.zip",
+    "bytes": 2117839,
+    "sha256": "77ebbc2718cb5f1d3b7e786731fe4350490225dd467f940c2d4b230d23dd8c07"
+  },
+  {
+    "path": "design/tauri-prd/prompts.json",
+    "archive": "visual-explorations.zip",
+    "bytes": 15461,
+    "sha256": "898d643cf84015acdf0188a52e122e1dba72ce66cc94758a352c889856e01776"
+  },
+  {
+    "path": "design/ui-concepts/concept-a-calm-workspace.png",
+    "archive": "visual-explorations.zip",
+    "bytes": 1213297,
+    "sha256": "1e1c51f624f485b94aca15c8911a6f8fd52762028631611ec6db4e213f233757"
+  },
+  {
+    "path": "design/ui-concepts/concept-b-runtime-console.png",
+    "archive": "visual-explorations.zip",
+    "bytes": 1329116,
+    "sha256": "ce2dab2f3de4aacdf1d9b14c32ece3afef8efc7dcbe503c969bb0e26a29b9de5"
+  },
+  {
+    "path": "design/ui-concepts/concept-c-agent-workspace.png",
+    "archive": "visual-explorations.zip",
+    "bytes": 1109575,
+    "sha256": "c814ad4b0f738a8551317175af695f75267b51695af6c293a25f1f9b840628c3"
+  },
+  {
+    "path": "frontend/work-records/assets/2026-09-24-frontend-workbench/1024.png",
+    "archive": "visual-explorations.zip",
+    "bytes": 98146,
+    "sha256": "61dd0cd9f00a02e1eeb81e09e622826b35ff43f424a2146f1ccb89d645a5e7c9"
+  },
+  {
+    "path": "frontend/work-records/assets/2026-09-24-frontend-workbench/1280.png",
+    "archive": "visual-explorations.zip",
+    "bytes": 91489,
+    "sha256": "cdd8961c12613e5d5b696c4152d1ffdf7bf5349ab0c2628ba92a831788357a94"
+  },
+  {
+    "path": "frontend/work-records/assets/2026-09-24-frontend-workbench/1440-collapsed.png",
+    "archive": "visual-explorations.zip",
+    "bytes": 139847,
+    "sha256": "678acc851be5563938ddefa424fbd0f448b293ecd2792d39e6eb8359a81ed11d"
+  },
+  {
+    "path": "frontend/work-records/assets/2026-09-24-frontend-workbench/1440-expanded.png",
+    "archive": "visual-explorations.zip",
+    "bytes": 160551,
+    "sha256": "bf3a3af6d27b11d8638c23a3a863af1353621ed47a62c95973c32ab93abcfa30"
+  },
+  {
+    "path": "frontend/work-records/assets/2026-09-24-frontend-workbench/390.png",
+    "archive": "visual-explorations.zip",
+    "bytes": 81607,
+    "sha256": "949ed15d7ae1b6645479cc9dc668eaa38617ec998969a736d20dca734f9d0dff"
+  }
+]

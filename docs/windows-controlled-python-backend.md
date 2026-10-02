@@ -1,12 +1,12 @@
 # 第 03 票实施说明 通过控制管道管理 Python 后端
 
-日期：2026-09-30。对应任务：[03-controlled-python-backend.md](../.scratch/windows-backend-lifecycle/issues/03-controlled-python-backend.md)。
+日期：2026-09-30。对应任务：[03-controlled-python-backend.md](windows-backend-lifecycle.md#实施结果)。
 
 本次增加了一个供桌面宿主调用的 Python 入口。宿主可以通过进程管道获知端口、请求退出，再通过 HTTP 确认后端就绪。本文解释这些改动在系统中的位置、设计原因和实际使用的 API，方便你沿着代码阅读。
 
 第 03 票完成的是 Python 一侧。Tauri 自动启动后端、Windows Job 管理进程树、超时强制回收等能力仍由后续票实现。本文中的测试结果引用本轮实施记录，编写说明时没有重新运行测试。
 
-后续进度（2026-10-02）：第 04～10 票现已实现桌面托管、初始化取消、有界退出、故障后的手动重试、桌面单实例、托盘驻留、业务客户端切换及错误页日志查询。本文保留第 03 票的实施背景及历史测试结果；回收规则见[第 05 票记录](../.scratch/windows-backend-lifecycle/issues/05-bounded-shutdown-reclamation.md)，重试接口与隔离见[第 06 票记录](../.scratch/windows-backend-lifecycle/issues/06-manual-retry-isolation.md)，重复打开、窗口恢复及竞争保护见[第 07 票记录](../.scratch/windows-backend-lifecycle/issues/07-single-desktop-instance.md)，关窗驻留、托盘退出及后台故障提示见[第 08 票记录](../.scratch/windows-backend-lifecycle/issues/08-tray-residency-exit.md)，真实会话读取、SSE 隔离及换端口恢复见[第 09 票记录](../.scratch/windows-backend-lifecycle/issues/09-client-backend-switch.md)，最近 1 MiB 日志缓存、按需查询及启动归属隔离见[第 10 票记录](../.scratch/windows-backend-lifecycle/issues/10-startup-log-view.md)。
+后续进度（2026-10-02）：第 04～10 票现已实现桌面托管、初始化取消、有界退出、故障后的手动重试、桌面单实例、托盘驻留、业务客户端切换及错误页日志查询。本文保留第 03 票的实施背景及历史测试结果；回收规则见[第 05 票记录](windows-backend-lifecycle.md#实施结果)，重试接口与隔离见[第 06 票记录](windows-backend-lifecycle.md#实施结果)，重复打开、窗口恢复及竞争保护见[第 07 票记录](windows-backend-lifecycle.md#实施结果)，关窗驻留、托盘退出及后台故障提示见[第 08 票记录](windows-backend-lifecycle.md#实施结果)，真实会话读取、SSE 隔离及换端口恢复见[第 09 票记录](windows-backend-lifecycle.md#实施结果)，最近 1 MiB 日志缓存、按需查询及启动归属隔离见[第 10 票记录](windows-backend-lifecycle.md#实施结果)。
 
 ## 1 为什么需要独立的桌面入口
 
@@ -243,13 +243,13 @@ flowchart TD
 - 本票桌面集成测试 9 项、配置文件测试 24 项均通过。
 - 类型检查、Ruff 和差异空白检查通过；两路审查发现的配置回显问题修复后，剩余发现为 0。
 
-详见[验收记录](../.scratch/windows-backend-lifecycle/issues/03-controlled-python-backend.md)和[完整测试日志](../.scratch/windows-backend-lifecycle/test-results-03.log)。
+详见[验收记录](windows-backend-lifecycle.md#实施结果)和[完整测试日志](archive/README.md#windows-历史与验收)。
 
 ## 10 当前边界与建议阅读顺序
 
 第 05 票让 `serve_backend()` 同时等待 runtime 生命周期任务和控制停止事件。初始化期间可取消上下文进入并释放已有资源；运行期间先停止执行，再等待 HTTP 收尾。同步阻塞或不响应取消的路径由 Rust 的总期限与 Job 强制回收处理。
 
-桌面宿主启动、就绪探测、Windows Job、统一期限、进程树强制回收、手动重试、单实例、托盘和业务客户端切换已实现。正常关窗只隐藏，托盘“退出应用”执行受控回收。页面在 ready 后使用本次地址读取真实 Thread、消息及 Run，重试只恢复读取，用户点击发送才创建新的执行。后续仍有第 10 票日志查询；当前没有 macOS 原生验收。
+桌面宿主启动、就绪探测、Windows Job、统一期限、进程树强制回收、手动重试、单实例、托盘和业务客户端切换已实现。正常关窗只隐藏，托盘“退出应用”执行受控回收。页面在 ready 后使用本次地址读取真实 Thread、消息及 Run，重试只恢复读取，用户点击发送才创建新的执行。第 10 票日志查询也已完成；当前没有 macOS 原生验收。
 
 建议按以下顺序阅读代码：
 
