@@ -2,7 +2,7 @@ import asyncio
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import httpx
 from langchain.agents import create_agent
@@ -23,10 +23,13 @@ from shikigen.core.approval import build_approval_middleware
 from shikigen.core.execution import ExecutionOutcome, ExecutionReason
 from shikigen.persistence import ChatStore
 from shikigen.runtime.composition import assemble_runtime
+from shikigen.runtime.run_observation import RunObservation
 from shikigen.runtime.runs import RunTransitions
 from sse_fixtures import parse_sse_frames
+from starlette.requests import ClientDisconnect, Request
 from test_approval_pause import nested_graph
 
+from app.routes.run import submit_approval_decisions
 from app.run_contract import SSE_EVENT
 from app.server import app
 
@@ -291,6 +294,7 @@ class ApprovalResumeTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_http_submission_conflicts_and_rebuild(self):
     body = {"responses": await self.responses()}
+    previous = await self.facts()
     with patch.object(app.state, "runtime", self.runtime, create=True):
       async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
@@ -305,6 +309,21 @@ class ApprovalResumeTests(unittest.IsolatedAsyncioTestCase):
         response = await client.post(url, json=body)
         self.assertEqual(response.status_code, 200)
         frames = parse_sse_frames(response.text)
+        self.assertEqual(
+          frames[0],
+          {
+            "event": "metadata",
+            "data": {
+              "thread_id": self.thread,
+              "run_id": self.run_id,
+              "status": "running",
+            },
+          },
+        )
+        observed_seqs = [f["data"]["seq"] for f in frames if f["event"] == "event"]
+        self.assertEqual(
+          observed_seqs, [f["seq"] for f in (await self.facts())[len(previous) :]]
+        )
         for frame in frames:
           SSE_EVENT.validate_python(frame)
         self.assertTrue(
@@ -318,6 +337,45 @@ class ApprovalResumeTests(unittest.IsolatedAsyncioTestCase):
         current = await client.get(again.json()["detail"]["stream"])
         self.assertEqual(current.status_code, 200)
         self.assertIn('"event_type":"required"', current.text)
+
+  async def test_old_execution_observation_stays_with_its_invocation_after_resume(self):
+    previous = await self.facts()
+    resumed = await self.runtime.runs.resume_run(
+      self.thread, self.run_id, await self.responses()
+    )
+    await self.runtime.runs.wait_run(resumed)
+    observation = RunObservation.from_execution(self.first)
+    self.assertEqual(
+      [e.data async for e in observation if e.event == "durable_event"], previous
+    )
+    observation = RunObservation.from_execution(resumed)
+    self.assertEqual(
+      [e.data async for e in observation if e.event == "durable_event"],
+      (await self.facts())[len(previous) :],
+    )
+
+  async def test_resume_send_failure_releases_observation_and_keeps_execution(self):
+    body = ApprovalSubmission(responses=await self.responses())
+    with patch.object(app.state, "runtime", self.runtime, create=True):
+      response = await submit_approval_decisions(
+        self.thread, self.run_id, body, Request({"type": "http", "app": app})
+      )
+    execution = self.runtime.executions.get(self.thread, self.run_id)
+    self.assertIsNotNone(execution)
+    self.assertEqual(len(execution.stream._subscribers), 1)
+
+    async def fail_send(message):
+      raise OSError("disconnected before body")
+
+    with self.assertRaises(ClientDisconnect):
+      await response(
+        {"type": "http", "asgi": {"spec_version": "2.4"}}, AsyncMock(), fail_send
+      )
+    self.assertEqual(len(execution.stream._subscribers), 0)
+    self.assertFalse(execution.abort_event.is_set())
+    self.assertEqual(
+      (await self.runtime.runs.wait_run(execution))["status"], "interrupted"
+    )
 
   async def test_nested_interrupts_resume_together(self):
     runtime = self.make_runtime(nested_graph(), self.store)
@@ -353,7 +411,7 @@ class ApprovalResumeTests(unittest.IsolatedAsyncioTestCase):
       try:
         await asyncio.wait_for(entered.wait(), 3)
         observation = await self.runtime.runs.observe_run(self.thread, self.run_id)
-        self.assertEqual(observation.run["status"], "running")
+        self.assertEqual(observation.metadata["status"], "running")
       finally:
         release.set()
       seen = [e.data async for e in observation if e.event == "durable_event"]

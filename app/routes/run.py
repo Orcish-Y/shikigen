@@ -1,4 +1,4 @@
-from collections.abc import AsyncGenerator, AsyncIterator
+from collections.abc import AsyncGenerator
 
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
@@ -12,7 +12,6 @@ from shikigen.contracts.runs import (
   StorageConflict,
   ThreadNotFound,
 )
-from shikigen.core.execution import RunExecution
 from shikigen.runtime import Runtime
 from shikigen.runtime.run_observation import RunObservation
 from starlette.types import Receive, Scope, Send
@@ -57,47 +56,6 @@ class ChatRequest(BaseModel):
   )
 
 
-async def stream_run_events(
-  execution: RunExecution,
-) -> AsyncGenerator[str, None]:
-  encoder = RunSseEncoder(execution.thread_id, execution.run_id)
-  subscription = execution.stream.subscribe()
-  try:
-    # todo.  encode 是不是要收拢到同一个地方，保存和输出为相同的内容
-    yield encode_sse(
-      MetadataEnvelope(
-        data=MetadataData(
-          thread_id=execution.thread_id,
-          run_id=execution.run_id,
-          status="running",
-        )
-      )
-    )
-    async for event in subscription:
-      if event.event == "metadata":
-        continue
-      try:
-        frame = encoder.encode(event)
-      except ValidationError:
-        yield observation_error("invalid_event")
-        return
-      if frame is not None:
-        yield frame
-  finally:
-    await subscription.aclose()
-
-
-def _sse_response(content: AsyncIterator[str]) -> StreamingResponse:
-  return StreamingResponse(
-    content,
-    media_type="text/event-stream",
-    headers={
-      "Cache-Control": "no-cache",
-      "X-Accel-Buffering": "no",
-    },
-  )
-
-
 @router.post(
   "/stream",
   summary="流式发送消息",
@@ -120,27 +78,15 @@ async def stream_chat(
       status_code=status.HTTP_409_CONFLICT,
       detail=str(error),
     ) from error
-  return _sse_response(stream_run_events(execution))
+  return ObservationResponse(RunObservation.from_execution(execution))
 
 
 async def stream_observation(observation: RunObservation) -> AsyncGenerator[str, None]:
   """将 RunObservation 事件流编码为 SSE 格式，并在退出时回收观察资源。"""
-  run = observation.run
-  encoder = RunSseEncoder(run["thread_id"], run["id"])
   try:
-    yield encode_sse(
-      MetadataEnvelope(
-        data=MetadataData.model_validate(
-          {
-            "thread_id": run["thread_id"],
-            "run_id": run["id"],
-            "status": run["status"],
-            "usage": run["usage"],
-            "usage_pending": run["usage_pending"],
-          }
-        )
-      )
-    )
+    metadata = MetadataData.model_validate(observation.metadata)
+    encoder = RunSseEncoder(metadata.thread_id, metadata.run_id)
+    yield encode_sse(MetadataEnvelope(data=metadata))
     async for event in observation:
       if event.event == "metadata":
         continue
@@ -227,7 +173,7 @@ async def submit_approval_decisions(
     raise HTTPException(
       status_code=503, detail=str(error), headers={"Retry-After": "1"}
     ) from error
-  return _sse_response(stream_run_events(execution))
+  return ObservationResponse(RunObservation.from_execution(execution))
 
 
 @router.post("/runs/{run_id}/cancel", summary="取消运行或暂停中的 Run")

@@ -15,6 +15,7 @@ from shikigen.core.execution import (
 from shikigen.persistence import ChatStore
 from shikigen.runtime.composition import assemble_runtime
 from shikigen.runtime.run_events import RunEventIngestor
+from shikigen.runtime.run_observation import RunObservation
 from shikigen.runtime.runs import RunTransitions
 from test_loop import MessageAgent
 
@@ -98,7 +99,7 @@ class ObservationTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_two_observers_and_close_before_iteration(self):
     execution = await self.active()
-    one = await self.runtime.runs.observe_run(self.thread, "run")
+    one = RunObservation.from_execution(execution)
     two = await self.runtime.runs.observe_run(self.thread, "run")
     await one.aclose()
     await one.aclose()
@@ -107,6 +108,22 @@ class ObservationTests(unittest.IsolatedAsyncioTestCase):
     await self.finish(execution)
     facts = [e.data async for e in two if e.event == "durable_event"]
     self.assertEqual(facts, await self.store.list_run_events(self.thread, "run"))
+
+  async def test_completed_execution_remains_observable_after_registry_removal(self):
+    execution = await self.runtime.runs.start_run(self.thread, "hi")
+    await self.runtime.runs.wait_run(execution)
+    self.assertIsNone(self.runtime.executions.get(self.thread, execution.run_id))
+    observation = RunObservation.from_execution(execution)
+    self.assertEqual(
+      observation.metadata,
+      {"thread_id": self.thread, "run_id": execution.run_id, "status": "running"},
+    )
+    events = [event async for event in observation]
+    self.assertEqual(
+      [e.data for e in events if e.event == "durable_event"],
+      await self.runtime.runs.list_run_events(self.thread, execution.run_id),
+    )
+    self.assertEqual(events[-1].data, {"status": "completed"})
 
   async def test_read_failure_and_cancel_release_subscription(self):
     execution = await self.active()
@@ -140,7 +157,7 @@ class ObservationTests(unittest.IsolatedAsyncioTestCase):
 
     with patch.object(self.runtime.runs, "read_run", side_effect=read):
       observation = await self.runtime.runs.observe_run(self.thread, "run")
-    self.assertEqual(observation.run["status"], "completed")
+    self.assertEqual(observation.metadata["status"], "completed")
     self.assertEqual(
       [e.data async for e in observation],
       await self.store.list_run_events(self.thread, "run"),
@@ -221,6 +238,8 @@ class ObservationTests(unittest.IsolatedAsyncioTestCase):
             else:
               observation = await self.runtime.runs.observe_run(thread, reason.value)
             facts = [e.data async for e in observation]
-          self.assertEqual(facts[-1]["content"]["status"], observation.run["status"])
+          self.assertEqual(
+            facts[-1]["content"]["status"], observation.metadata["status"]
+          )
         finally:
           await reopened.close()

@@ -631,7 +631,6 @@ class RunService:
     """
     run = await self.read_run(thread_id, run_id)
     execution = None
-    # todo. 这里后面看看能不能优化一下
     if run["status"] == "running":
       execution = self._executions.get(thread_id, run_id)
       if execution is None:
@@ -639,13 +638,4 @@ class RunService:
         run = await self.read_run(thread_id, run_id)
         if run["status"] == "running":
           raise ObservationUnavailable("Local execution unavailable; retry observation")
-    subscription = execution.stream.subscribe() if execution is not None else None
-    try:
-      history = await self._store.list_run_events(thread_id, run_id)
-      if execution is not None:
-        history = [e for e in history if e["seq"] < execution.replay_start_seq]
-      return RunObservation(run, history, subscription)
-    except BaseException:
-      if subscription is not None:
-        await subscription.aclose()
-      raise
+    return await RunObservation.rebuild(run, store=self._store, execution=execution)

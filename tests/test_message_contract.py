@@ -27,10 +27,11 @@ from shikigen.core.graph_events import GraphEventAdapter
 from shikigen.persistence import ChatStore
 from shikigen.runtime.composition import open_runtime
 from shikigen.runtime.run_events import RunEventIngestor
+from shikigen.runtime.run_observation import RunObservation
 from shikigen.runtime.runs import RunTransitions
 from sse_fixtures import parse_sse
 
-from app.routes.run import stream_run_events
+from app.routes.run import stream_observation
 from app.run_contract import SSE_EVENT, RunSseEncoder
 
 
@@ -273,7 +274,10 @@ class MessageContractTests(unittest.IsolatedAsyncioTestCase):
   async def test_invalid_observation_ends_subscription_without_changing_run(self):
     execution = RunExecution(run_id="first", thread_id="thread")
     execution.stream.publish("message", {"text": "invalid end", "done": True})
-    frames = [parse_sse(frame) async for frame in stream_run_events(execution)]
+    frames = [
+      parse_sse(frame)
+      async for frame in stream_observation(RunObservation.from_execution(execution))
+    ]
     self.assertEqual(
       frames[1:],
       [
