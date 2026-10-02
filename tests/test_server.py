@@ -14,6 +14,7 @@ from shikigen.contracts.runs import StorageConflict
 from shikigen.core.execution import RunExecution
 from shikigen.persistence import ChatStore
 from shikigen.runtime.composition import assemble_runtime, open_runtime
+from shikigen.runtime.run_observation import RunObservation
 from shikigen.runtime.runs import RunTransitions
 from sse_fixtures import parse_sse, parse_sse_frames
 from starlette.requests import ClientDisconnect
@@ -23,7 +24,7 @@ from app.routes.run import (
   ChatRequest,
   ObservationResponse,
   stream_chat,
-  stream_run_events,
+  stream_observation,
 )
 from app.server import app as server_app
 from app.server import create_app
@@ -206,24 +207,35 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
       (await self.runtime.runs.read_run(thread, "orphan"))["status"], "running"
     )
 
-  async def test_get_response_send_failure_releases_unstarted_observation(self):
-    thread = await self.runtime.threads.create_thread()
+  async def test_create_and_get_send_failure_release_unstarted_observation(self):
     self.runtime.runs.agent = BlockingAgent()
-    execution = await self.runtime.runs.start_run(thread, "hello")
-    observation = await self.runtime.runs.observe_run(thread, execution.run_id)
-    response = ObservationResponse(observation)
+    for source in ("create", "reconnect"):
+      with self.subTest(source=source):
+        thread = await self.runtime.threads.create_thread()
+        if source == "create":
+          response = await stream_chat(
+            thread,
+            ChatRequest(message="hello"),
+            Request({"type": "http", "app": server_app}),
+          )
+          execution = self.runtime.executions.for_thread(thread)[0]
+        else:
+          execution = await self.runtime.runs.start_run(thread, "hello")
+          observation = await self.runtime.runs.observe_run(thread, execution.run_id)
+          response = ObservationResponse(observation)
+        self.assertEqual(len(execution.stream._subscribers), 1)
 
-    async def fail_send(message):
-      raise OSError("disconnected before body")
+        async def fail_send(message):
+          raise OSError("disconnected before body")
 
-    with self.assertRaises(ClientDisconnect):
-      await response(
-        {"type": "http", "asgi": {"spec_version": "2.4"}},
-        AsyncMock(),
-        fail_send,
-      )
-    self.assertEqual(len(execution.stream._subscribers), 0)
-    self.assertFalse(execution.abort_event.is_set())
+        with self.assertRaises(ClientDisconnect):
+          await response(
+            {"type": "http", "asgi": {"spec_version": "2.4"}},
+            AsyncMock(),
+            fail_send,
+          )
+        self.assertEqual(len(execution.stream._subscribers), 0)
+        self.assertFalse(execution.abort_event.is_set())
 
   async def test_busy_thread_returns_conflict(self):
     thread = await self.runtime.threads.create_thread()
@@ -364,7 +376,10 @@ class EncoderTests(unittest.IsolatedAsyncioTestCase):
       execution = RunExecution("run", "thread")
       execution.stream.publish("status", {"status": status})
       execution.stream.close()
-      events = [parse_sse(line) async for line in stream_run_events(execution)]
+      events = [
+        parse_sse(line)
+        async for line in stream_observation(RunObservation.from_execution(execution))
+      ]
       self.assertEqual(events[-1]["event"], "metadata")
       self.assertEqual(
         events[-1]["data"], {"thread_id": "thread", "run_id": "run", "status": status}
@@ -379,7 +394,10 @@ class EncoderTests(unittest.IsolatedAsyncioTestCase):
     execution.stream.publish("message", {"text": "", "done": True})
     execution.stream.publish("tool_call", {"name": "search", "input": {}, "output": {}})
     execution.stream.close()
-    frames = [frame async for frame in stream_run_events(execution)]
+    frames = [
+      frame
+      async for frame in stream_observation(RunObservation.from_execution(execution))
+    ]
     self.assertEqual(
       [parse_sse(frame) for frame in frames],
       [
@@ -423,7 +441,10 @@ class EncoderTests(unittest.IsolatedAsyncioTestCase):
     )
     execution.stream.publish("error", {"message": "model failed"})
     execution.stream.close()
-    frames = [parse_sse(frame) async for frame in stream_run_events(execution)]
+    frames = [
+      parse_sse(frame)
+      async for frame in stream_observation(RunObservation.from_execution(execution))
+    ]
     self.assertEqual(
       [frame["event"] for frame in frames], ["metadata", "event", "metadata"]
     )
@@ -464,7 +485,10 @@ class EncoderTests(unittest.IsolatedAsyncioTestCase):
       },
     )
     execution.stream.close()
-    frames = [parse_sse(frame) async for frame in stream_run_events(execution)]
+    frames = [
+      parse_sse(frame)
+      async for frame in stream_observation(RunObservation.from_execution(execution))
+    ]
     self.assertEqual(frames[1]["data"]["usage"], usage)
     self.assertEqual(frames[2]["event"], "event")
     self.assertIsNone(frames[2]["data"]["payload"]["artifact"])

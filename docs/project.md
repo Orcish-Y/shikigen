@@ -135,6 +135,14 @@ SSE 仅有 `metadata`（归属、状态与用量）、`delta`（预览）、`eve
 每次重连新建客户端投影；没有 SSE id、Last-Event-ID 或增量续传。EOF 不代表任务成功。
 Python 使用 `observe_run()`，退出时 `aclose()`；暂停流不会自动随 resume 重新打开。
 
+创建与审批恢复使用 `RunObservation.from_execution(execution)`，只消费指定 invocation
+的完整缓存与后续事件，即使句柄已移出注册表也能读取；初始 metadata 为 running，
+不附加用量快照。重连通过 `runs.observe_run()` 重建整个 Run，初始 metadata 携带
+持久状态、usage 与 usage_pending。两种来源共享异步迭代和幂等 `aclose()`，
+HTTP 均使用 `ObservationResponse` 编码 SSE，并在响应发送前失败时释放订阅。
+Python 调用方从 `observation.metadata` 读取观察起点，替代原 `observation.run`；
+需要完整 RunSnapshot 时使用 `runs.read_run()`。
+
 ### SSE 契约与 HTTP 入口
 
 | 帧 | 主要字段 |
