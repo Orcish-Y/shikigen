@@ -3,13 +3,13 @@ export interface Message {
   role: "user" | "assistant";
   text: string;
   code?: { language: string; filename: string; content: string };
-  tool?: { name: string; command: string; output: string };
+  tool?: { name: string; command: string; output: string; status?: "success" | "error" };
 }
 
 export interface Session {
   id: string;
   title: string;
-  group: "今天" | "昨天";
+  group: "今天" | "昨天" | "历史";
   summary: string;
   messages: Message[];
 }

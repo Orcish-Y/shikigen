@@ -1,0 +1,90 @@
+{
+  "counts": [
+    1,
+    1
+  ],
+  "snapshot": {
+    "state": "ready",
+    "revision": 2,
+    "startup_id": "3aace14f-c870-4929-a8ca-4b46c81b7a08",
+    "base_url": "http://127.0.0.1:45200",
+    "can_retry": false,
+    "error": null
+  },
+  "events": [
+    {
+      "thread_id": "d6cb2df42c2840dc83b4de3e50a58078",
+      "run_id": "db7ff93672734ee2a64e6c4e3064f974",
+      "status": "running"
+    },
+    {
+      "seq": 1,
+      "created_at": "2026-10-02T05:32:01.504743+00:00",
+      "category": "lifecycle",
+      "event_type": "status_changed",
+      "payload": {
+        "status": "running"
+      }
+    },
+    {
+      "seq": 2,
+      "created_at": "2026-10-02T05:32:01.504743+00:00",
+      "category": "message",
+      "event_type": "created",
+      "payload": {
+        "type": "human",
+        "message_id": "da7ac9383a6c47a38d235e6c65ef1b9c",
+        "content": "continue in background"
+      }
+    },
+    {
+      "thread_id": "d6cb2df42c2840dc83b4de3e50a58078",
+      "run_id": "db7ff93672734ee2a64e6c4e3064f974",
+      "status": "running",
+      "usage": {
+        "total_input": 0,
+        "total_output": 0,
+        "total_tokens": 0,
+        "calls": 0,
+        "by_model": {}
+      }
+    },
+    {
+      "seq": 3,
+      "created_at": "2026-10-02T05:32:01.651794+00:00",
+      "category": "lifecycle",
+      "event_type": "status_changed",
+      "payload": {
+        "status": "error",
+        "message": "acceptance task failure",
+        "error_code": "execution_failed"
+      }
+    },
+    {
+      "thread_id": "d6cb2df42c2840dc83b4de3e50a58078",
+      "run_id": "db7ff93672734ee2a64e6c4e3064f974",
+      "status": "error"
+    }
+  ],
+  "messages": {
+    "data": [
+      {
+        "id": 2,
+        "thread_id": "d6cb2df42c2840dc83b4de3e50a58078",
+        "run_id": "db7ff93672734ee2a64e6c4e3064f974",
+        "seq": 2,
+        "event_type": "human_message",
+        "category": "message",
+        "event_key": "human:da7ac9383a6c47a38d235e6c65ef1b9c",
+        "content": {
+          "content": "continue in background",
+          "message_id": "da7ac9383a6c47a38d235e6c65ef1b9c",
+          "type": "human"
+        },
+        "metadata": {},
+        "created_at": "2026-10-02T05:32:01.504743+00:00"
+      }
+    ]
+  },
+  "stayed_hidden": true
+}

@@ -97,6 +97,7 @@ from unittest.mock import patch
 from runtime_fixtures import deterministic_agent
 from desktop_shutdown_fixtures import waiting_agent
 from desktop_tray_fixtures import resident_agent
+from desktop_client_fixtures import approval_agent
 async def agent(**kwargs):
     child = subprocess.Popen(
         [sys.executable, "-c", "import time; time.sleep(120)"],
@@ -115,6 +116,8 @@ async def agent(**kwargs):
             await asyncio.sleep(0.05)
     if os.environ.get("DESKTOP_TEST_RESIDENT_TASK"):
         return await resident_agent(**kwargs)
+    if os.environ.get("DESKTOP_TEST_APPROVAL"):
+        return await approval_agent(**kwargs)
     if os.environ.get("DESKTOP_TEST_EXECUTING"):
         return await waiting_agent(**kwargs)
     return await deterministic_agent(**kwargs)

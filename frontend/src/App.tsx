@@ -13,7 +13,8 @@ import {
 import { Navigation, History } from "./components/Sidebar";
 import { Conversation, Composer } from "./components/Conversation";
 import { Overlay } from "./components/Overlay";
-import { demoSessions, type Session } from "./data/demo";
+import type { BackendSession } from "./backend-client";
+import { useConversations } from "./useConversations";
 
 function initialCollapsed() {
   try {
@@ -27,32 +28,62 @@ function initialCollapsed() {
 
 export default function App() {
   const backend = useBackendState();
-  const backendReady = backend.desktop && backend.snapshot?.state === "ready";
+  if (backend.desktop && (backend.error || backend.snapshot?.state !== "ready" || !backend.session)) {
+    const state = backend.snapshot;
+    const labels = {
+      starting: "正在启动后端",
+      ready: "后端已就绪",
+      stopping: "正在关闭后端",
+      reclaiming: "正在回收后端进程",
+      failed: "后端启动或运行失败",
+      stopped: "后端已停止",
+    };
+    return (
+      <main className="backend-screen" aria-live="polite">
+        <TrayNotice />
+        <img src="/logo.svg" alt="" width="40" height="40" />
+        <h1>{backend.error ? "无法读取后端状态" : labels[state?.state ?? "starting"]}</h1>
+        <p>{backend.error ?? state?.error?.message ?? "正在准备运行环境，请稍候。"}</p>
+        {state?.state === "failed" && (
+          <p>
+            {state.error?.code === "reclamation_unconfirmed"
+              ? "正在继续确认退出状态，请保持此窗口打开。"
+              : state.can_retry
+                ? "修正问题后，可以手动重试启动后端。"
+                : "正在处理退出，请稍候。"}
+          </p>
+        )}
+        {state?.state === "failed" && (
+          <button className="secondary-button" disabled={!state.can_retry || backend.retrying} onClick={() => void backend.retry()}>
+            {backend.retrying ? "正在请求重试…" : "重试启动后端"}
+          </button>
+        )}
+        {backend.retryError && <p role="alert">{backend.retryError}</p>}
+      </main>
+    );
+  }
+
+  return <Workspace key={backend.session?.startupId ?? "preview"} session={backend.session} />;
+}
+
+function Workspace({ session }: { session: BackendSession | null }) {
+  const backendReady = Boolean(session);
+  const conversations = useConversations(session);
+  const { sessions, active, activeId } = conversations;
   const [collapsed, setCollapsed] = useState(initialCollapsed);
-  const [sessions, setSessions] = useState<Session[]>(demoSessions);
-  const [activeId, setActiveId] = useState(demoSessions[0].id);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [query, setQuery] = useState("");
   const [mobilePanel, setMobilePanel] = useState<
     "navigation" | "history" | null
   >(null);
   const [overlay, setOverlay] = useState<"commands" | "details" | null>(null);
-  const active = sessions.find((session) => session.id === activeId)!;
   const shortcut = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl";
 
   function toggleNavigation() {
     setCollapsed((value) => !value);
   }
   function createSession() {
-    const session: Session = {
-      id: crypto.randomUUID(),
-      title: "新会话",
-      group: "今天",
-      summary: "尚未开始对话",
-      messages: [],
-    };
-    setSessions((current) => [session, ...current]);
-    setActiveId(session.id);
+    void conversations.create();
     setQuery("");
     setMobilePanel(null);
     setOverlay(null);
@@ -62,7 +93,7 @@ export default function App() {
   }
   function exportSession() {
     const content =
-      `# ${active.title}\n\n> 页面框架预览：仅导出当前已加载的示例消息，不含草稿。\n\n` +
+      `# ${active.title}\n\n${session ? "" : "> 页面框架预览：示例消息。\n\n"}` +
       active.messages
         .map(
           (message) =>
@@ -105,42 +136,8 @@ export default function App() {
     }
     window.addEventListener("keydown", keydown);
     return () => window.removeEventListener("keydown", keydown);
-  }, []);
+  });
 
-  if (backend.desktop && (backend.error || backend.snapshot?.state !== "ready")) {
-    const state = backend.snapshot;
-    const labels = {
-      starting: "正在启动后端",
-      ready: "后端已就绪",
-      stopping: "正在关闭后端",
-      reclaiming: "正在回收后端进程",
-      failed: "后端启动或运行失败",
-      stopped: "后端已停止",
-    };
-    return (
-      <main className="backend-screen" aria-live="polite">
-        <TrayNotice />
-        <img src="/logo.svg" alt="" width="40" height="40" />
-        <h1>{backend.error ? "无法读取后端状态" : labels[state?.state ?? "starting"]}</h1>
-        <p>{backend.error ?? state?.error?.message ?? "正在准备运行环境，请稍候。"}</p>
-        {state?.state === "failed" && (
-          <p>
-            {state.error?.code === "reclamation_unconfirmed"
-              ? "正在继续确认退出状态，请保持此窗口打开。"
-              : state.can_retry
-                ? "修正问题后，可以手动重试启动后端。"
-                : "正在处理退出，请稍候。"}
-          </p>
-        )}
-        {state?.state === "failed" && (
-          <button className="secondary-button" disabled={!state.can_retry || backend.retrying} onClick={() => void backend.retry()}>
-            {backend.retrying ? "正在请求重试…" : "重试启动后端"}
-          </button>
-        )}
-        {backend.retryError && <p role="alert">{backend.retryError}</p>}
-      </main>
-    );
-  }
 
   return (
     <IconContext.Provider value={{ weight: "regular", size: 18 }}>
@@ -151,11 +148,11 @@ export default function App() {
           <div className="brand">
             <img src="/logo.svg" alt="" />
             <strong>shikigen</strong>
-            <span className="preview-label">界面预览</span>
+            {!session && <span className="preview-label">界面预览</span>}
           </div>
           <span className="app-connection">
             <span className="status-dot" />
-            {backend.desktop ? "后端已就绪" : "后端未连接"}
+            {backendReady ? "后端已就绪" : "后端未连接"}
           </span>
           <button
             className="text-button"
@@ -188,10 +185,11 @@ export default function App() {
             query={query}
             onQuery={setQuery}
             onSelect={(id) => {
-              setActiveId(id);
+              conversations.select(id);
               setMobilePanel(null);
             }}
             onCreate={createSession}
+            creating={conversations.creating || conversations.loading}
           />
           <main className="chat-workspace">
             <div className="chat-toolbar">
@@ -211,7 +209,7 @@ export default function App() {
               </button>
               <h1>{active.title}</h1>
               <span className="badge toolbar-badge">
-                {active.messages.length ? "示例会话" : "就绪"}
+                {session ? conversations.run?.status ?? (conversations.loading ? "读取中" : "就绪") : "示例会话"}
               </span>
               <div className="toolbar-actions">
                 <button
@@ -233,7 +231,10 @@ export default function App() {
                 </button>
               </div>
             </div>
+            {conversations.error && <p className="business-notice" role="alert">{conversations.error}</p>}
+            {session && <button className="text-button" onClick={conversations.reload} disabled={conversations.sending || conversations.loading}>刷新数据</button>}
             <Conversation
+              preview={!session}
               session={active}
               onSuggestion={(text) => {
                 updateDraft(text);
@@ -242,6 +243,12 @@ export default function App() {
             />
             <Composer
               backendReady={backendReady}
+              canSend={conversations.canSend}
+              sending={conversations.sending}
+              onSend={() => {
+                const text = drafts[activeId]?.trim();
+                if (text && conversations.send(text)) updateDraft("");
+              }}
               draft={drafts[activeId] ?? ""}
               onChange={updateDraft}
               onCommands={() => setOverlay("commands")}
@@ -287,23 +294,21 @@ export default function App() {
         {overlay === "details" && (
           <Overlay title="运行详情" drawer onClose={() => setOverlay(null)}>
             <div className="details-content">
-              <span className="badge">尚无真实运行</span>
+              <span className="badge">{conversations.run?.status ?? "尚无真实运行"}</span>
               <h3>{active.title}</h3>
-              <p>
-                当前展示页面框架，连接后端后将在这里显示运行状态、用量与事件。
-              </p>
               <dl>
-                {["Run ID", "模型", "输入 Token", "输出 Token", "工具调用"].map(
-                  (label) => (
-                    <div key={label}>
-                      <dt>{label}</dt>
-                      <dd>—</dd>
-                    </div>
-                  ),
-                )}
+                {[
+                  ["Run ID", conversations.run?.run_id],
+                  ["状态", conversations.run?.status],
+                  ["输入 Token", conversations.run?.usage?.total_input],
+                  ["输出 Token", conversations.run?.usage?.total_output],
+                ].map(([label, value]) => (
+                  <div key={label}><dt>{label}</dt><dd>{value ?? "—"}</dd></div>
+                ))}
               </dl>
-              <h3>生命周期事件</h3>
-              <p>暂无事件</p>
+              {conversations.run?.status === "interrupted" && <p>此运行正在等待审批。</p>}
+              {conversations.error && <p role="alert">{conversations.error}</p>}
+
             </div>
           </Overlay>
         )}

@@ -1,0 +1,16 @@
+{
+  "counts": [
+    1,
+    1
+  ],
+  "ready": {
+    "state": "ready",
+    "revision": 2,
+    "startup_id": "8a90e7fd-c2ca-494d-a520-9d0378dd114a",
+    "base_url": "http://127.0.0.1:45200",
+    "can_retry": false,
+    "error": null
+  },
+  "body": "shikigen\n后端已就绪\n命令面板\nCtrl K\n工作空间\n会话与对话\n工具与技能编排\n待开放\n知识库与向量空间\n待开放\n提示词与评估\n待开放\n运行日志与追踪\n待开放\n后端已就绪\n快捷命令面板\n系统设置\nLocal Developer\n个人工作空间\n会话历史\n新建\n\n历史\n\n会话 9e484bbb\n2026-10-02T05:30:40.148147+00:00\n当前 Run 用量\n\n暂无用量数据\n\n用量信息见运行详情\n会话 9e484bbb\nrunning\n导出\n运行详情\n刷新数据\nME\nLocal Developer\n\n需要审批的任务\n\nshikigen Agent\n\nbash({})\n\n后端已就绪 · 可编辑草稿\n发送\n草稿仅保留在当前页面\nCtrl K\n命令面板\n运行详情\nrunning\n会话 9e484bbb\nRun ID\n29f18513f42e4928a69c3b2d784f002e\n状态\nrunning\n输入 Token\n0\n输出 Token\n0",
+  "run_id": "29f18513f42e4928a69c3b2d784f002e"
+}

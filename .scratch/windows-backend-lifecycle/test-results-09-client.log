@@ -1,0 +1,16 @@
+✔ host query races cannot restore an old address; leaving ready closes SSE and rejects old sessions (63.7591ms)
+✔ delayed JSON and SSE headers from a revoked startup are discarded and released (3.7797ms)
+✔ queued SSE frames cannot publish after revocation, even within the same network chunk (1.3845ms)
+✔ subscribe before querying and ignore an older query result (4.6213ms)
+✔ unmount during subscription releases the late listener and does not query (0.7886ms)
+✔ retry results, old events and an outstanding query cannot overwrite the new attempt (0.7409ms)
+✔ a refused retry applies the manager snapshot and exposes its reason (0.7366ms)
+✔ unmount while retry is pending suppresses the reply and later commands (0.6719ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 365.4153

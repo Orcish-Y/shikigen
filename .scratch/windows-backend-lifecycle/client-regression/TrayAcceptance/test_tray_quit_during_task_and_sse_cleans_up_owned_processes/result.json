@@ -1,0 +1,16 @@
+{
+  "counts": [
+    1,
+    1
+  ],
+  "snapshot": {
+    "state": "ready",
+    "revision": 2,
+    "startup_id": "ade8c6e5-1f9c-45c2-bdf6-2690132b27a0",
+    "base_url": "http://127.0.0.1:45200",
+    "can_retry": false,
+    "error": null
+  },
+  "elapsed": 1.3440000000118744,
+  "processes_reclaimed": true
+}
