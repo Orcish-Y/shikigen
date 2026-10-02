@@ -1,16 +1,21 @@
 # 文档导航
 
-| 分类 | 内容 | 入口 |
-| --- | --- | --- |
-| 项目开发参考 | 架构、关键约定、能力边界和后续任务 | [project.md](project.md) |
-| 前端产品设计 | 当前能力、工作台信息架构、交互与后端缺口 | [frontend-prd.md](frontend-prd.md) |
-| Windows 桌面生命周期规划 | 后端随应用启动、退出回收、异常处理与验收场景 | [windows-backend-lifecycle-plan.md](windows-backend-lifecycle-plan.md) |
-| Python 桌面后端实施说明 | 第 03 票的控制管道、启动就绪、资源归属与退出流程 | [windows-controlled-python-backend.md](windows-controlled-python-backend.md) |
-| Wayfinder 决策地图 | Windows 后端生命周期的已定决策与待决票据 | [map.md](wayfinder/windows-backend-lifecycle/map.md) |
-| 前端实现规范 | 视觉 token、布局、组件与本地交互 | [frontend/design.md](../frontend/design.md) |
-| 前端工作记录 | 页面框架完成项、验证结果、截图与待办 | [2026-09-24：前端工作台](../frontend/work-records/2026-09-24-workbench.md) |
-| 调查与技术参考 | 外部项目对照、框架机制、原始来源与调查日期 | [research/](research/README.md) |
-| 学习记录 | 按学习顺序保存的实践与复盘 | [learning-records/](../learning-records/) |
+开发时从这里找材料。当前项目行为以 [项目开发参考](project.md)、最终接口契约及代码/测试为准；外部调查保留原调查日期，历史建议不自动成为当前待办。
 
-项目运行方式见[根 README](../README.md)，长期目标见 [MISSION](../MISSION.md)，学习资源见 [RESOURCES](../RESOURCES.md)。
-调查资料可能包含未采用的建议；当前项目约定以项目开发参考和实现为准。
+| 要找什么 | 入口 | 内容 |
+| --- | --- | --- |
+| Harness 架构与业务契约 | [project.md](project.md) | 模块边界、持久化、消息/SSE、审批、恢复、后续任务 |
+| 本地运行 | [根 README](../README.md)、[Windows 开发](windows-development.md)、[前端 README](../frontend/README.md) | 环境、启动、测试 |
+| 桌面后端 | [Windows 生命周期](windows-backend-lifecycle.md) | 01～10 票实施摘要、当前能力、验收和复现 |
+| 桌面接口细节 | [最终契约](wayfinder/windows-backend-lifecycle/tickets/002-runtime-contract.resolution.md) | 协议、状态、期限、单实例和托盘行为 |
+| 数据锁与 Python 启动器 | [数据独占](windows-runtime-data-ownership.md)、[受控 Python 后端](windows-controlled-python-backend.md) | 开发指导与代码阅读顺序；当时的测试数字是阶段记录 |
+| 前端产品与设计 | [PRD](frontend-prd.md)、[实现设计规范](../frontend/design.md) | 产品目标和实现规范；PRD 中首版目标不表示全部已实现 |
+| 外部 Agent 架构对照 | [研究索引](research/README.md) | 持久化/执行边界、子 Agent/多会话、MCP 三个主题摘要 |
+| 框架 API 速查 | [LangGraph 标识](research/langgraph-identifiers.md)、[状态存储](research/runtime-context-and-storage-strategy.md) | 开发参考，保留原文 |
+| 决策依据 | [Windows 决策地图](wayfinder/windows-backend-lifecycle/map.md) | 保留已关闭票据和最终 resolution；长讨论已归档 |
+| 学习与走读 | [learning-records/](../learning-records/)、[DeerFlow 架构导读](../doc/1.txt)、[run_agent 走读](../doc/带你一行行走读%20run_agent%28%29.md) | 教学材料保留，不混入当前实施待办 |
+| 旧材料与验收证据 | [归档索引](archive/README.md) | 原文、日志、结果 JSON、截图、设计探索和恢复方式 |
+
+长期目标见 [MISSION](../MISSION.md)，学习资源见 [RESOURCES](../RESOURCES.md)，协作与追踪约定保留在 [agents/](agents/issue-tracker.md)。
+
+2026-09-24 页面框架记录见 [历史工作记录](../frontend/work-records/2026-09-24-workbench.md)。截至 2026-10-02，Windows 开发态已完成桌面后端托管及真实 HTTP/SSE 接入；审批提交界面、完整取消交互、安装包分发、macOS 原生验收仍不能视为已交付。

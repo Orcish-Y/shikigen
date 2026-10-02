@@ -17,9 +17,9 @@ status: closed
 
 - 使用本目录的本地 Markdown tracker；规则见 [tracker 说明](tracker.md)。
 - 按 wayfinder 进行规划；讨论决策时使用 grilling、domain-modeling，设计可替换模块接口时使用 codebase-design。用户主导代码实现，未授权修改 Git。
-- [实施规划](../../windows-backend-lifecycle-plan.md)保留架构草案、实施顺序和验收场景；已定决策以票据的 resolution 为准，候选技术细节不等于已确认结论。
+- [实施规划](../../windows-backend-lifecycle.md)汇总实施结果和验收范围；早期草案已压缩归档；已定决策以票据的 resolution 为准，候选技术细节不等于已确认结论。
 - 每次只处理一张决策票据；未关闭、无未完成依赖、未被认领的子票据构成当前 frontier。开放票据不在地图正文重复列出。
-- 用户逐项确认的单实例、托盘驻留、动态端口及平台适配规则已汇总到[最终接口契约](tickets/002-runtime-contract.resolution.md)；[讨论记录](tickets/002-runtime-contract.discussion.md)保留历史过程。
+- 用户逐项确认的单实例、托盘驻留、动态端口及平台适配规则已汇总到[最终接口契约](tickets/002-runtime-contract.resolution.md)；[已归档的讨论记录](../../archive/README.md#windows-历史与验收)保留历史过程。
 - 地图已完成：已知范围内的决策均已解决，下一阶段按最终契约实施。此状态不表示应用功能或平台行为验证完成。
 
 ## Decisions so far

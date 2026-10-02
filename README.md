@@ -1,6 +1,6 @@
 # Shikigen Agent
 
-文档：[工作文档](docs/project.md) · [调查与技术参考](docs/research/README.md) · [学习记录](learning-records/)
+文档：[总导航](docs/README.md) · [工作文档](docs/project.md) · [调查与技术参考](docs/research/README.md) · [学习记录](learning-records/)
 
 ## 项目结构
 
@@ -11,7 +11,7 @@
 - `packages/harness/shikigen/persistence/`：会话、运行与事件的 SQLite 持久化。
 - `packages/harness/shikigen/checkpoint/`：Graph checkpoint 与连接管理。
 - `packages/harness/shikigen/runtime/`：共享运行环境，包含装配、生命周期、会话与 Run 管理；对外入口为 `Runtime`、`open_runtime()`、`assemble_runtime()`。
-- `frontend/`：React + TypeScript + Tauri 桌面工作台框架；[运行说明](frontend/README.md)、[设计规范](frontend/design.md)。当前使用示例数据，尚未接入后端。
+- `frontend/`：React + TypeScript + Tauri 桌面工作台框架；[运行说明](frontend/README.md)、[设计规范](frontend/design.md)。Windows 桌面就绪后接入真实 HTTP/SSE；直接浏览器访问保留示例预览。桌面托管与验收见 [Windows 生命周期](docs/windows-backend-lifecycle.md)。
 - `tests/`：测试。
 
 框架包内部按职责组织：

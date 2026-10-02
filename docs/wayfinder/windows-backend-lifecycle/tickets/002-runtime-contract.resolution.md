@@ -1,6 +1,6 @@
 # Resolution：确定 Windows 后端托管接口与状态转换
 
-状态：已确认的接口契约。讨论过程见[讨论记录](002-runtime-contract.discussion.md)，底层依据见[机制调查](../../../research/windows-backend-lifecycle-mechanisms.md)。本文件汇总最终约定，覆盖早期草案中固定端口、关窗即退出等已被修订的行为。
+状态：已确认的接口契约。实施进度补记（2026-10-02）：01～10 票已完成，结果见 [收尾摘要](../../../windows-backend-lifecycle.md)；下文“未执行”指契约确定时的历史阶段。讨论过程见[讨论记录](../../../archive/README.md#windows-历史与验收)，底层依据见[机制调查](../../../research/windows-backend-lifecycle-mechanisms.md)。本文件汇总最终约定，覆盖早期草案中固定端口、关窗即退出等已被修订的行为。
 
 ## 1. 职责与平台接口
 

@@ -1,6 +1,6 @@
 # 第 02 票实施说明：让多个入口安全争用运行数据
 
-日期：2026-09-29。对应任务：[02-exclusive-runtime-data.md](../.scratch/windows-backend-lifecycle/issues/02-exclusive-runtime-data.md)。
+日期：2026-09-29。本文保留第 02 票的数据独占设计与当时验收；Windows 01～10 票已于 2026-10-02 收尾，后续票进度见 [收尾摘要](windows-backend-lifecycle.md)。对应任务：[02-exclusive-runtime-data.md](windows-backend-lifecycle.md#实施结果)。
 
 这份文档解释本次已经完成的代码改动及其原因。验证结果来自本轮实施时的测试记录；编写本说明时没有重新运行测试。
 
@@ -161,7 +161,7 @@ flowchart TD
 | `git diff --check` | 通过 |
 | Standards / Spec 两路审查 | 各 0 项发现 |
 
-原始输出：[test-results-02.log](../.scratch/windows-backend-lifecycle/test-results-02.log)。
+原始输出：[test-results-02.log](archive/README.md#windows-历史与验收)。
 
 跳过的是符号链接实测：当前 Windows 账户没有创建符号链接的权限。目录联接、硬链接和 8.3 短文件名测试实际通过。第 01 票曾记录的审批恢复超时用例本轮通过；本次没有修改该逻辑，不能据此认定历史问题已修复。
 
