@@ -50,6 +50,19 @@ runtime 负责审批对应的 Run 状态检查、持久化与恢复执行。
 根项目通过 uv workspace 依赖 `shikigen-harness`；`uv sync` 会以 editable 模式安装框架包。
 以下命令均在项目根目录执行；默认配置 `config.json` 和运行数据路径相对于当前工作目录。
 
+配置中的 `workspace_root` 指定内置文件工具的工作区，例如
+`"workspace_root": "C:/code/my-project"`。缺省为 `"."`；相对路径以创建工具时的
+进程工作目录为准，也支持 `~`。根目录必须已经存在且为目录。
+每次创建工具集合都会绑定独立的绝对根目录，后续切换进程工作目录不改变工具归属。
+`read_file`、`write_file`、`list_dir`、`grep` 的路径检查和 `bash` 的执行目录共用该根目录；
+shell 设置执行目录不提供 sandbox，MCP 工具仍使用各自配置。
+
+Python 调用方可使用 `create_builtin_registry(workspace_root)`，或从
+`shikigen.tools` 导入 `create_filesystem_tools(workspace_root)` 获得五个文件工具。
+原来的全局文件工具导出已移除；通过返回工具的 `name` 获取所需工具。
+`open_runtime()` 与 `create_lead_agent()` 的默认工具装配均使用配置中的工作区；
+显式注入 registry 时沿用其中工具，子 Agent 继承工具集合时沿用同一工作区。
+
 ## 运行测试
 
 ```bash

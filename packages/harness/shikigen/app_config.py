@@ -114,6 +114,7 @@ class AppConfig(BaseModel):
 
   model: ModelConfig
   mcp: McpConfig
+  workspace_root: str = Field(default=".", min_length=1)
   subagents: SubagentsConfig = Field(default_factory=SubagentsConfig)
   checkpointer: CheckpointerConfig = Field(default_factory=CheckpointerConfig)
   database: DatabaseConfig = Field(default_factory=DatabaseConfig)

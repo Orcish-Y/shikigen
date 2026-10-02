@@ -81,7 +81,7 @@ async def open_runtime(
     checkpointer = await stack.enter_async_context(make_checkpointer(app_config))
     executions = ExecutionRegistry()
     ingestor = RunEventIngestor(store, executions)
-    registry = create_builtin_registry()
+    registry = create_builtin_registry(app_config.workspace_root)
     registry.register_many(await load_mcp_tools(app_config.mcp))
     agent = await create_lead_agent(
       config=app_config,

@@ -1,4 +1,6 @@
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 from langchain.messages import AIMessage
@@ -16,6 +18,34 @@ from shikigen.tools import ToolRegistry, build_task_tool, create_builtin_registr
 
 
 class AgentFactoryTests(unittest.IsolatedAsyncioTestCase):
+  async def test_configured_workspace_is_bound_to_parent_and_child_tools(self):
+    with tempfile.TemporaryDirectory() as directory:
+      root = Path(directory)
+      (root / "note.txt").write_text("configured workspace", encoding="utf-8")
+      model = FakeMessagesListChatModel(responses=[AIMessage(content="done")])
+      with patch("shikigen.core.agent.create_agent") as make_agent:
+        await create_lead_agent(
+          model,
+          config=AppConfig(
+            model=ModelConfig(), mcp=McpConfig(), workspace_root=directory
+          ),
+        )
+      tools = {t.name: t for t in make_agent.call_args.kwargs["tools"]}
+      self.assertEqual(
+        tools["read_file"].invoke({"path": "note.txt"}), "configured workspace"
+      )
+      child = AsyncMock()
+      child.ainvoke.return_value = {"messages": [AIMessage(content="done")]}
+      with patch(
+        "shikigen.tools.task_tool.create_agent", return_value=child
+      ) as make_child:
+        await tools["task"].ainvoke({"description": "inspect workspace"})
+      child_tools = {t.name: t for t in make_child.call_args.kwargs["tools"]}
+      self.assertIs(child_tools["read_file"], tools["read_file"])
+      self.assertEqual(
+        child_tools["read_file"].invoke({"path": "note.txt"}), "configured workspace"
+      )
+
   async def test_config_errors_propagate_before_loading_dependencies(self):
     for message in ("Config file not found", "Invalid config file"):
       with (

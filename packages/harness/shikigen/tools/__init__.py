@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from shikigen.tools.add import add
-from shikigen.tools.filesystem import bash, grep, list_dir, read_file, write_file
+from shikigen.tools.filesystem import create_filesystem_tools
 from shikigen.tools.get_current_time import get_current_time
 from shikigen.tools.task_tool import build_task_tool
 from shikigen.tools.tool_registry import ToolRegistry, create_builtin_registry
@@ -13,11 +13,7 @@ __all__ = [
   "create_builtin_registry",
   "get_current_time",
   "add",
-  "read_file",
-  "write_file",
-  "list_dir",
-  "bash",
-  "grep",
+  "create_filesystem_tools",
   "web_fetch_tool",
   "web_search_tool",
   "build_task_tool",

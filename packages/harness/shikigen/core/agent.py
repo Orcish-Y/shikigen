@@ -45,7 +45,7 @@ async def create_lead_agent(
   if model is None:
     model = create_chat_model(resolved_config.model)
   if tool_registry is None:
-    _tool_registry = create_builtin_registry()
+    _tool_registry = create_builtin_registry(resolved_config.workspace_root)
     _tool_registry.register_many(await load_mcp_tools(resolved_config.mcp))
   else:
     _tool_registry = tool_registry

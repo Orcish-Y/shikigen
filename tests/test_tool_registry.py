@@ -1,4 +1,7 @@
+import tempfile
 import unittest
+from contextlib import chdir
+from pathlib import Path
 from unittest.mock import Mock
 
 from shikigen.tools import ToolRegistry, create_builtin_registry
@@ -61,6 +64,41 @@ class ToolRegistryTests(unittest.TestCase):
 
 
 class BuiltinToolRegistryTests(unittest.TestCase):
+  def test_two_workspaces_use_independent_filesystem_tools(self) -> None:
+    with tempfile.TemporaryDirectory() as directory:
+      roots = [Path(directory) / name for name in ("first", "second")]
+      for root in roots:
+        root.mkdir()
+      registries = [create_builtin_registry(root) for root in roots]
+      for name in ("read_file", "write_file", "list_dir", "grep", "bash"):
+        self.assertIsNot(registries[0].tools[name], registries[1].tools[name])
+      for registry, content in zip(registries, ("first", "second"), strict=True):
+        registry.tools["write_file"].invoke({"path": "note.txt", "content": content})
+        registry.tools["bash"].invoke({"command": f"echo {content} > shell.txt"})
+      for registry, root in zip(registries, roots, strict=True):
+        self.assertEqual(
+          registry.tools["read_file"].invoke({"path": "note.txt"}), root.name
+        )
+        self.assertEqual(registry.tools["list_dir"].invoke({}), "note.txt\nshell.txt")
+        self.assertIn(
+          "note.txt:1:" + root.name,
+          registry.tools["grep"].invoke({"pattern": root.name}),
+        )
+        self.assertEqual((root / "shell.txt").read_text().strip(), root.name)
+        other = roots[1] if root == roots[0] else roots[0]
+        with self.assertRaisesRegex(ValueError, "within the workspace"):
+          registry.tools["read_file"].invoke({"path": str(other / "note.txt")})
+
+  def test_default_workspace_is_selected_when_registry_is_created(self) -> None:
+    with tempfile.TemporaryDirectory() as directory:
+      root = Path(directory)
+      (root / "note.txt").write_text("created here", encoding="utf-8")
+      with chdir(root):
+        registry = create_builtin_registry()
+      self.assertEqual(
+        registry.tools["read_file"].invoke({"path": "note.txt"}), "created here"
+      )
+
   def test_builtin_registry_includes_filesystem_tools(self) -> None:
     registry = create_builtin_registry()
 
