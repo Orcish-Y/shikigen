@@ -3,11 +3,12 @@ from __future__ import annotations
 import builtins
 import logging
 from collections.abc import Iterable
+from pathlib import Path
 
 from langchain_core.tools import BaseTool
 
 from shikigen.tools.add import add
-from shikigen.tools.filesystem import bash, grep, list_dir, read_file, write_file
+from shikigen.tools.filesystem import create_filesystem_tools
 from shikigen.tools.get_current_time import get_current_time
 from shikigen.tools.web_fetch import web_fetch_tool
 from shikigen.tools.web_search_client import web_search_tool
@@ -50,18 +51,14 @@ class ToolRegistry:
     return sorted(self.tools.keys())
 
 
-def create_builtin_registry() -> ToolRegistry:
-  """创建并返回一个预填了所有内置工具的注册表。"""
+def create_builtin_registry(workspace_root: str | Path = ".") -> ToolRegistry:
+  """创建内置工具集合；文件工具绑定创建时解析的工作区根目录。"""
   registry = ToolRegistry()
   registry.register_many(
     [
       get_current_time,
       add,
-      read_file,
-      write_file,
-      list_dir,
-      bash,
-      grep,
+      *create_filesystem_tools(workspace_root),
       web_fetch_tool,
       web_search_tool,
     ]

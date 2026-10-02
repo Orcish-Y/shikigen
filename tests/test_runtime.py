@@ -299,6 +299,43 @@ class TransactionTests(unittest.IsolatedAsyncioTestCase):
 
 
 class CompositionTests(unittest.IsolatedAsyncioTestCase):
+  async def test_two_live_runtimes_bind_their_own_workspace_tools(self):
+    with tempfile.TemporaryDirectory() as directory:
+      configs = []
+      for name in ("first", "second"):
+        root = Path(directory) / name
+        root.mkdir()
+        (root / "note.txt").write_text(name, encoding="utf-8")
+        configs.append(
+          AppConfig(
+            model=ModelConfig(),
+            mcp=McpConfig(),
+            workspace_root=str(root),
+            database=DatabaseConfig(path=str(root / "runs.db")),
+            checkpointer={"type": "memory"},
+          )
+        )
+      registries = []
+
+      async def capture_tools(**kwargs):
+        registries.append(kwargs["tool_registry"])
+        return await deterministic_agent(**kwargs)
+
+      with patch("shikigen.runtime.composition.create_lead_agent", new=capture_tools):
+        async with open_runtime(configs[0]), open_runtime(configs[1]):
+          self.assertEqual(
+            [r.tools["read_file"].invoke({"path": "note.txt"}) for r in registries],
+            ["first", "second"],
+          )
+          for registry, config in zip(registries, configs, strict=True):
+            registry.tools["write_file"].invoke(
+              {"path": "output.txt", "content": config.workspace_root}
+            )
+            self.assertEqual(
+              (Path(config.workspace_root) / "output.txt").read_text(encoding="utf-8"),
+              config.workspace_root,
+            )
+
   async def asyncSetUp(self):
     self.directory = tempfile.TemporaryDirectory()
     self.addCleanup(self.directory.cleanup)

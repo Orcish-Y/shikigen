@@ -1,17 +1,44 @@
 import tempfile
 import unittest
+from contextlib import chdir
 from pathlib import Path
-from unittest.mock import patch
 
-from shikigen.tools.filesystem import bash, grep, list_dir, read_file, write_file
+from shikigen.tools.filesystem import create_filesystem_tools
 
 
 class FilesystemToolTests(unittest.TestCase):
+  def test_bound_tools_remain_in_their_workspace_after_cwd_changes(self) -> None:
+    with tempfile.TemporaryDirectory() as directory:
+      parent = Path(directory)
+      first, second = parent / "first", parent / "second"
+      first.mkdir()
+      second.mkdir()
+      with chdir(parent):
+        tools = {t.name: t for t in create_filesystem_tools("first")}
+      with chdir(second):
+        tools["write_file"].invoke({"path": "note.txt", "content": "first"})
+        self.assertEqual(tools["read_file"].invoke({"path": "note.txt"}), "first")
+        tools["bash"].invoke({"command": "echo first > shell.txt"})
+      self.assertTrue((first / "shell.txt").is_file())
+      self.assertEqual(list(second.iterdir()), [])
+
+  def test_workspace_root_must_be_an_existing_directory(self) -> None:
+    with tempfile.TemporaryDirectory() as directory:
+      parent = Path(directory)
+      file = parent / "file.txt"
+      file.write_text("file", encoding="utf-8")
+      for path in (file, parent / "missing"):
+        with (
+          self.subTest(path=path),
+          self.assertRaisesRegex(ValueError, "existing directory"),
+        ):
+          create_filesystem_tools(path)
+
   def test_shell_runs_in_workspace(self) -> None:
     with tempfile.TemporaryDirectory() as temporary_directory:
       workspace = Path(temporary_directory).resolve()
-      with patch("shikigen.tools.filesystem.WORKSPACE_ROOT", workspace):
-        bash.invoke({"command": "echo migration-ok > shell-output.txt"})
+      tools = {tool.name: tool for tool in create_filesystem_tools(workspace)}
+      tools["bash"].invoke({"command": "echo migration-ok > shell-output.txt"})
       self.assertEqual(
         (workspace / "shell-output.txt").read_text().strip(), "migration-ok"
       )
@@ -19,9 +46,11 @@ class FilesystemToolTests(unittest.TestCase):
   def test_writes_and_reads_a_file_inside_the_workspace(self) -> None:
     with tempfile.TemporaryDirectory() as temporary_directory:
       workspace = Path(temporary_directory).resolve()
-      with patch("shikigen.tools.filesystem.WORKSPACE_ROOT", workspace):
-        result = write_file.invoke({"path": "notes/example.txt", "content": "hello"})
-        content = read_file.invoke({"path": "notes/example.txt"})
+      tools = {tool.name: tool for tool in create_filesystem_tools(workspace)}
+      result = tools["write_file"].invoke(
+        {"path": "notes/example.txt", "content": "hello"}
+      )
+      content = tools["read_file"].invoke({"path": "notes/example.txt"})
 
       self.assertEqual(result, "Successfully wrote to file notes/example.txt")
       self.assertEqual(content, "hello")
@@ -31,9 +60,9 @@ class FilesystemToolTests(unittest.TestCase):
       workspace = Path(temporary_directory).resolve()
       outside_path = workspace.parent / "outside.txt"
 
-      with patch("shikigen.tools.filesystem.WORKSPACE_ROOT", workspace):
-        with self.assertRaisesRegex(ValueError, "must stay within the workspace"):
-          read_file.invoke({"path": str(outside_path)})
+      tools = {tool.name: tool for tool in create_filesystem_tools(workspace)}
+      with self.assertRaisesRegex(ValueError, "must stay within the workspace"):
+        tools["read_file"].invoke({"path": str(outside_path)})
 
   def test_lists_files_and_directories_in_name_order(self) -> None:
     with tempfile.TemporaryDirectory() as temporary_directory:
@@ -41,8 +70,8 @@ class FilesystemToolTests(unittest.TestCase):
       (workspace / "zebra.txt").write_text("", encoding="utf-8")
       (workspace / "alpha").mkdir()
 
-      with patch("shikigen.tools.filesystem.WORKSPACE_ROOT", workspace):
-        result = list_dir.invoke({"path": "."})
+      tools = {tool.name: tool for tool in create_filesystem_tools(workspace)}
+      result = tools["list_dir"].invoke({"path": "."})
 
       self.assertEqual(result, "alpha/\nzebra.txt")
 
@@ -52,9 +81,9 @@ class FilesystemToolTests(unittest.TestCase):
       (workspace / "empty").mkdir()
       (workspace / "file.txt").write_text("", encoding="utf-8")
 
-      with patch("shikigen.tools.filesystem.WORKSPACE_ROOT", workspace):
-        empty_result = list_dir.invoke({"path": "empty"})
-        file_result = list_dir.invoke({"path": "file.txt"})
+      tools = {tool.name: tool for tool in create_filesystem_tools(workspace)}
+      empty_result = tools["list_dir"].invoke({"path": "empty"})
+      file_result = tools["list_dir"].invoke({"path": "file.txt"})
 
       self.assertEqual(empty_result, "(empty)")
       self.assertEqual(file_result, "Error: Not a directory: file.txt")
@@ -72,7 +101,7 @@ class FilesystemToolTests(unittest.TestCase):
         directory.mkdir()
         (directory / "noise.py").write_text("def read_file():\n", encoding="utf-8")
 
-      with patch("shikigen.tools.filesystem.WORKSPACE_ROOT", workspace):
-        result = grep.invoke({"pattern": "def read_file"})
+      tools = {tool.name: tool for tool in create_filesystem_tools(workspace)}
+      result = tools["grep"].invoke({"pattern": "def read_file"})
 
       self.assertEqual(result, "source.py:1:def read_file():")
