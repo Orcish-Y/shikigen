@@ -12,6 +12,16 @@ fn get_backend_state(manager: tauri::State<'_, Arc<BackendManager>>) -> BackendS
 }
 
 #[tauri::command]
+async fn get_backend_logs(
+    manager: tauri::State<'_, Arc<BackendManager>>,
+) -> Result<backend::BackendLogs, String> {
+    let manager = manager.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || manager.logs())
+        .await
+        .map_err(|_| "无法读取本次启动日志".into())
+}
+
+#[tauri::command]
 fn retry_backend(manager: tauri::State<'_, Arc<BackendManager>>) -> backend::RetryResult {
     manager.inner().retry()
 }
@@ -50,6 +60,7 @@ pub fn run_with_backend(
     let app = builder
         .invoke_handler(tauri::generate_handler![
             get_backend_state,
+            get_backend_logs,
             retry_backend,
             get_tray_error
         ])

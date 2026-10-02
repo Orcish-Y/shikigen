@@ -212,7 +212,9 @@ with patch("shikigen.runtime.composition.create_lead_agent", new=deterministic_a
     asyncio.run(server.serve(sockets=[sock]))
 """
     independent = subprocess.Popen(
-      [str(self.root / ".venv/Scripts/python.exe"), "-c", script],
+      # Avoid the Windows venv redirector: cleanup must own the actual HTTP
+      # process, not a wrapper whose child can still hold the database open.
+      [sys._base_executable, "-c", script],
       cwd=self.root,
       env=self.env,
       stdin=subprocess.DEVNULL,

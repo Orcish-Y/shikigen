@@ -1,9 +1,8 @@
-use super::{BackendError, LaunchPlan};
+use super::{logs::StartupLogs, BackendError, BackendLogs, LaunchPlan};
 use crate::process::{ManagedProcess, SpawnSpec};
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::{
-    collections::VecDeque,
     fs::File,
     io::{BufRead, BufReader, Read, Write},
     sync::{
@@ -16,7 +15,6 @@ use std::{
 };
 
 const LINE_LIMIT: usize = 64 * 1024;
-const LOG_LIMIT: usize = 64 * 1024;
 #[derive(Clone, Debug, Serialize)]
 pub struct BackendSnapshot {
     pub state: String,
@@ -49,6 +47,7 @@ pub struct RetryResult {
 }
 struct ManagerState {
     snapshot: BackendSnapshot,
+    logs: Arc<StartupLogs>,
     shutdown_at: Option<Instant>,
     released: bool,
 }
@@ -66,9 +65,11 @@ impl BackendManager {
         launcher: Launcher,
         publish: Arc<dyn Fn(BackendSnapshot) + Send + Sync>,
     ) -> Arc<Self> {
+        let snapshot = BackendSnapshot::starting(1);
         let manager = Arc::new(Self {
             state: Mutex::new(ManagerState {
-                snapshot: BackendSnapshot::starting(1),
+                logs: Arc::new(StartupLogs::new(snapshot.startup_id.clone())),
+                snapshot,
                 shutdown_at: None,
                 released: false,
             }),
@@ -82,6 +83,7 @@ impl BackendManager {
     }
     fn launch(self: &Arc<Self>, id: String) {
         let worker = self.clone();
+        let logs = self.state.lock().unwrap().logs.clone();
         thread::spawn(move || {
             if worker.stop.load(Ordering::SeqCst) {
                 worker.finish(&id, None);
@@ -89,7 +91,7 @@ impl BackendManager {
             }
             match (worker.load_plan)() {
                 Err(error) => worker.finish(&id, Some(error)),
-                Ok(plan) => worker.run(plan, &id),
+                Ok(plan) => worker.run(plan, &id, logs),
             }
         });
     }
@@ -114,6 +116,7 @@ impl BackendManager {
             }
             current.released = false;
             current.snapshot = BackendSnapshot::starting(current.snapshot.revision + 1);
+            current.logs = Arc::new(StartupLogs::new(current.snapshot.startup_id.clone()));
             current.snapshot.clone()
         };
         (self.publish)(snapshot.clone());
@@ -126,6 +129,10 @@ impl BackendManager {
     }
     pub fn snapshot(&self) -> BackendSnapshot {
         self.state.lock().unwrap().snapshot.clone()
+    }
+    pub fn logs(&self) -> BackendLogs {
+        let logs = self.state.lock().unwrap().logs.clone();
+        logs.snapshot()
     }
     /// Exit intent survives failed/unconfirmed reclamation; state alone cannot
     /// decide whether another desktop launch may activate the window.
@@ -199,7 +206,7 @@ impl BackendManager {
         };
         (self.publish)(snapshot);
     }
-    fn run(&self, plan: LaunchPlan, id: &str) {
+    fn run(&self, plan: LaunchPlan, id: &str, logs: Arc<StartupLogs>) {
         if self.stop.load(Ordering::SeqCst) {
             self.finish(id, None);
             return;
@@ -218,7 +225,7 @@ impl BackendManager {
                 "--port".into(),
                 plan.config.port.to_string().into(),
             ],
-            env: vec![],
+            env: vec![("PYTHONIOENCODING".into(), "utf-8".into())],
         };
         let mut process = match (self.launcher)(&spec) {
             Ok(value) => value,
@@ -240,11 +247,10 @@ impl BackendManager {
         };
         let mut input = streams.stdin;
         let messages = read_messages(streams.stdout);
-        let logs = drain_logs(streams.stderr);
+        logs.drain(streams.stderr);
         let result = self.monitor(
             process.as_ref(),
             &messages,
-            &logs,
             id,
             started,
             plan.config.startup_timeout_seconds,
@@ -264,7 +270,6 @@ impl BackendManager {
         &self,
         process: &dyn ManagedProcess,
         messages: &Receiver<Result<Value, BackendError>>,
-        logs: &Mutex<VecDeque<u8>>,
         id: &str,
         started: Instant,
         timeout: f64,
@@ -322,13 +327,9 @@ impl BackendManager {
                     }
                 }
                 Err(RecvTimeoutError::Disconnected) => {
-                    let tail: Vec<u8> = logs.lock().unwrap().iter().copied().collect();
                     return Err(BackendError::new(
                         "backend_exit",
-                        format!(
-                            "后端输出管道已关闭。缺少依赖时请在项目根目录运行 uv sync。\n{}",
-                            String::from_utf8_lossy(&tail)
-                        ),
+                        "后端输出管道已关闭。请查看本次启动日志；缺少依赖时请在项目根目录运行 uv sync。",
                     ));
                 }
                 Err(RecvTimeoutError::Timeout) => {}
@@ -341,12 +342,10 @@ impl BackendManager {
                 // Briefly drain already-written startup_error messages. A tool
                 // retaining stdout must not hide its parent's death indefinitely.
                 if ready || seen.elapsed() >= Duration::from_millis(50) {
-                    let tail: Vec<u8> = logs.lock().unwrap().iter().copied().collect();
                     return Err(BackendError::new(
                         "backend_exit",
                         format!(
-                            "后端意外退出（{code}）。缺少依赖时请先运行 uv sync。\n{}",
-                            String::from_utf8_lossy(&tail)
+                            "后端意外退出（{code}）。请查看本次启动日志；缺少依赖时请先运行 uv sync。"
                         ),
                     ));
                 }
@@ -487,23 +486,6 @@ fn read_messages(output: File) -> Receiver<Result<Value, BackendError>> {
         }
     });
     receiver
-}
-fn drain_logs(mut stderr: File) -> Arc<Mutex<VecDeque<u8>>> {
-    let logs = Arc::new(Mutex::new(VecDeque::new()));
-    let tail = logs.clone();
-    thread::spawn(move || {
-        let mut bytes = [0; 8192];
-        while let Ok(count) = stderr.read(&mut bytes) {
-            if count == 0 {
-                break;
-            }
-            let mut tail = tail.lock().unwrap();
-            let remove = (tail.len() + count).saturating_sub(LOG_LIMIT);
-            tail.drain(..remove);
-            tail.extend(&bytes[..count]);
-        }
-    });
-    logs
 }
 fn probe(
     client: &reqwest::blocking::Client,

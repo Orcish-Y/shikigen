@@ -6,7 +6,7 @@
 
 第 03 票完成的是 Python 一侧。Tauri 自动启动后端、Windows Job 管理进程树、超时强制回收等能力仍由后续票实现。本文中的测试结果引用本轮实施记录，编写说明时没有重新运行测试。
 
-后续进度（2026-10-02）：第 04～09 票现已实现桌面托管、初始化取消、有界退出、故障后的手动重试、桌面单实例、托盘驻留及业务客户端切换。本文保留第 03 票的实施背景及历史测试结果；回收规则见[第 05 票记录](../.scratch/windows-backend-lifecycle/issues/05-bounded-shutdown-reclamation.md)，重试接口与隔离见[第 06 票记录](../.scratch/windows-backend-lifecycle/issues/06-manual-retry-isolation.md)，重复打开、窗口恢复及竞争保护见[第 07 票记录](../.scratch/windows-backend-lifecycle/issues/07-single-desktop-instance.md)，关窗驻留、托盘退出及后台故障提示见[第 08 票记录](../.scratch/windows-backend-lifecycle/issues/08-tray-residency-exit.md)，真实会话读取、SSE 隔离及换端口恢复见[第 09 票记录](../.scratch/windows-backend-lifecycle/issues/09-client-backend-switch.md)。
+后续进度（2026-10-02）：第 04～10 票现已实现桌面托管、初始化取消、有界退出、故障后的手动重试、桌面单实例、托盘驻留、业务客户端切换及错误页日志查询。本文保留第 03 票的实施背景及历史测试结果；回收规则见[第 05 票记录](../.scratch/windows-backend-lifecycle/issues/05-bounded-shutdown-reclamation.md)，重试接口与隔离见[第 06 票记录](../.scratch/windows-backend-lifecycle/issues/06-manual-retry-isolation.md)，重复打开、窗口恢复及竞争保护见[第 07 票记录](../.scratch/windows-backend-lifecycle/issues/07-single-desktop-instance.md)，关窗驻留、托盘退出及后台故障提示见[第 08 票记录](../.scratch/windows-backend-lifecycle/issues/08-tray-residency-exit.md)，真实会话读取、SSE 隔离及换端口恢复见[第 09 票记录](../.scratch/windows-backend-lifecycle/issues/09-client-backend-switch.md)，最近 1 MiB 日志缓存、按需查询及启动归属隔离见[第 10 票记录](../.scratch/windows-backend-lifecycle/issues/10-startup-log-view.md)。
 
 ## 1 为什么需要独立的桌面入口
 

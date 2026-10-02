@@ -960,6 +960,18 @@ textarea::placeholder {
 }
 .backend-screen h1 { font-size: 24px; font-weight: 500; }
 .backend-screen p { max-width: 760px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
+.backend-logs { width: min(100%, 900px); min-width: 0; }
+.backend-logs p { margin-top: 12px; font-size: 13px; }
+.backend-logs pre {
+  max-height: 40dvh;
+  overflow: auto;
+  margin-top: 12px;
+  padding: 16px;
+  background: var(--surface-muted, #f1f1ef);
+  font: 12px/1.6 "JetBrains Mono", monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .business-notice {
   margin: 8px 20px;
   color: #8b401f;
