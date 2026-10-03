@@ -3,8 +3,6 @@
 import asyncio
 import uuid
 from collections.abc import Callable, Coroutine
-from contextlib import nullcontext
-from functools import partial
 from typing import Any
 from weakref import WeakValueDictionary
 
@@ -48,7 +46,7 @@ from shikigen.persistence import ChatStore
 from shikigen.runtime.lifecycle import ApplicationLifecycle
 from shikigen.runtime.recovery import RunRecoveryCoordinator
 from shikigen.runtime.run_events import RunEventIngestor
-from shikigen.runtime.run_execution import start_run_execution
+from shikigen.runtime.run_execution import RunExecutionCoordinator
 from shikigen.runtime.run_observation import RunObservation
 from shikigen.utils.text_safety import replace_surrogates
 
@@ -418,19 +416,18 @@ class RunService:
     store: ChatStore,
     executions: ExecutionRegistry,
     lifecycle: ApplicationLifecycle,
-    ingestor: RunEventIngestor | None = None,
+    transitions: RunTransitions,
+    coordinator: RunExecutionCoordinator,
   ) -> None:
     self._thread_locks: WeakValueDictionary[str, asyncio.Lock] = WeakValueDictionary()
     self.agent = agent
     self._store = store
     self._executions = executions
     self._lifecycle = lifecycle
-    self._transitions = RunTransitions(store)
+    self._transitions = transitions
+    self._coordinator = coordinator
     self.recovery = RunRecoveryCoordinator(
       agent=agent, store=store, executions=executions, transitions=self._transitions
-    )
-    self._ingestor = (
-      ingestor if ingestor is not None else RunEventIngestor(store, executions)
     )
 
   async def _accept[T](
@@ -448,8 +445,8 @@ class RunService:
       # 持久取消先释放产品槽位，但旧 Graph 必须退出后才能使用同一 checkpoint。
       for previous in self._executions.for_thread(thread_id):
         run = await self._read_run(thread_id, previous.run_id)
-        if RunStatus(run["status"]).terminal and previous.task is not None:
-          await asyncio.shield(asyncio.gather(previous.task, return_exceptions=True))
+        if RunStatus(run["status"]).terminal:
+          await self._coordinator.drain(previous)
       run_id = uuid.uuid4().hex
       entry = HumanMessage(id=uuid.uuid4().hex, content=replace_surrogates(message))
       created = await self._transitions.create_run(
@@ -457,31 +454,13 @@ class RunService:
         thread_id=thread_id,
         entry_message=entry,
       )
-      try:
-        return start_run_execution(
-          agent=self.agent,
-          message=entry,
-          thread_id=thread_id,
-          run_id=run_id,
-          registry=self._executions,
-          settlement=self._transitions,
-          initial_events=created.events,
-          ingest_message=partial(
-            self._ingestor.ingest_message, thread_id=thread_id, run_id=run_id
-          ),
-          ingest_delta=partial(
-            self._ingestor.ingest_delta,
-            thread_id=thread_id,
-            run_id=run_id,
-          ),
-        )
-      except Exception as error:
-        await self._transitions.settle_execution(
-          thread_id=thread_id,
-          run_id=run_id,
-          outcome=ExecutionOutcome(ExecutionReason.FAILED, error=error),
-        )
-        raise
+      return await self._coordinator.start(
+        agent=self.agent,
+        message=entry,
+        thread_id=thread_id,
+        run_id=run_id,
+        initial_events=created.events,
+      )
 
     return await self._accept(thread_id, start)
 
@@ -520,53 +499,23 @@ class RunService:
       accepted = await self._transitions.accept_approval_decisions(
         thread_id=thread_id, run_id=run_id, submission=submission
       )
-      try:
-        return start_run_execution(
-          agent=self.agent,
-          message=Command(resume=accepted.resume),
-          checkpoint=accepted.checkpoint,
-          thread_id=thread_id,
-          run_id=run_id,
-          registry=self._executions,
-          settlement=self._transitions,
-          initial_events=accepted.events,
-          ingest_message=partial(
-            self._ingestor.ingest_message, thread_id=thread_id, run_id=run_id
-          ),
-          ingest_delta=partial(
-            self._ingestor.ingest_delta, thread_id=thread_id, run_id=run_id
-          ),
-        )
-      except Exception as error:
-        await self._transitions.settle_execution(
-          thread_id=thread_id,
-          run_id=run_id,
-          outcome=ExecutionOutcome(ExecutionReason.FAILED, error=error),
-          error_code="resume_start_failed",
-          invocation_seq=accepted.events[-1]["seq"],
-        )
-        raise
+      return await self._coordinator.start(
+        agent=self.agent,
+        message=Command(resume=accepted.resume),
+        checkpoint=accepted.checkpoint,
+        thread_id=thread_id,
+        run_id=run_id,
+        initial_events=accepted.events,
+      )
 
     return await self._accept(thread_id, resume)
 
   async def cancel_run(self, thread_id: str, run_id: str) -> RunSnapshot:
     """先提交取消，再通知本地协作停止；终态返回已有结果。"""
 
-    async def cancel() -> RunSnapshot:
-      execution = self._executions.get(thread_id, run_id)
-      async with execution.settlement_lock if execution is not None else nullcontext():
-        result = await self._transitions.cancel_run(thread_id=thread_id, run_id=run_id)
-        if execution is not None and result.run["status"] == "cancelled":
-          if result.events:
-            RunEventIngestor.publish(
-              execution.stream,
-              result.events,
-              settlement=CommittedRunState(RunStatus.CANCELLED, events=result.events),
-            )
-          execution.request_cancel()
-        return result.run
-
-    return await self._accept(thread_id, cancel)
+    return await self._accept(
+      thread_id, lambda: self._coordinator.cancel(thread_id, run_id)
+    )
 
   async def wait_run(self, execution: RunExecution) -> RunSnapshot:
     """等待这次执行及持久化收尾，返回已提交状态（包括 interrupted）。
@@ -574,17 +523,7 @@ class RunService:
     句柄在注册表移除后仍可等待。停止等待不取消执行；Task 异常原样传播。
     跨进程或只保存了 ID 的调用方使用 read_run，不从 EOF 推断完成。
     """
-    task = execution.task
-    if task is None:
-      raise ValueError("Execution has not been started")
-    try:
-      await asyncio.shield(task)
-    except asyncio.CancelledError:
-      if task.cancelled():
-        raise ExecutionStopped(
-          "Local execution stopped without a committed result"
-        ) from None
-      raise
+    await self._coordinator.wait(execution)
     row = await self._read_run(execution.thread_id, execution.run_id)
     status = RunStatus(row["status"])
     if not status.terminal and status is not RunStatus.INTERRUPTED:

@@ -274,7 +274,7 @@ class RunUsageTests(unittest.IsolatedAsyncioTestCase):
     with patch("shikigen.runtime.run_execution.execute_agent_loop", side_effect=loop):
       execution = await runtime.runs.start_run("t", "work")
       await entered.wait()
-      await runtime.executions.shutdown()
+      await runtime.lifecycle.shutdown()
     result = await runtime.runs.read_run("t", execution.run_id)
     self.assertIsNone(result["usage"])
     self.assertTrue(result["usage_pending"])

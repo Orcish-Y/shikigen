@@ -12,6 +12,7 @@
 | --- | --- |
 | [装配](../packages/harness/shikigen/runtime/composition.py) | `open_runtime()` 装配依赖、启动恢复并管理关闭；HTTP / Python / CLI 共用 |
 | [Run 服务](../packages/harness/shikigen/runtime/runs.py) | `RunService` 创建、等待、查询、观察、恢复、取消；`RunTransitions` 决定事务内状态转换 |
+| [本地执行协调](../packages/harness/shikigen/runtime/run_execution.py) | `RunExecutionCoordinator` 统一启动接线、启动失败结算、取消与结算后的发布、等待及资源回收 |
 | [Graph 适配](../packages/harness/shikigen/core/graph_events.py) | `GraphEventAdapter` 转换根图预览与完整消息候选，不访问存储 |
 | [事件接入](../packages/harness/shikigen/runtime/run_events.py) | `RunEventIngestor` 预留 seq、接入消息并在提交后发布 |
 | [存储](../packages/harness/shikigen/persistence/chat_store.py) | `ChatStore.transaction()` 与组合 stores 负责事务、约束和查询 |
@@ -44,6 +45,11 @@ checkpoint 由 Graph 与注入的 saver 管理；工厂不隐式创建 checkpoin
 
 启动时先完成恢复扫描，再交付 Runtime；关闭时先收尾执行资源，再释放存储和 checkpointer。
 创建、恢复、取消共用 Thread 协调，已接受的后台操作由应用生命周期持有，请求断开不会撤销操作。
+本地执行的锁由 `RunExecutionCoordinator` 持有，覆盖提交、发布和关闭；`RunExecution`
+只暴露执行句柄，`ExecutionRegistry` 只索引执行身份。创建与恢复共用启动接线和失败结算。
+Task 未开始即取消时，done callback 也经过同一关闭协议；应用关闭先等待已接受操作，
+再由执行协调者停止 Task、等待收尾并释放 Stream。直接使用 Runtime 的调用方通过
+`runtime.lifecycle.shutdown()` 关闭，注册表不再提供 `shutdown()`。
 观察方在 `finally` 中调用 `await observation.aclose()` 或 `await subscription.aclose()`；
 即使未开始迭代也能释放注册，重复关闭安全。单个订阅不支持与进行中的 `anext()` 并发关闭。
 

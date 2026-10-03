@@ -77,11 +77,11 @@ async def main():
 
         if phase == "created":
 
-          def stop_start(**kwargs):
-            (directory / "identity").write_text(json.dumps([thread, kwargs["run_id"]]))
+          def stop_start(execution):
+            (directory / "identity").write_text(json.dumps([thread, execution.run_id]))
             os._exit(73)
 
-          with patch("shikigen.runtime.runs.start_run_execution", new=stop_start):
+          with patch.object(runtime.executions, "install", new=stop_start):
             await runtime.runs.start_run(thread, "start")
         else:
           original = runtime.chat_store._events.insert_fact
@@ -124,10 +124,10 @@ async def main():
           await runtime.runs.resume_run(thread, execution.run_id, responses)
       if phase == "accepted":
 
-        def stop_resume(**kwargs):
+        def stop_resume(execution):
           os._exit(73)
 
-        with patch("shikigen.runtime.runs.start_run_execution", new=stop_resume):
+        with patch.object(runtime.executions, "install", new=stop_resume):
           await runtime.runs.resume_run(thread, execution.run_id, responses)
       if phase == "completed":
         original_publish = RunEventIngestor.publish
