@@ -2,8 +2,28 @@
 
 状态：Draft 0.3  
 更新时间：2026-09-24  
-布局基准：[主导航展开态](../design/demo.html)、[主导航收起态](../design/front-end-demo.html)  
+布局基准：[主导航展开原稿](../../design/demo-菜单展开.html)、[主导航折叠原稿](../../design/demo-菜单折叠.html)  
 能力依据：当前 FastAPI 路由、SSE 契约和 Runtime 状态模型
+
+2026-10-03 实现现状见[前后端差距审计](frontend-gap-audit.md)，当前样式继承见[前端设计规范](../../frontend/design.md)，补全路线见[首版决策地图](../wayfinder/frontend-completion/map.md)。用户已确认首轮补齐首版聊天工作台与后端恢复接口，独立页面留到后续；以下功能正文保留原 Draft 0.3。
+
+2026-10-03 用户补充[项目展开截图](../../design/pic/展开.png)与[项目收起截图](../../design/pic/收起.png)，要求尽量贴近上述 HTML 原稿，并确认视觉基准定稿、剩余实机检查后置，见[视觉基准决议](../wayfinder/frontend-completion/tickets/007-native-style-baseline.resolution.md)。视觉目标、两态一致性及 HTML／Tauri 尺寸换算见设计规范；截图记录当前外观，完整响应式与交互在对应实施后验收。
+
+首版查询目标已于 2026-10-03 定稿，见[会话与运行查询契约](../wayfinder/frontend-completion/tickets/001-run-discovery.contract.md)。正文中的查询建议与该契约不一致时，以已确认契约为准；这表示实施目标已明确，不表示接口已经实现。
+
+首版投影与恢复目标也已定稿，见[运行投影与恢复契约](../wayfinder/frontend-completion/tickets/002-run-projection.contract.md)。正文中手动重连、草稿保存、状态合并等建议与该契约不一致时，以已确认目标为准；应用行为仍待实施。
+
+首版审批与取消目标已定稿，见[审批与取消交互契约](../wayfinder/frontend-completion/tickets/003-approval-cancel.contract.md)。参数默认折叠、审批草稿保存、操作入口、请求确认和取消竞态以该契约为准；正文继续保留原 Draft 0.3，规划完成不表示界面已实现。
+
+首版消息、工具、导出与本地资源目标已完整确认，见[消息、工具、导出与本地资源契约](../wayfinder/frontend-completion/tickets/004-message-tools-export.contract.md)。用户补充要求：取消／失败时保存已生成正文并独立标记；仅识别 Agent Markdown 明确链接，自动预览当前工作目录内的本地图片，文件每次确认后用系统默认程序打开。字段、接口与导出格式均已定稿、待实施；正文相关描述与该契约不一致时以已确认目标为准。附件上传及其他未纳入的媒体能力继续留到后续。
+
+首版运行详情、用量与事件目标已完整确认，见[运行详情、用量与事件契约](../wayfinder/frontend-completion/tickets/005-run-details.contract.md)。进入会话读取快照，打开详情读取事件；运行结果和用量结算分别呈现，后续结算核实有明确上限。读取、合并、事件与样式以该契约为准；正文继续保留原 Draft 0.3，应用及新增查询待实施。
+
+2026-10-04 首版交互已完整确认并定稿，见[交互与验收契约](../wayfinder/frontend-completion/tickets/006-interaction-acceptance.contract.md)。运行中或等待审批时允许编辑并保存下一条草稿，普通发送仍禁用，不排队、不自动发送，结束后手动发送；这取代正文的“输入框禁用”。trim 只判空，正文保留首尾空格和换行；无法发送时拦截 Enter，仅 Shift+Enter 换行。服务端 title 缺失时以首条已提交用户消息派生并缓存临时标题，跨重启保留、打开核实。正文相关建议与已确认契约不一致时以契约为准，应用实现仍待完成。
+
+会话浏览与阅读规则已确认：相对时间七天起改为本地日期；会话列表只用到底自动分页，原始页不足 20 条或游标为空时显示“没有更多”；首次打开聊天定位最新、本次应用内切回恢复阅读位置；任务示例只填入或追加草稿，不覆盖已有文字、不自动发送。命令面板搜索操作及已加载会话，K／N／B 在输入中可用但受输入法、长按及前景模态限制；小于 768px 的合并菜单默认会话列表，在同一面板切换主导航。具体边界以同一契约为准。
+
+首版实现前决策地图已关闭，最终确认见[交互与实施收尾决议](../wayfinder/frontend-completion/tickets/006-interaction-acceptance.resolution.md)。按[八批实施与验收顺序](../wayfinder/frontend-completion/tickets/006-interaction-acceptance.implementation.md)由用户主导代码，覆盖首版 17 条及新增要求；规划定稿不表示应用实现或实机验收通过。
 
 ## 1. 产品定义
 
@@ -20,9 +40,9 @@ Shikigen 前端是一个面向 Agent 开发者的单用户聊天工作台，以�
 
 ## 2. 设计基准与取舍
 
-以 [design/demo.html](../design/demo.html) 为主导航展开态基准，以 [design/front-end-demo.html](../design/front-end-demo.html) 为主导航收起态基准。两份原型共同定义同一工作区的两种布局状态：顶部应用栏、可折叠主导航、独立的会话历史侧栏、主对话区和底部悬浮输入区。运行详情按需打开，不长期挤占对话宽度。
+以 [菜单展开原稿](../../design/demo-菜单展开.html) 为主导航展开态基准，以 [菜单折叠原稿](../../design/demo-菜单折叠.html) 为主导航收起态基准。两份原型共同定义同一工作区的两种布局状态：顶部应用栏、可折叠主导航、独立的会话历史侧栏、主对话区和底部悬浮输入区。运行详情按需打开，不长期挤占对话宽度。
 
-两份原型的菜单内容存在差异：导航名称、顺序和分组以新版 `demo.html` 为准；旧版仅作为 64px 图标栏的布局参考，收起时不切换成另一套菜单。
+两份原稿的菜单、配色和控件组织存在差异：导航名称、顺序、分组及基础配色以展开原稿为准；折叠原稿提供 64px 图标栏的布局参考，收起时保持同一视觉系统和菜单。
 
 - 保留原型的浅色桌面应用风格：白色主画布、浅灰侧栏、细边框、靛蓝强调色、小圆角与轻阴影。
 - 保留原型的消息组织：用户与 Agent 消息均左对齐，头像独立一列；用户正文置于浅灰容器，Agent 正文直接排在白色画布上，代码和工具结果使用内嵌区块。
