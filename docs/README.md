@@ -9,7 +9,9 @@
 | 桌面后端 | [Windows 生命周期](windows-backend-lifecycle.md) | 01～10 票实施摘要、当前能力、验收和复现 |
 | 桌面接口细节 | [最终契约](wayfinder/windows-backend-lifecycle/tickets/002-runtime-contract.resolution.md) | 协议、状态、期限、单实例和托盘行为 |
 | 数据锁与 Python 启动器 | [数据独占](windows-runtime-data-ownership.md)、[受控 Python 后端](windows-controlled-python-backend.md) | 开发指导与代码阅读顺序；当时的测试数字是阶段记录 |
-| 前端产品与设计 | [PRD](frontend-prd.md)、[实现设计规范](../frontend/design.md) | 产品目标和实现规范；PRD 中首版目标不表示全部已实现 |
+| 前端产品与设计 | [PRD](frontend/frontend-prd.md)、[实现设计规范](../frontend/design.md)、[视觉基准决议](wayfinder/frontend-completion/tickets/007-native-style-baseline.resolution.md) | 已确认的原稿视觉要求与项目桌面差异；剩余实机检查纳入实施后验收，首版目标不表示全部已实现 |
+| 首版前端补全 | [前后端差距审计](frontend/frontend-gap-audit.md)、[决策地图](wayfinder/frontend-completion/map.md)、[查询契约](wayfinder/frontend-completion/tickets/001-run-discovery.contract.md)、[运行投影与恢复契约](wayfinder/frontend-completion/tickets/002-run-projection.contract.md)、[审批与取消交互契约](wayfinder/frontend-completion/tickets/003-approval-cancel.contract.md)、[消息、工具与本地资源契约](wayfinder/frontend-completion/tickets/004-message-tools-export.contract.md)、[运行详情、用量与事件契约](wayfinder/frontend-completion/tickets/005-run-details.contract.md)、[交互与验收契约](wayfinder/frontend-completion/tickets/006-interaction-acceptance.contract.md) | 2026-10-03 的代码现状；2026-10-04 七项规划定稿、地图关闭，应用待实施，独立页留后续 |
+| 首版实施与验收 | [八批任务与覆盖矩阵](wayfinder/frontend-completion/tickets/006-interaction-acceptance.implementation.md)、[收尾决议](wayfinder/frontend-completion/tickets/006-interaction-acceptance.resolution.md) | 用户主导代码，覆盖 PRD 17 条、中止消息与本地资源；实机验收及证据待完成 |
 | 外部 Agent 架构对照 | [研究索引](research/README.md) | 持久化/执行边界、子 Agent/多会话、MCP 三个主题摘要 |
 | 框架 API 速查 | [LangGraph 标识](research/langgraph-identifiers.md)、[状态存储](research/runtime-context-and-storage-strategy.md) | 开发参考，保留原文 |
 | 决策依据 | [Windows 决策地图](wayfinder/windows-backend-lifecycle/map.md) | 保留已关闭票据和最终 resolution；长讨论已归档 |

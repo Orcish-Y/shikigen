@@ -16,4 +16,4 @@
 
 五张尺寸/导航截图已集中到 [视觉归档](../../docs/archive/2026-10-02/visual-explorations.zip)，路径仍为 `frontend/work-records/assets/2026-09-24-frontend-workbench/`。完整旧记录保存在 [整理前文档包](../../docs/archive/2026-10-02/edited-documents-before-cleanup.zip)。
 
-设计基准：[展开 demo](../../design/demo.html)、[收起 demo](../../design/front-end-demo.html)；开发材料：[设计规范](../design.md)、[前端 PRD](../../docs/frontend-prd.md)、[运行方式](../README.md)。组件文件组织与当前数据流以现有代码为准。
+设计基准的现路径：[展开原稿](../../design/demo-菜单展开.html)、[折叠原稿](../../design/demo-菜单折叠.html)；开发材料：[设计规范](../design.md)、[前端 PRD](../../docs/frontend/frontend-prd.md)、[运行方式](../README.md)。链接于 2026-10-03 按当前文件位置更新；本记录的开发事实仍属于 2026-09-24，组件文件组织与当前数据流以现有代码为准。
