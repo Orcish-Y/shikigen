@@ -17,7 +17,8 @@ from shikigen.persistence.chat_store import ChatStore, open_chat_store
 from shikigen.runtime.data_ownership import own_runtime_data
 from shikigen.runtime.lifecycle import ApplicationLifecycle
 from shikigen.runtime.run_events import RunEventIngestor
-from shikigen.runtime.runs import RunService
+from shikigen.runtime.run_execution import RunExecutionCoordinator
+from shikigen.runtime.runs import RunService, RunTransitions
 from shikigen.runtime.threads import ThreadService
 from shikigen.tools import create_builtin_registry
 from shikigen.tools.mcp_loader import load_mcp_tools
@@ -48,7 +49,12 @@ def assemble_runtime(
 ) -> Runtime:
   """将调用者提供的依赖组装为 Runtime；调用者负责关闭生命周期与存储。"""
   executions = executions if executions is not None else ExecutionRegistry()
-  lifecycle = ApplicationLifecycle(executions)
+  transitions = RunTransitions(chat_store)
+  ingestor = (
+    ingestor if ingestor is not None else RunEventIngestor(chat_store, executions)
+  )
+  coordinator = RunExecutionCoordinator(executions, transitions, ingestor)
+  lifecycle = ApplicationLifecycle(coordinator)
   return Runtime(
     config=config,
     agent=agent,
@@ -62,7 +68,8 @@ def assemble_runtime(
       store=chat_store,
       executions=executions,
       lifecycle=lifecycle,
-      ingestor=ingestor,
+      transitions=transitions,
+      coordinator=coordinator,
     ),
   )
 

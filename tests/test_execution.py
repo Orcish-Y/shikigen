@@ -2,9 +2,10 @@ import asyncio
 import unittest
 
 from langchain_core.messages import HumanMessage
+from shikigen.contracts.runs import RunWriteResult
 from shikigen.core.execution import ExecutionReason, ExecutionRegistry, RunExecution
 from shikigen.core.loop import execute_agent_loop
-from shikigen.runtime.run_execution import CommittedRunState, start_run_execution
+from shikigen.runtime.run_execution import CommittedRunState, RunExecutionCoordinator
 from test_loop import (
   BlockingAgent,
   FailingAgent,
@@ -23,9 +24,18 @@ class ControlledSettlement:
     self.status = status
     self.saved = None
     self.outcome = None
+    self.cancel_entered = asyncio.Event()
+    self.allow_cancel = asyncio.Event()
 
   async def settle_execution(
-    self, *, thread_id, run_id, outcome, invocation_seq=None, usage=None
+    self,
+    *,
+    thread_id,
+    run_id,
+    outcome,
+    error_code=None,
+    invocation_seq=None,
+    usage=None,
   ):
     self.outcome = outcome
     self.entered.set()
@@ -35,20 +45,51 @@ class ControlledSettlement:
     self.saved = CommittedRunState(self.status)
     return self.saved
 
+  async def cancel_run(self, *, thread_id, run_id):
+    self.cancel_entered.set()
+    await self.allow_cancel.wait()
+    return RunWriteResult(
+      run={
+        "id": run_id,
+        "thread_id": thread_id,
+        "status": "cancelled",
+        "error": None,
+        "error_code": None,
+        "created_at": "2026-10-03T00:00:00+00:00",
+        "updated_at": "2026-10-03T00:00:01+00:00",
+        "completed_at": "2026-10-03T00:00:01+00:00",
+        "usage": None,
+        "usage_pending": True,
+      },
+      events=(
+        {
+          "id": 1,
+          "thread_id": thread_id,
+          "run_id": run_id,
+          "seq": 1,
+          "event_type": "run_cancelled",
+          "category": "lifecycle",
+          "event_key": f"cancelled:{run_id}",
+          "content": {"status": "cancelled"},
+          "metadata": {},
+          "created_at": "2026-10-03T00:00:01+00:00",
+        },
+      ),
+    )
+
 
 class ExecutionTests(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.registry = ExecutionRegistry()
-    self.addAsyncCleanup(self.registry.shutdown)
 
-  def start(self, settlement, agent=None):
-    return start_run_execution(
+  async def start(self, settlement, agent=None):
+    self.coordinator = RunExecutionCoordinator(self.registry, settlement)
+    self.addAsyncCleanup(self.coordinator.shutdown)
+    return await self.coordinator.start(
       agent=agent or MessageAgent(),
       message=HumanMessage(content="hello"),
       thread_id="thread-1",
       run_id="run-1",
-      registry=self.registry,
-      settlement=settlement,
     )
 
   async def events(self, execution):
@@ -92,7 +133,7 @@ class ExecutionTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_disconnect_does_not_own_execution_or_other_subscription(self):
     settlement = ControlledSettlement()
-    execution = self.start(settlement)
+    execution = await self.start(settlement)
     first = execution.stream.subscribe()
     second = execution.stream.subscribe()
     self.addAsyncCleanup(first.aclose)
@@ -119,7 +160,7 @@ class ExecutionTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_persistence_failure_never_publishes_success(self):
     settlement = ControlledSettlement(fail=True)
-    execution = self.start(settlement)
+    execution = await self.start(settlement)
     settlement.allow_commit.set()
     with self.assertLogs("shikigen.runtime.run_execution", level="ERROR"):
       with self.assertRaisesRegex(OSError, "storage unavailable"):
@@ -131,7 +172,7 @@ class ExecutionTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_committed_cancellation_wins_over_loop_completion(self):
     settlement = ControlledSettlement(status="cancelled")
-    execution = self.start(settlement)
+    execution = await self.start(settlement)
     settlement.allow_commit.set()
     await asyncio.wait_for(execution.task, 2)
     self.assertEqual(settlement.outcome.reason, ExecutionReason.COMPLETED)
@@ -159,9 +200,9 @@ class ExecutionTests(unittest.IsolatedAsyncioTestCase):
         return Context()
 
     settlement = ControlledSettlement()
-    execution = self.start(settlement, Agent())
+    execution = await self.start(settlement, Agent())
     await asyncio.wait_for(entered.wait(), 2)
-    await asyncio.wait_for(self.registry.shutdown(), 2)
+    await asyncio.wait_for(self.coordinator.shutdown(), 2)
     self.assertTrue(execution.task.cancelled())
     self.assertTrue(cleaned.is_set())
     self.assertFalse(settlement.entered.is_set())
@@ -171,10 +212,34 @@ class ExecutionTests(unittest.IsolatedAsyncioTestCase):
     self.assertFalse(any(e.event == "status" for e in events))
 
   async def test_shutdown_before_task_starts_closes_subscription(self):
-    execution = self.start(ControlledSettlement())
-    await self.registry.shutdown()
+    execution = await self.start(ControlledSettlement())
+    await self.coordinator.shutdown()
     self.assertTrue(execution.task.cancelled())
     self.assertEqual(await self.events(execution), [])
+    self.assertIsNone(self.registry.get("thread-1", "run-1"))
+
+  async def test_prestart_task_cancel_waits_for_accepted_cancellation_publication(self):
+    settlement = ControlledSettlement()
+    execution = await self.start(settlement)
+    subscription = execution.stream.subscribe()
+    self.addAsyncCleanup(subscription.aclose)
+    execution.task.cancel()
+    cancellation = asyncio.create_task(self.coordinator.cancel("thread-1", "run-1"))
+    try:
+      await asyncio.wait_for(settlement.cancel_entered.wait(), 2)
+      # done callback 的清理必须等待取消事务，不能提前关流或移除句柄。
+      execution.stream.publish("metadata", {"run_id": "before-cancel-commit"})
+      self.assertIs(self.registry.get("thread-1", "run-1"), execution)
+    finally:
+      settlement.allow_cancel.set()
+    self.assertEqual((await cancellation)["status"], "cancelled")
+    async with asyncio.timeout(2):
+      events = [event async for event in subscription]
+    self.assertEqual(events[-1].data, {"status": "cancelled"})
+    self.assertEqual(
+      [e.data["event_type"] for e in events if e.event == "durable_event"],
+      ["run_cancelled"],
+    )
     self.assertIsNone(self.registry.get("thread-1", "run-1"))
 
   async def test_duplicate_install_and_old_cleanup_do_not_replace_new_execution(self):

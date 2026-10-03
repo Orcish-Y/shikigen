@@ -276,8 +276,9 @@ class ApprovalResumeTests(unittest.IsolatedAsyncioTestCase):
       self.assertCountEqual(self.calls, ["a.txt", "first", "first-again", "second"])
 
   async def test_start_failure_preserves_resolved_fact(self):
-    with patch(
-      "shikigen.runtime.runs.start_run_execution",
+    with patch.object(
+      self.runtime.executions,
+      "install",
       side_effect=RuntimeError("cannot start"),
     ):
       with self.assertRaisesRegex(RuntimeError, "cannot start"):

@@ -5,13 +5,13 @@ import logging
 from collections.abc import Coroutine
 from typing import Any
 
-from shikigen.core.execution import ExecutionRegistry
+from shikigen.runtime.run_execution import RunExecutionCoordinator
 
 logger = logging.getLogger(__name__)
 
 
 class ApplicationLifecycle:
-  def __init__(self, executions: ExecutionRegistry) -> None:
+  def __init__(self, executions: RunExecutionCoordinator) -> None:
     self._executions = executions
     self._operations: set[asyncio.Task] = set()
     self._closing = False

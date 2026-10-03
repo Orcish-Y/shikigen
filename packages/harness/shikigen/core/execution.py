@@ -43,8 +43,6 @@ class RunExecution:
   abort_event: asyncio.Event = field(default_factory=asyncio.Event)
   # 本次 invocation 缓存覆盖的首个持久序号；不是客户端续传游标。
   replay_start_seq: int = 0
-  # 应用编排串行提交、发布与关闭，避免取消事实被提前关闭的流吞掉。
-  settlement_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
   _task: asyncio.Task[None] | None = field(default=None, init=False, repr=False)
 
   @property
@@ -90,20 +88,7 @@ class ExecutionRegistry:
     if self._executions.get(execution.run_id) is execution:
       del self._executions[execution.run_id]
 
-  async def shutdown(self) -> None:
-    """强制停止本地 Task 并等待 finally；不推断产品取消状态。"""
+  def stop_accepting(self) -> tuple[RunExecution, ...]:
+    """停止安装并交付剩余句柄；执行协调者负责停止与回收资源。"""
     self._closing = True
-    executions = list(self._executions.values())
-    for execution in executions:
-      execution.request_cancel()
-      if execution.task is not None and not execution.task.done():
-        execution.task.cancel()
-    try:
-      await asyncio.gather(
-        *(item.task for item in executions if item.task is not None),
-        return_exceptions=True,
-      )
-    finally:
-      for execution in executions:
-        execution.stream.close()
-        self.remove(execution)
+    return tuple(self._executions.values())

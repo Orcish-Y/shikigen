@@ -143,6 +143,30 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(row["status"], "error")
     self.assertIn("stream setup failed", row["error"])
 
+  async def test_task_creation_failure_settles_run_and_releases_thread(self):
+    create_task = asyncio.create_task
+
+    def fail_execution(coroutine, **kwargs):
+      if kwargs.get("name", "").startswith("run:"):
+        raise RuntimeError("cannot create execution task")
+      return create_task(coroutine, **kwargs)
+
+    with patch("asyncio.create_task", side_effect=fail_execution):
+      with self.assertRaisesRegex(RuntimeError, "cannot create execution task"):
+        await self.runtime.runs.start_run(self.thread_id, "hello")
+    messages = await self.runtime.threads.list_thread_messages(self.thread_id)
+    run_id = messages[0]["run_id"]
+    run = await self.runtime.runs.read_run(self.thread_id, run_id)
+    self.assertEqual(run["status"], "error")
+    self.assertEqual(run["error_code"], "execution_failed")
+    self.assertIsNone(self.runtime.executions.get(self.thread_id, run_id))
+    facts = await self.runtime.runs.list_run_events(self.thread_id, run_id)
+    self.assertEqual(facts[-1]["event_type"], "run_error")
+    next_execution = await self.runtime.runs.start_run(self.thread_id, "retry")
+    self.assertEqual(
+      (await self.runtime.runs.wait_run(next_execution))["status"], "completed"
+    )
+
   async def test_shutdown_does_not_pretend_to_commit_user_cancellation(self):
     self.runtime.runs.agent = BlockingAgent()
     execution = await self.runtime.runs.start_run(self.thread_id, "hello")
