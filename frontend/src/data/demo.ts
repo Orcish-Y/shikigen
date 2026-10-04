@@ -7,6 +7,7 @@ export interface Message {
 }
 
 export interface Session {
+  status?: string;
   id: string;
   title: string;
   group: "今天" | "昨天" | "历史";

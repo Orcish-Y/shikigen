@@ -47,9 +47,9 @@ test('host query races cannot restore an old address; leaving ready closes SSE a
       res.writeHead(200, {'content-type':'text/event-stream'});
       res.write('event: metadata\ndata: {"thread_id":"t","run_id":"r","status":"running"}\n\n');
       res.on('close', closed);
-    } else res.end(JSON.stringify([{id:'old-thread'}]));
+    } else res.end(JSON.stringify({data:[{id:'old-thread', user_id:null, title:null, run_id:null, run_status:null, created_at:'2026-10-04T00:00:00Z', updated_at:'2026-10-04T00:00:00Z'}], next_cursor:null}));
   });
-  const newUrl = await server(t, (req, res) => res.end(JSON.stringify([{id:'persisted-thread'}])));
+  const newUrl = await server(t, (req, res) => res.end(JSON.stringify({data:[{id:'persisted-thread', user_id:null, title:null, run_id:null, run_status:null, created_at:'2026-10-04T00:00:00Z', updated_at:'2026-10-04T00:00:00Z'}], next_cursor:null})));
   const client = new BackendClient();
   let receive, queryDone;
   const subscription = subscribeBackendState({
@@ -61,20 +61,20 @@ test('host query races cannot restore an old address; leaving ready closes SSE a
   assert.equal(client.session, null);
   receive(ready(2, 'old', oldUrl));
   const old = client.session;
-  assert.equal((await old.threads())[0].id, 'old-thread');
+  assert.equal((await old.threads(20)).data[0].id, 'old-thread');
   let first; const received = new Promise(resolve => first = resolve);
   const stream = old.observe('t', 'r', first).catch(error => error);
   await received;
   receive({...ready(3, 'old', null), state:'failed'});
   assert.equal(client.session, null);
   assert.equal(old.signal.aborted, true);
-  await assert.rejects(old.threads(), {name:'AbortError'});
+  await assert.rejects(old.threads(20), {name:'AbortError'});
   await disconnected;
   assert.equal((await stream).name, 'AbortError');
   receive(ready(5, 'new', newUrl));
   queryDone(ready(2, 'old', oldUrl));
   await tick();
-  assert.equal((await client.session.threads())[0].id, 'persisted-thread');
+  assert.equal((await client.session.threads(20)).data[0].id, 'persisted-thread');
 });
 
 test('delayed JSON and SSE headers from a revoked startup are discarded and released', async () => {

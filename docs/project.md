@@ -35,6 +35,7 @@ checkpoint 由 Graph 与注入的 saver 管理；工厂不隐式创建 checkpoin
 | 操作 | 共享接口 | 语义 |
 | --- | --- | --- |
 | 创建会话 | `threads.create_thread()` | 返回 Thread 身份 |
+| 浏览会话 | `threads.list_threads(limit=20, cursor=None)` | 按调用方指定条数返回 `data` 与 `next_cursor`，含当前／最近发起 Run 的身份及状态 |
 | 开始任务 | `runs.start_run(thread_id, message)` | 创建事务提交后启动执行，返回 RunExecution |
 | 等待执行 | `runs.wait_run(execution)` | 等待本次执行和持久化收尾；暂停返回 interrupted，不等待未来人工审批 |
 | 查询任务 | `runs.read_run(thread_id, run_id)` | 读取持久快照；暂停状态会在 Thread 锁内再次校验 |
@@ -163,6 +164,18 @@ required、resolved、invalidated。任务执行失败属于 lifecycle，不是�
 未知结构字段、事件或错误类型被拒绝；content block、工具输入、artifact、metadata 内部 JSON 可扩展。
 省略字段不自动补 null。编码校验失败输出 invalid_event 并结束该订阅，不影响 Run 执行；
 recoverable 表示可查询已持久事实，不承诺自动续接。
+
+`GET /api/threads` 接受必填正整数 `limit` 与可选 `cursor`，返回 `{data, next_cursor}`。
+前端首版传 `limit=20`；HTTP、Runtime、ChatStore 逐层传递条数，ThreadStore 通过
+`limit + 1` 条预读判断是否有下一页，不设置固定业务页长。缺少或非法 limit 返回
+422 与 `no-store`，重复参数及未知参数同样拒绝。摘要保留会话字段，
+增加同一 Run 的 `run_id` / `run_status`（尚无 Run 时均为 null）。按 `updated_at DESC,
+id DESC` 排序；游标固定签发时的时间／ID 边界，跨页不保证固定快照。查询只读已提交
+事实并设置 `no-store`；非法游标返回 422，暂不可读返回 503 与 `Retry-After: 1`，
+其他读取错误返回 500。运行状态与会话排序时间沿用同次事务提交。
+
+桌面 HTTP 入口对允许的 WebView 来源暴露 `Retry-After` 响应头，供跨端口请求读取
+503 的等待时间，并在等待结束后开放原位重试。
 
 以下路径均相对于 `/api/threads/{thread_id}`：
 

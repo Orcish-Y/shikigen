@@ -6,6 +6,7 @@ from contextlib import contextmanager
 
 from fastapi import HTTPException, Response
 from shikigen.contracts.runs import QueryUnavailable, RunNotFound, ThreadNotFound
+from shikigen.contracts.threads import InvalidThreadCursor
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,8 @@ def query_response_policy(response: Response) -> Iterator[None]:
   response.headers.update(headers)
   try:
     yield
+  except InvalidThreadCursor as error:
+    raise HTTPException(422, str(error), headers=headers) from error
   except (RunNotFound, ThreadNotFound) as error:
     raise HTTPException(404, str(error), headers=headers) from error
   except QueryUnavailable as error:

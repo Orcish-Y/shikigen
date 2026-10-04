@@ -1,7 +1,9 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager, nullcontext
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from shikigen.runtime import Runtime, open_runtime
 
 from app.routes import run, thread
@@ -29,6 +31,14 @@ def create_app(*, runtime: Runtime | None = None) -> FastAPI:
     version="0.1.0",
     lifespan=lifespan,
   )
+
+  @app.exception_handler(RequestValidationError)
+  async def validation_error(request: Request, error: RequestValidationError):
+    response = await request_validation_exception_handler(request, error)
+    if request.method == "GET" and request.url.path == "/api/threads":
+      response.headers["Cache-Control"] = "no-store"
+    return response
+
   app.include_router(thread.router)
   app.include_router(run.router)
   return app

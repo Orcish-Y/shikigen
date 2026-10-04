@@ -44,7 +44,10 @@ class DesktopLifecycleTests(unittest.IsolatedAsyncioTestCase):
         "shikigen.runtime.composition.create_lead_agent", new=deterministic_agent
       ):
         async with open_runtime(self.config) as runtime:
-          self.assertEqual(await runtime.threads.list_threads(), [])
+          self.assertEqual(
+            await runtime.threads.list_threads(limit=20),
+            {"data": [], "next_cursor": None},
+          )
 
   async def cancel_during(self, config, phase):
     with ExitStack() as patches:
@@ -119,7 +122,7 @@ class DesktopLifecycleTests(unittest.IsolatedAsyncioTestCase):
           finally:
             draining.set()
             await release.wait()
-            storage_reads.append(await runtime.threads.list_threads())
+            storage_reads.append(await runtime.threads.list_threads(limit=20))
 
       app.router.lifespan_context = lifespan
       return app
@@ -145,7 +148,7 @@ class DesktopLifecycleTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.wait_for(task, 5)
         else:
           await asyncio.wait_for(task, 5)
-        self.assertEqual(storage_reads, [[]])
+        self.assertEqual(storage_reads, [{"data": [], "next_cursor": None}])
       finally:
         release.set()
         if not task.done():
@@ -156,7 +159,10 @@ class DesktopLifecycleTests(unittest.IsolatedAsyncioTestCase):
       "shikigen.runtime.composition.create_lead_agent", new=deterministic_agent
     ):
       async with open_runtime(self.config) as runtime:
-        self.assertEqual(await runtime.threads.list_threads(), [])
+        self.assertEqual(
+          await runtime.threads.list_threads(limit=20),
+          {"data": [], "next_cursor": None},
+        )
 
   async def test_server_failure_propagates_and_releases_data(self):
     control = ControlChannel(io.BytesIO(), io.BytesIO(), "failed")
@@ -172,4 +178,7 @@ class DesktopLifecycleTests(unittest.IsolatedAsyncioTestCase):
       "shikigen.runtime.composition.create_lead_agent", new=deterministic_agent
     ):
       async with open_runtime(self.config) as runtime:
-        self.assertEqual(await runtime.threads.list_threads(), [])
+        self.assertEqual(
+          await runtime.threads.list_threads(limit=20),
+          {"data": [], "next_cursor": None},
+        )

@@ -14,6 +14,7 @@ from shikigen.contracts.runs import (
   RunSnapshot,
   ThreadMessage,
 )
+from shikigen.contracts.threads import ThreadPage
 from shikigen.persistence.database import Database, integrity_error
 from shikigen.persistence.event_store import EventStore
 from shikigen.persistence.run_store import RunStore
@@ -88,8 +89,8 @@ class ChatStore:
       thread_id,
     )
 
-  async def list_threads(self) -> list[dict[str, Any]]:
-    return await self._threads.list_threads()
+  async def list_threads(self, *, limit: int, cursor: str | None = None) -> ThreadPage:
+    return await self._threads.list_threads(limit=limit, cursor=cursor)
 
   @asynccontextmanager
   async def transaction(self) -> AsyncGenerator[RunTransaction, None]:

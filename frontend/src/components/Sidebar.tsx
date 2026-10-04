@@ -13,6 +13,47 @@ import {
   Lightning,
 } from "@phosphor-icons/react";
 import type { Session } from "../data/demo";
+import { useEffect, useRef, useState } from "react";
+import type { ListFailure } from "../conversation-state";
+
+interface HistoryPagination {
+  loaded: boolean;
+  refreshing: boolean;
+  loadingMore: boolean;
+  hasMore: boolean;
+  listError: ListFailure | null;
+  pageError: ListFailure | null;
+  onMore: (retry?: boolean) => Promise<void>;
+  onReload: () => Promise<void>;
+}
+
+function useRetrySeconds(retryAt: number) {
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    setNow(Date.now());
+    if (retryAt <= Date.now()) return;
+    const timer = window.setInterval(() => {
+      setNow(Date.now());
+      if (Date.now() >= retryAt) window.clearInterval(timer);
+    }, 250);
+    return () => window.clearInterval(timer);
+  }, [retryAt]);
+  return Math.max(0, Math.ceil((retryAt - now) / 1000));
+}
+
+function ListError({ failure, onRetry, onReload }: {
+  failure: ListFailure; onRetry: () => void; onReload: () => void;
+}) {
+  const seconds = useRetrySeconds(failure.retryAt);
+  return <div className="list-error" role="alert">
+    <p>{failure.invalidCursor ? "分页位置已失效，请重新加载会话列表。" : failure.message}</p>
+    {seconds > 0 && <p>{seconds} 秒后可重试</p>}
+    <button className="text-button" disabled={seconds > 0}
+      onClick={failure.invalidCursor ? onReload : onRetry}>
+      {failure.invalidCursor ? "重新加载会话列表" : "重试"}
+    </button>
+  </div>;
+}
 
 export function Navigation({
   backendReady,
@@ -96,6 +137,7 @@ export function History({
   onSelect,
   onCreate,
   creating = false,
+  pagination,
 }: {
   sessions: Session[];
   activeId: string;
@@ -104,14 +146,41 @@ export function History({
   onSelect: (id: string) => void;
   onCreate: () => void;
   creating?: boolean;
+  pagination?: HistoryPagination;
 }) {
+  const list = useRef<HTMLElement>(null);
+  const wheelGesture = useRef(false);
+  const wheelTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const touchY = useRef<number | null>(null);
+  const scrollTop = useRef(0);
+  const hasFilter = query.length > 0;
+  const { onMore, loadingMore, refreshing, loaded, hasMore, listError, pageError } = pagination ?? {};
+  const retrySeconds = useRetrySeconds(Math.max(listError?.retryAt ?? 0, pageError?.retryAt ?? 0));
+  const canLoad = Boolean(loaded && hasMore && !loadingMore && !refreshing && !listError && !pageError);
+  const atBottom = () => {
+    const element = list.current;
+    return Boolean(element && element.scrollTop + element.clientHeight >= element.scrollHeight - 2);
+  };
+  const loadNext = () => { if (canLoad) void onMore?.(); };
+  useEffect(() => {
+    const element = list.current;
+    if (!element || hasFilter || !canLoad) return;
+    const fill = () => {
+      if (element.clientHeight > 0 && element.scrollHeight <= element.clientHeight + 2) void onMore?.();
+    };
+    fill();
+    const observer = new ResizeObserver(fill);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [hasFilter, canLoad, sessions.length, onMore]);
+  useEffect(() => () => { if (wheelTimer.current) clearTimeout(wheelTimer.current); }, []);
   const filtered = sessions.filter((session) =>
     session.title.toLowerCase().includes(query.toLowerCase()),
   );
   return (
-    <aside className="history" aria-label="会话历史">
+    <aside className="history" aria-label="会话列表">
       <div className="history-heading">
-        <h2>会话历史</h2>
+        <h2>会话列表</h2>
         <button className="secondary-button" onClick={onCreate} disabled={creating}>
           <Plus size={14} />
           新建
@@ -122,11 +191,54 @@ export function History({
         <input
           value={query}
           onChange={(event) => onQuery(event.target.value)}
-          placeholder="过滤历史会话…"
-          aria-label="过滤历史会话"
+          placeholder="过滤已加载会话…"
+          aria-label="过滤已加载会话"
         />
       </label>
-      <nav className="session-list" aria-label="历史会话">
+      <div className="list-scope">
+        <span>仅筛选已加载会话</span>
+        {pagination && <button className="text-button" onClick={() => void pagination.onReload()}
+          disabled={refreshing || loadingMore || retrySeconds > 0}>
+          重载列表
+        </button>}
+      </div>
+      {listError && pagination && <ListError failure={listError}
+        onRetry={pagination.onReload} onReload={pagination.onReload} />}
+      <nav className="session-list" aria-label="会话列表内容" tabIndex={0} ref={list}
+        aria-busy={Boolean(refreshing || loadingMore)}
+        onScroll={() => {
+          const next = list.current?.scrollTop ?? 0;
+          if (next > scrollTop.current && atBottom()) loadNext();
+          scrollTop.current = next;
+        }}
+        onWheel={event => {
+          if (wheelTimer.current) clearTimeout(wheelTimer.current);
+          wheelTimer.current = setTimeout(() => { wheelGesture.current = false; }, 200);
+          if (event.deltaY > 0 && atBottom() && !wheelGesture.current) {
+            wheelGesture.current = true;
+            loadNext();
+          }
+        }}
+        onTouchStart={event => { touchY.current = event.touches[0]?.clientY ?? null; }}
+        onTouchMove={event => {
+          if (touchY.current !== null && event.touches[0]?.clientY < touchY.current - 12 && atBottom()) {
+            touchY.current = null;
+            loadNext();
+          }
+        }}
+        onKeyDown={event => {
+          if (event.repeat || event.nativeEvent.isComposing || !["End", "PageDown"].includes(event.key)) return;
+          const element = list.current;
+          if (element && (event.key === "End" || element.scrollTop + 2 * element.clientHeight >= element.scrollHeight)) {
+            event.preventDefault();
+            element.scrollTop = element.scrollHeight;
+            loadNext();
+          }
+        }}>
+        {refreshing && sessions.length === 0 && <div aria-label="正在加载会话列表" role="status">
+          {Array.from({ length: 6 }, (_, index) => <div className="session-skeleton" key={index}><i /><i /></div>)}
+        </div>}
+        {refreshing && sessions.length > 0 && <p className="list-feedback" role="status">正在刷新会话列表…</p>}
         {(["今天", "昨天", "历史"] as const).map((group) => {
           const entries = filtered.filter((session) => session.group === group);
           return (
@@ -144,21 +256,30 @@ export function History({
                     aria-current={activeId === session.id ? "true" : undefined}
                   >
                     <strong>{session.title}</strong>
-                    <span>{session.summary}</span>
+                    <span className="session-meta"><span>{session.summary}</span>
+                      {session.status && <span className="session-status">{session.status}</span>}
+                    </span>
                   </button>
                 ))}
               </div>
             )
           );
         })}
-        {filtered.length === 0 && (
+        {filtered.length === 0 && !refreshing && !listError && (
           <div className="no-results">
-            <p>没有匹配的会话</p>
+            <p>{hasFilter ? "已加载会话中没有匹配结果" : "还没有会话"}</p>
+            {hasFilter && <>
             <button className="text-button" onClick={() => onQuery("")}>
               清除过滤
             </button>
+            {hasMore && <p>向下滚动或按 End 可继续读取更早会话</p>}
+            </>}
           </div>
         )}
+        {loadingMore && <p className="list-feedback" role="status">正在加载更早会话…</p>}
+        {pageError && pagination && <ListError failure={pageError}
+          onRetry={() => void pagination.onMore(true)} onReload={pagination.onReload} />}
+        {loaded && !hasMore && !pageError && <p className="list-feedback" role="status">没有更多</p>}
       </nav>
       <div className="usage">
         <span>

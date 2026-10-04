@@ -27,4 +27,9 @@ Status: ready-for-agent
 
 ## Comments
 
-尚无实施或验收记录。
+### 2026-10-04：第 2 票可复用证据与剩余实机范围
+
+- [会话分页票](02-paginated-conversation-list.md)已完成接口、客户端及真实 Tauri WebView 验证，其[续验收报告](../../../../.scratch/frontend-completion/ticket-02-native-resume/report.md)、JSON、日志与截图可在联合验收时复用。
+- 滚轮、错误区重试／重载、End 与 PageDown 的成功输入证据来自可信 CDP 事件；本票仍须按既有验收条件覆盖真实 Windows 焦点、物理输入与 IME。此前物理按键注入没有到达目标 DOM，不能记为通过，也未证实产品缺陷。
+- 第 2 票实测 1440×900 CSS 内容区、DPR 2，截图只有 WebView 内容；原生标题栏／边框、其他三个尺寸、跨分支状态仍按本票验收条件执行。五种会话数量已覆盖 HTTP 全页与 WebView 首屏，实机全页路径有 41 条 20／20／1，以及 21 条错误后重试；其余数量的实机末页检查可在联合验收补齐。
+- 本节只记录后续可复用材料与覆盖边界，本票仍为待实施，未执行联合验收。

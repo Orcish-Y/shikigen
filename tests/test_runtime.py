@@ -59,8 +59,10 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         "run_completed",
       ],
     )
-    threads = await self.runtime.threads.list_threads()
-    self.assertEqual((threads[0]["user_id"], threads[0]["title"]), ("user", "title"))
+    threads = await self.runtime.threads.list_threads(limit=20)
+    self.assertEqual(
+      (threads["data"][0]["user_id"], threads["data"][0]["title"]), ("user", "title")
+    )
 
   async def test_waiter_cancellation_does_not_stop_execution_or_settlement(self):
     entered, release = asyncio.Event(), asyncio.Event()
@@ -468,7 +470,7 @@ class CompositionTests(unittest.IsolatedAsyncioTestCase):
           async with open_runtime(self.config):
             self.fail("Unexpected runtime")
     with self.assertRaises(ValueError):
-      await captured["store"].list_threads()
+      await captured["store"].list_threads(limit=20)
     with self.assertRaises(ValueError):
       await captured["checkpointer"].conn.execute("SELECT 1")
 
@@ -494,7 +496,7 @@ class CompositionTests(unittest.IsolatedAsyncioTestCase):
                   return stream
 
                 async def __aexit__(self, *args):
-                  await captured["store"].list_threads()
+                  await captured["store"].list_threads(limit=20)
                   await checkpointer.conn.execute("SELECT 1")
                   cleaned.set()
 
@@ -517,6 +519,6 @@ class CompositionTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(cleaned.is_set())
         self.assertTrue(execution.task.done())
         with self.assertRaises(ValueError):
-          await captured["store"].list_threads()
+          await captured["store"].list_threads(limit=20)
         with self.assertRaises(ValueError):
           await captured["checkpointer"].conn.execute("SELECT 1")

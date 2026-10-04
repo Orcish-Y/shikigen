@@ -88,6 +88,7 @@ async def _serve_runtime(
     allow_origins=["http://127.0.0.1:5173", "http://tauri.localhost"],
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type"],
+    expose_headers=["Retry-After"],
   )
 
   @app.get("/health/ready")

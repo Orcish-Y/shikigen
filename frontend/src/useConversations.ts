@@ -42,6 +42,7 @@ export function useConversations(session: BackendSession | null, previewMode = f
   const sessions: Session[] = previewMode ? preview : state.threads.map(thread => ({
     id: thread.id, title: thread.title?.trim() ? thread.title : "新会话", group: "历史",
     summary: thread.updated_at || "更新时间待核实",
+    status: thread.run_status ? runStatusLabels[thread.run_status] : "未开始",
     messages: (state.views[thread.id]?.messages ?? []).map(displayMessage),
   }));
   const active = sessions.find(item => item.id === activeId) ?? {
@@ -76,7 +77,12 @@ export function useConversations(session: BackendSession | null, previewMode = f
     loading: state.listing || view.history === "loading",
     verifying: Boolean(view.run && !view.verified && !view.error),
     creating: state.creating, sending: view.sending,
-    error: state.listError ?? view.error,
+    error: view.error,
+    pagination: previewMode ? undefined : {
+      loaded: state.listLoaded, refreshing: state.listing, loadingMore: state.loadingMore,
+      hasMore: state.nextCursor !== null, listError: state.listError, pageError: state.pageError,
+      onMore: store.loadMore, onReload: store.reloadThreads,
+    },
     notice: state.notice,
     canSend: !previewMode && store.canSend(),
     reload: store.reload,

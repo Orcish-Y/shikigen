@@ -1,5 +1,8 @@
-from fastapi import APIRouter, HTTPException, Request, Response
+from typing import Annotated
+
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 from shikigen.contracts.runs import StorageConflict
+from shikigen.contracts.threads import InvalidThreadCursor, ThreadPage
 from shikigen.runtime import Runtime
 
 from app.routes.queries import query_response_policy
@@ -10,13 +13,23 @@ router = APIRouter(prefix="/api/threads")
 @router.get(
   "",
   summary="获取会话列表",
-  description="获取当前用户可访问的全部 Agent 会话。",
+  description="按更新时间倒序获取会话及运行状态；limit 指定每页条数，cursor 可选。",
   response_description="会话列表",
   tags=["Threads"],
 )
-async def get_thread(request: Request) -> list[dict[str, object]]:
+async def get_thread(
+  request: Request,
+  response: Response,
+  limit: Annotated[int, Query(gt=0)],
+  cursor: str | None = None,
+) -> ThreadPage:
   runtime: Runtime = request.app.state.runtime
-  return await runtime.threads.list_threads()
+  with query_response_policy(response):
+    if set(request.query_params) - {"limit", "cursor"} or any(
+      len(request.query_params.getlist(key)) > 1 for key in ("limit", "cursor")
+    ):
+      raise InvalidThreadCursor("Only one limit and one optional cursor are accepted")
+    return await runtime.threads.list_threads(limit=limit, cursor=cursor)
 
 
 @router.post(

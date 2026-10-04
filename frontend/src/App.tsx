@@ -194,6 +194,7 @@ function Workspace({ session, conversations }: {
             }}
             onCreate={createSession}
             creating={conversations.creating || conversations.loading}
+            pagination={conversations.pagination}
           />
           <main className="chat-workspace">
             <div className="chat-toolbar">

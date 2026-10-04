@@ -46,7 +46,7 @@ class LifespanTests(unittest.IsolatedAsyncioTestCase):
           "shikigen.runtime.composition.create_lead_agent", new=deterministic_agent
         ),
       ):
-        with self.assertRaisesRegex(OSError, "request failed"):
+        with self.assertRaises(httpx.HTTPStatusError):
           async with (
             app.router.lifespan_context(app),
             httpx.AsyncClient(
@@ -57,16 +57,18 @@ class LifespanTests(unittest.IsolatedAsyncioTestCase):
             response = await client.post("/api/threads")
             self.assertEqual(response.status_code, 200)
             self.assertEqual(
-              (await runtime.threads.list_threads())[0]["id"],
+              (await runtime.threads.list_threads(limit=20))["data"][0]["id"],
               response.json()["thread_id"],
             )
             with patch.object(
               runtime.threads, "list_threads", side_effect=OSError("request failed")
             ):
-              await client.get("/api/threads")
+              failure = await client.get("/api/threads", params={"limit": 20})
+              self.assertEqual(failure.status_code, 500)
+              failure.raise_for_status()
       self.assertFalse(hasattr(app.state, "runtime"))
       with self.assertRaises(ValueError):
-        await runtime.chat_store.list_threads()
+        await runtime.chat_store.list_threads(limit=20)
 
   async def test_lifespan_uses_shared_context_and_releases_it(self):
     runtime = SimpleNamespace(lifecycle=SimpleNamespace(shutdown=AsyncMock()))
@@ -115,15 +117,18 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
     self.addAsyncCleanup(self.client.aclose)
 
   async def test_registered_routes_creation_and_not_found(self):
-    self.assertEqual((await self.client.get("/api/threads")).json(), [])
+    self.assertEqual(
+      (await self.client.get("/api/threads", params={"limit": 20})).json(),
+      {"data": [], "next_cursor": None},
+    )
     with patch.object(
       self.runtime.threads, "create_thread", wraps=self.runtime.threads.create_thread
     ) as create:
       response = await self.client.post("/api/threads")
       self.assertEqual(response.status_code, 200)
       create.assert_awaited_once_with()
-    threads = (await self.client.get("/api/threads")).json()
-    self.assertEqual(threads[0]["id"], response.json()["thread_id"])
+    threads = (await self.client.get("/api/threads", params={"limit": 20})).json()
+    self.assertEqual(threads["data"][0]["id"], response.json()["thread_id"])
     for path, detail in (
       ("/api/threads/missing/messages", "Thread not found"),
       ("/api/threads/missing/runs/missing/messages", "Run not found"),
@@ -367,7 +372,7 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
           (await runtime.runs.wait_run(execution))["status"], "completed"
         )
       with self.assertRaises(ValueError):
-        await runtime.chat_store.list_threads()
+        await runtime.chat_store.list_threads(limit=20)
 
 
 class EncoderTests(unittest.IsolatedAsyncioTestCase):

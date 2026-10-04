@@ -200,7 +200,9 @@ class ClientAcceptance(WindowAcceptance):
     self.assertTrue(all(r["aborted"] for r in old_streams))
     self.assertTrue(all(r["method"] == "GET" for r in requests))
     self.assertTrue(any(r["url"].startswith(retried["base_url"]) for r in requests))
-    thread = self.client.get(retried["base_url"] + "/api/threads").json()[0]["id"]
+    thread = self.client.get(
+      retried["base_url"] + "/api/threads", params={"limit": 20}
+    ).json()["data"][0]["id"]
     messages = self.client.get(
       retried["base_url"] + f"/api/threads/{thread}/messages"
     ).json()["data"]

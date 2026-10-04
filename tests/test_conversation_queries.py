@@ -70,6 +70,28 @@ class ConversationQueryTests(unittest.IsolatedAsyncioTestCase):
       (await self.client.get("/api/threads/missing/messages")).status_code, 404
     )
 
+  async def test_thread_pages_freeze_boundary_and_keep_existing_fields(self):
+    empty = await self.client.get("/api/threads", params={"limit": 20})
+    self.assertEqual(empty.json(), {"data": [], "next_cursor": None})
+    for index in range(21):
+      await self.store.create_thread(f"thread-{index:02}", title=f"会话 {index}")
+    first = await self.client.get("/api/threads", params={"limit": 20})
+    self.assertEqual(first.headers.get("cache-control"), "no-store")
+    page = first.json()
+    self.assertEqual(len(page["data"]), 20)
+    self.assertEqual(page["data"][0]["id"], "thread-20")
+    self.assertIsNone(page["data"][0]["run_id"])
+    self.assertIsNone(page["data"][0]["run_status"])
+    self.assertEqual(page["data"][0]["title"], "会话 20")
+    # 边界会话后来发起运行，其新时间不能改写已签发的分页边界。
+    run = await self.runtime.runs.start_run("thread-01", "移动边界")
+    await self.runtime.runs.wait_run(run)
+    second = await self.client.get(
+      "/api/threads", params={"limit": 20, "cursor": page["next_cursor"]}
+    )
+    self.assertEqual([row["id"] for row in second.json()["data"]], ["thread-00"])
+    self.assertIsNone(second.json()["next_cursor"])
+
   async def test_snapshot_reads_committed_pause_without_recovery_or_writes(self):
     from langchain_core.messages import HumanMessage
     from shikigen.runtime.runs import RunTransitions
@@ -84,7 +106,7 @@ class ConversationQueryTests(unittest.IsolatedAsyncioTestCase):
     async with self.store.transaction() as tx:
       await tx.runs.update_state("paused", thread, status="interrupted", terminal=False)
     before = await self.runtime.runs.list_run_events(thread, "paused")
-    threads_before = await self.runtime.threads.list_threads()
+    threads_before = await self.runtime.threads.list_threads(limit=20)
     path = f"/api/threads/{thread}/runs/paused"
     for _ in range(2):
       response = await self.client.get(path)
@@ -107,7 +129,7 @@ class ConversationQueryTests(unittest.IsolatedAsyncioTestCase):
         "interrupted",
       )
     self.assertEqual(before, await self.runtime.runs.list_run_events(thread, "paused"))
-    self.assertEqual(threads_before, await self.runtime.threads.list_threads())
+    self.assertEqual(threads_before, await self.runtime.threads.list_threads(limit=20))
     for target in (
       f"/api/threads/{thread}/runs/missing",
       "/api/threads/other/runs/paused",

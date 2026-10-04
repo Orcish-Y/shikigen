@@ -5,7 +5,7 @@ import { ConversationStore } from '../src/conversation-state.ts';
 
 const ready = (revision, startup_id = 'first') => ({revision, startup_id,
   base_url:`http://127.0.0.1:${revision}`, state:'ready', can_retry:false, error:null});
-const thread = id => ({id, title:null, created_at:'2026-10-04T00:00:00Z', updated_at:'2026-10-04T00:00:00Z'});
+const thread = id => ({id, title:null, user_id:null, run_id:null, run_status:null, created_at:'2026-10-04T00:00:00Z', updated_at:'2026-10-04T00:00:00Z'});
 const message = (thread_id, text, status = 'completed') => ({id:1, thread_id, run_id:`run-${thread_id}`,
   run_status:status, seq:2, event_type:'human_message', category:'message', event_key:'human:m',
   metadata:{source:'history'}, created_at:'2026-10-04T00:00:00Z',
@@ -23,7 +23,7 @@ test('opening a terminal conversation preserves complete facts, selection and dr
   const client = new BackendClient(async url => {
     const path = new URL(url).pathname;
     paths.push(path);
-    if (path === '/api/threads') return Response.json([thread('t')]);
+    if (path === '/api/threads') return Response.json({data:[thread('t')], next_cursor:null});
     if (path.endsWith('/messages')) return Response.json({data:[message('t', '已保存正文')]});
     if (path.endsWith('/runs/run-t')) return Response.json({data:{id:'run-t', thread_id:'t', status:'completed', usage:null}});
     assert.fail(`终态不应开启观察：${path}`);
@@ -59,7 +59,7 @@ test('late history from a previous selection cannot replace the selected convers
   let release;
   const client = new BackendClient(async url => {
     const path = new URL(url).pathname;
-    if (path === '/api/threads') return Response.json([thread('a'), thread('b')]);
+    if (path === '/api/threads') return Response.json({data:[thread('a'), thread('b')], next_cursor:null});
     if (path === '/api/threads/a/messages') return {
       ok:true, json: () => new Promise(resolve => release = resolve),
     };
@@ -95,7 +95,7 @@ test('a confirmed creation is retained after list failure and does not steal a n
     }
     if (url.endsWith('/messages')) return Response.json({data:[]});
     if (failList) return new Response('temporarily unavailable', {status:503});
-    return Response.json([thread('a'), thread('b')]);
+    return Response.json({data:[thread('a'), thread('b')], next_cursor:null});
   });
   const store = new ConversationStore();
   client.update(ready(1));
@@ -113,7 +113,7 @@ test('a confirmed creation is retained after list failure and does not steal a n
   assert.ok(store.getSnapshot().threads.some(item => item.id === 'new'));
   assert.equal(store.getSnapshot().drafts.b, '继续这段对话');
   assert.match(store.getSnapshot().notice, /已创建/);
-  assert.match(store.getSnapshot().listError, /列表/);
+  assert.match(store.getSnapshot().listError.message, /列表/);
   assert.equal(posts, 1);
   store.setSession(null);
   client.update(null);
@@ -127,7 +127,7 @@ test('running and interrupted history reopens the existing stream; replay cannot
     let observations = 0;
     const client = new BackendClient(async (url, init) => {
       assert.notEqual(init.method, 'POST');
-      if (url.endsWith('/api/threads')) return Response.json([thread('t')]);
+      if (new URL(url).pathname === '/api/threads') return Response.json({data:[thread('t')], next_cursor:null});
       if (url.endsWith('/messages')) return Response.json({data:[message('t', '已有任务', status)]});
       observations++;
       assert.ok(url.endsWith('/runs/run-t/stream'));
@@ -159,7 +159,7 @@ test('new run metadata does not inherit the previous failed runs error, usage or
       live = controller;
       controller.enqueue(new TextEncoder().encode('event: metadata\ndata: {"thread_id":"t","run_id":"new-run","status":"running"}\n\n'));
     }}), {headers:{'content-type':'text/event-stream'}});
-    if (url.endsWith('/api/threads')) return Response.json([thread('t')]);
+    if (new URL(url).pathname === '/api/threads') return Response.json({data:[thread('t')], next_cursor:null});
     if (url.endsWith('/messages')) return Response.json({data:[message('t', '旧任务', 'error')]});
     return Response.json({data:{id:'run-t', thread_id:'t', status:'error', error:'上一轮失败',
       completed_at:'2026-10-04T01:00:00Z', usage:{total_tokens:99}}});
@@ -190,7 +190,7 @@ test('normal send remains explicit and committed history is readable after the s
         ['metadata', {thread_id:'t', run_id:'run-t', status:'completed'}],
       ]);
     }
-    if (url.endsWith('/api/threads')) return Response.json([thread('t')]);
+    if (new URL(url).pathname === '/api/threads') return Response.json({data:[thread('t')], next_cursor:null});
     if (url.endsWith('/messages')) return Response.json({data:sent ? [saved] : []});
     return Response.json({data:{id:'run-t', thread_id:'t', status:'completed'}});
   });
@@ -215,7 +215,7 @@ test('unknown creation outcome only reads the list and does not select a guessed
       if (init.method === 'POST') { posts++; return reply(); }
       if (url.endsWith('/messages')) return Response.json({data:[]});
       listReads++;
-      return Response.json(listReads === 1 ? [thread('t')] : [thread('new'), thread('t')]);
+      return Response.json({data:listReads === 1 ? [thread('t')] : [thread('new'), thread('t')], next_cursor:null});
     });
     const store = new ConversationStore();
     client.update(ready(1));
@@ -236,7 +236,7 @@ test('unknown creation outcome only reads the list and does not select a guessed
 test('failed or invalid history is not an empty conversation and keeps previous facts', async () => {
   let mode = 'valid';
   const client = new BackendClient(async url => {
-    if (url.endsWith('/api/threads')) return Response.json([thread('t')]);
+    if (new URL(url).pathname === '/api/threads') return Response.json({data:[thread('t')], next_cursor:null});
     if (url.endsWith('/messages')) {
       if (mode === 'unavailable') return new Response('unavailable', {status:503, headers:{'Retry-After':'1'}});
       return Response.json({data:[message('t', '已加载事实', mode === 'valid' ? 'completed' : 'unknown')]});

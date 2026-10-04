@@ -36,6 +36,8 @@ class DesktopTests(unittest.IsolatedAsyncioTestCase):
         port = probe.getsockname()[1]
     process = await asyncio.create_subprocess_exec(
       sys.executable,
+      "-X",
+      "utf8",
       str(ROOT / "tests/desktop_process.py"),
       "--config",
       str(self.config),
@@ -103,7 +105,9 @@ class DesktopTests(unittest.IsolatedAsyncioTestCase):
       with self.assertRaises(OSError):
         contender.bind(("127.0.0.1", port))
     async with httpx.AsyncClient(trust_env=False) as client:
-      response = await client.get(f"http://127.0.0.1:{port}/api/threads")
+      response = await client.get(
+        f"http://127.0.0.1:{port}/api/threads", params={"limit": 20}
+      )
       self.assertEqual(response.status_code, 200)
       created = await client.post(f"http://127.0.0.1:{port}/api/threads")
       thread_id = created.json()["thread_id"]
@@ -121,6 +125,36 @@ class DesktopTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(stdout, b"")
     self.assertIn(b"fixture ordinary stdout", stderr)
     self.assertIn(b"fixture child stdout", stderr)
+
+  async def test_desktop_origins_can_read_retry_after(self):
+    process = await self.launch()
+    port = await self.bound(process)
+    await self.ready(port)
+    url = f"http://127.0.0.1:{port}/api/threads"
+    async with httpx.AsyncClient(trust_env=False) as client:
+      for origin in ("http://127.0.0.1:5173", "http://tauri.localhost"):
+        with self.subTest(origin=origin):
+          response = await client.get(
+            url, params={"limit": 20}, headers={"Origin": origin}
+          )
+          self.assertEqual(response.status_code, 200)
+          self.assertEqual(response.headers["access-control-allow-origin"], origin)
+          exposed = {
+            header.strip().lower()
+            for header in response.headers.get(
+              "access-control-expose-headers", ""
+            ).split(",")
+          }
+          self.assertIn("retry-after", exposed)
+      denied = await client.get(
+        url, params={"limit": 20}, headers={"Origin": "https://unrelated.example"}
+      )
+      self.assertEqual(denied.status_code, 200)
+      self.assertNotIn("access-control-allow-origin", denied.headers)
+    process.stdin.write(b'{"version":1,"startup_id":"test-start","type":"shutdown"}\n')
+    await process.stdin.drain()
+    _, stderr = await asyncio.wait_for(process.communicate(), 20)
+    self.assertEqual(process.returncode, 0, stderr.decode())
 
   async def test_bind_errors_skip_10013_but_fail_other_errors(self):
     process = await self.launch(port=65490, env={"DESKTOP_TEST_BIND_ERROR": "10013"})

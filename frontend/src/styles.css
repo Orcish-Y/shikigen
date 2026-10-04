@@ -45,7 +45,8 @@ textarea {
 button:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
-summary:focus-visible {
+summary:focus-visible,
+.session-list:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
@@ -393,6 +394,26 @@ small {
 .session.selected strong {
   color: #0f172a;
 }
+.session-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+.session-meta > span:first-child { flex: 1; min-width: 0; }
+.session-meta .session-status { flex-shrink: 0; color: var(--secondary); }
+.list-scope {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--muted);
+}
+.list-feedback { padding: 10px 8px; font-size: 11px; color: var(--muted); text-align: center; }
+.list-error { padding: 10px 8px; font-size: 12px; color: #8b401f; overflow-wrap: anywhere; }
+.session-skeleton { height: 63px; padding: 12px 8px; margin-bottom: 4px; }
+.session-skeleton i { display: block; height: 12px; width: 75%; background: var(--border); border-radius: 4px; }
+.session-skeleton i + i { margin-top: 8px; width: 50%; }
 .no-results {
   text-align: center;
   color: var(--muted);

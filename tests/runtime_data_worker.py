@@ -46,7 +46,7 @@ async def main():
             report(status="ran", results=[row["status"] for row in rows])
       # Both real SQLite connections must be closed before a successor can enter.
       try:
-        await runtime.chat_store.list_threads()
+        await runtime.chat_store.list_threads(limit=20)
       except ValueError:
         pass
       else:

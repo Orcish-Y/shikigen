@@ -1,9 +1,9 @@
 """Thread 创建与会话历史查询；供 HTTP 和普通 Python 入口共同使用。"""
 
 import uuid
-from typing import Any
 
 from shikigen.contracts.runs import ThreadMessage, ThreadNotFound
+from shikigen.contracts.threads import ThreadPage
 from shikigen.persistence import ChatStore
 from shikigen.persistence.database import committed_query
 from shikigen.runtime.lifecycle import ApplicationLifecycle
@@ -27,8 +27,9 @@ class ThreadService:
 
     return await self._lifecycle.accept(create())
 
-  async def list_threads(self) -> list[dict[str, Any]]:
-    return await self._store.list_threads()
+  async def list_threads(self, *, limit: int, cursor: str | None = None) -> ThreadPage:
+    with committed_query():
+      return await self._store.list_threads(limit=limit, cursor=cursor)
 
   async def list_thread_messages(self, thread_id: str) -> list[ThreadMessage]:
     with committed_query():

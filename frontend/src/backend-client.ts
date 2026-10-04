@@ -2,10 +2,14 @@ import type { BackendSnapshot } from "./backend-state";
 
 export interface Thread {
   id: string;
+  user_id: string | null;
   title: string | null;
   created_at: string;
   updated_at: string;
+  run_id: string | null;
+  run_status: RunStatus | null;
 }
+export interface ThreadPage { data: Thread[]; next_cursor: string | null }
 export type RunStatus = "running" | "completed" | "cancelled" | "interrupted" | "error";
 export interface Run {
   thread_id: string;
@@ -114,8 +118,29 @@ export class BackendSession {
     return data as T;
   }
 
-  threads(signal?: AbortSignal) {
-    return this.json<Thread[]>("/api/threads", { cache: "no-store" }, signal);
+  async threads(limit: number, signal?: AbortSignal, cursor?: string | null): Promise<ThreadPage> {
+    if (!Number.isSafeInteger(limit) || limit <= 0) throw new Error("每页会话条数必须是正整数");
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (cursor != null) params.set("cursor", cursor);
+    const page = await this.json<ThreadPage>(
+      `/api/threads?${params}`,
+      { cache: "no-store" }, signal);
+    if (!page || !Array.isArray(page.data) || page.data.length > limit
+        || (page.next_cursor !== null && (typeof page.next_cursor !== "string" || !page.next_cursor))) {
+      throw new Error("会话分页格式无效");
+    }
+    for (const item of page.data) {
+      if (!item || typeof item.id !== "string" || !item.id.trim()
+          || (item.title !== null && typeof item.title !== "string")
+          || (item.user_id !== null && typeof item.user_id !== "string")
+          || typeof item.created_at !== "string" || !Number.isFinite(Date.parse(item.created_at))
+          || typeof item.updated_at !== "string" || !Number.isFinite(Date.parse(item.updated_at))
+          || !(item.run_id === null && item.run_status === null
+            || typeof item.run_id === "string" && item.run_id.trim() && validStatus(item.run_status))) {
+        throw new Error("会话摘要字段或运行状态无效");
+      }
+    }
+    return page;
   }
 
   async createThread() {

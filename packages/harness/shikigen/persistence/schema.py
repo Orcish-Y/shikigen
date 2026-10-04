@@ -28,6 +28,8 @@ CREATE TABLE IF NOT EXISTS runs (
   UNIQUE (thread_id, id)
 );
 
+CREATE INDEX IF NOT EXISTS ix_threads_updated_id ON threads(updated_at DESC, id DESC);
+
 CREATE INDEX IF NOT EXISTS ix_runs_thread_created
   ON runs(thread_id, created_at);
 
