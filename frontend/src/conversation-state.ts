@@ -1,6 +1,7 @@
 import { BackendRequestError, type BackendSession, type Run, type RunFrame, type RunEvent, type Thread } from "./backend-client.ts";
 import { RunProjection, terminalRun, type ApprovalProjection, type ConversationMessage } from './run-projection.ts';
 import { RunProtocolError } from './run-protocol.ts';
+import { MessageDrafts, type DraftStorage, type MessageSubmission } from './message-drafts.ts';
 export type { ConversationMessage } from './run-projection.ts';
 
 const THREAD_PAGE_SIZE = 20;
@@ -27,6 +28,7 @@ export interface ConversationView {
   approval: ApprovalProjection | null;
   observation: 'idle' | 'connecting' | 'open' | 'closed' | 'paused' | 'failed';
   protocolIssue: {message:string; raw:unknown} | null;
+  missing: boolean;
 }
 export interface ConversationState {
   threads: Thread[];
@@ -41,9 +43,11 @@ export interface ConversationState {
   creating: boolean;
   listError: ListFailure | null;
   notice: string | null;
+  storageIssue: string | null;
+  submissions: Record<string, MessageSubmission>;
 }
 export const emptyConversation: ConversationView = {
-  messages: [], run: null, history: "idle", verified: false, error: null, sending: false, events:{}, approval:null, observation:'idle', protocolIssue:null,
+  messages: [], run: null, history: "idle", verified: false, error: null, sending: false, events:{}, approval:null, observation:'idle', protocolIssue:null, missing:false,
 };
 
 interface ObservationAttempt {
@@ -56,7 +60,7 @@ export class ConversationStore {
   private state: ConversationState = {
     threads: [], activeId: "", views: {}, drafts: {}, listing: false,
     listLoaded: false, loadingMore: false, nextCursor: null, pageError: null,
-    creating: false, listError: null, notice: null,
+    creating: false, listError: null, notice: null, storageIssue:null, submissions:{},
   };
   private listeners = new Set<() => void>();
   private session: BackendSession | null = null;
@@ -68,6 +72,19 @@ export class ConversationStore {
   private creation: object | null = null;
   private intent = 0;
   private projections = new Map<string, RunProjection>();
+  private inputs: MessageDrafts;
+
+  constructor(options: {storage?: DraftStorage | null} = {}) {
+    this.inputs = new MessageDrafts(options.storage);
+    this.state = {...this.state, activeId:this.inputs.selected, ...this.inputState()};
+  }
+
+  private inputState() {
+    return {drafts:Object.fromEntries(Object.entries(this.inputs.drafts).map(([id, draft]) => [id, draft.text])),
+      storageIssue:this.inputs.storageIssue, submissions:this.inputs.submissions};
+  }
+
+  private publishInputs() { this.publish(this.inputState()); }
 
   private projection(threadId: string) {
     let projection = this.projections.get(threadId);
@@ -93,10 +110,12 @@ export class ConversationStore {
   }
 
   private stopSelection() {
+    const id = this.state.activeId;
+    this.inputs.markSubmissionUnknown(id, '发送连接已停止，接受情况待核实；不会自动重发。');
+    this.publishInputs();
     this.selection?.abort();
     this.selection = null;
     this.observing = null;
-    const id = this.state.activeId;
     if (id && this.state.views[id]) this.view(id, { sending: false, observation:'paused',
       approval:this.state.views[id].approval ? {...this.state.views[id].approval!, verified:false} : null });
   }
@@ -224,13 +243,16 @@ export class ConversationStore {
     this.intent++;
     this.stopSelection();
     this.publish({ activeId: threadId });
+    this.inputs.select(threadId);
+    this.publishInputs();
     void this.openSelected();
   }
 
   updateDraft(value: string) {
     const id = this.state.activeId;
     if (!id) return;
-    this.publish({ drafts: { ...this.state.drafts, [id]: value } });
+    this.inputs.update(id, value);
+    this.publishInputs();
   }
 
   async create() {
@@ -249,6 +271,7 @@ export class ConversationStore {
       if (intent === this.intent) this.select(thread_id);
       else this.publish({ notice: `会话已创建（${thread_id}），已保留在列表中，继续当前会话。` });
       await this.loadThreads(false);
+      return thread_id;
     } catch (error) {
       if (this.session !== session || session.signal.aborted) return;
       this.publish({ notice: `创建结果待确认：${String(error)}。请核对会话列表；不会自动再次创建。` });
@@ -261,30 +284,96 @@ export class ConversationStore {
     }
   }
 
-  canSend() {
+  copyDraftToNewConversation = async () => {
+    const sourceId = this.state.activeId;
+    const text = this.inputs.get(sourceId).text || this.inputs.submissions[sourceId]?.text || '';
+    if (!sourceId || !text) return;
+    const targetId = await this.create();
+    if (!targetId) return;
+    const targetText = this.inputs.get(targetId).text;
+    this.inputs.update(targetId, targetText ? `${targetText}\n\n${text}` : text);
+    this.publishInputs();
+    this.publish({notice:'文字已复制到新会话，请核对后手动发送；原会话文字仍保留。'});
+  };
+
+  private canStartRun() {
     const view = this.state.views[this.state.activeId];
     return Boolean(this.session && !this.session.signal.aborted && view?.history === "ready"
       && view.verified && !view.sending && !this.state.creating
       && (!view.run || ["completed", "cancelled", "error"].includes(view.run.status)));
   }
 
+  canSend() {
+    const submission = this.inputs.submissions[this.state.activeId];
+    return this.canStartRun() && (!submission || submission.status === 'accepted');
+  }
+
+  canSendAsNewTask() {
+    const record = this.inputs.submissions[this.state.activeId];
+    return this.canStartRun() && record?.status === 'unknown' && Date.now() >= record.retryAt;
+  }
+
+  sendAsNewTask(submissionId: string): boolean {
+    const record = this.inputs.submissions[this.state.activeId];
+    if (record?.id !== submissionId || !this.canSendAsNewTask()) return false;
+    return this.startSend(record.text, record.version);
+  }
+
+  confirmSend(seq: number, submissionId: string): boolean {
+    const threadId = this.state.activeId;
+    const record = this.inputs.submissions[threadId];
+    const view = this.state.views[threadId];
+    if (!record || record.id !== submissionId || record.status !== 'unknown' || view?.history !== 'ready'
+      || !view.verified || !view.messages.some(message => message.seq === seq
+        && message.content.type === 'human' && !message.preview)) return false;
+    this.inputs.confirm(threadId);
+    this.publishInputs();
+    return true;
+  }
+
   send(message: string): boolean {
     const session = this.session;
-    const threadId = this.state.activeId;
     if (!session || !this.canSend() || !message.trim()) return false;
+    return this.startSend(message);
+  }
+
+  private startSend(message: string, version?: number): boolean {
+    const session = this.session!;
+    const threadId = this.state.activeId;
+    if (!message.trim()) return false;
     this.stopSelection();
     const controller = this.selection = new AbortController();
+    const submission = this.inputs.begin(threadId, message, this.state.views[threadId].run?.run_id ?? null, version);
+    this.publishInputs();
     this.view(threadId, { sending: true, error: null });
-    void session.send(threadId, message, this.receiver(session, controller, threadId), controller.signal)
+    const receive = this.receiver(session, controller, threadId);
+    void session.send(threadId, message, frame => {
+      if (!this.live(session, controller) || this.state.activeId !== threadId) return;
+      if (frame.event === 'metadata' && frame.data.run_id === submission.previousRunId) {
+        throw new RunProtocolError('本次发送返回旧运行身份，接受情况待核实', frame.data);
+      }
+      receive(frame);
+      if (!this.live(session, controller) || this.state.activeId !== threadId) return;
+      if (frame.event === 'metadata') {
+        this.inputs.accept(threadId, submission.id, frame.data.run_id);
+        this.publishInputs();
+        this.view(threadId, {sending:false});
+      }
+    }, controller.signal)
       .then(() => { if (this.live(session, controller)) this.finishObservation(controller); })
       .catch(error => {
         if (this.live(session, controller)) {
+          if (error instanceof BackendRequestError && [400,409,422].includes(error.status)) this.inputs.rejected(threadId);
+          else this.inputs.markSubmissionUnknown(threadId, String(error), listFailure(error).retryAt);
+          this.publishInputs();
           this.view(threadId, {verified:false, observation:'failed',
             ...(error instanceof RunProtocolError ? {protocolIssue:{message:error.message, raw:error.raw}} : {})});
-          this.publish({notice: `发送连接中断：${String(error)}。正在读取已保存的结果；不会自动重发。`});
+          this.publish({notice: `发送请求异常：${String(error)}。正在读取已保存的结果；不会自动重发。`});
         }
       }).finally(() => {
         if (!this.live(session, controller)) return;
+        this.inputs.markSubmissionUnknown(threadId, '发送流在确认接受前结束，请核对已保存消息。');
+        this.publishInputs();
         this.view(threadId, { sending: false });
         // 发出 POST 后只用 GET 核实，包括连接结果未知的情况。
         this.reload();
@@ -303,12 +392,22 @@ export class ConversationStore {
     if (!session || session.signal.aborted || !threadId) return;
     this.stopSelection();
     const controller = this.selection = new AbortController();
-    this.view(threadId, { history: "loading", verified: false, error: null });
+    this.view(threadId, { history: "loading", verified: false, error: null, missing:false });
+    let historyRead = false;
     try {
       const messages = await session.messages(threadId, controller.signal);
       if (!this.live(session, controller)) return;
+      historyRead = true;
       const projection = this.projection(threadId);
       projection.mergeHistory(messages);
+      const accepted = this.inputs.submissions[threadId];
+      // 接受身份是恢复线索；历史可能尚未包含该 Run，必须重新 GET 核实。
+      if (accepted?.status === 'accepted' && accepted.runId
+        && (!projection.run || projection.run.run_id === accepted.previousRunId)) {
+        const snapshot = await session.runSnapshot(threadId, accepted.runId, controller.signal);
+        if (!this.live(session, controller)) return;
+        projection.metadata(snapshot);
+      }
       const run = projection.run;
       this.view(threadId, { ...projection.snapshot(), history: "ready", verified: !run });
       if (!run) return;
@@ -327,7 +426,9 @@ export class ConversationStore {
     } catch (error) {
       if (this.live(session, controller)) this.view(threadId, {
         history: this.state.views[threadId].history === "loading" ? "error" : "ready",
-        verified: false, observation:'failed', error: `读取会话失败：${String(error)}`,
+        verified: false, observation:'failed', error: historyRead && error instanceof BackendRequestError && error.status === 404
+          ? `运行不可读取：${String(error)}` : `读取会话失败：${String(error)}`,
+        missing:!historyRead && error instanceof BackendRequestError && error.status === 404,
         ...(error instanceof RunProtocolError ? {protocolIssue:{message:error.message, raw:error.raw}} : {}),
       });
     }

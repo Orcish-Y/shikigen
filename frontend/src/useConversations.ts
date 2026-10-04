@@ -47,7 +47,7 @@ export function useConversations(session: BackendSession | null, previewMode = f
     messages: (state.views[thread.id]?.messages ?? []).map(displayMessage),
   }));
   const active = sessions.find(item => item.id === activeId) ?? {
-    id: "", title: state.listing ? "正在读取会话" : "新建会话开始对话", group: "历史" as const,
+    id: activeId, title: activeId ? '会话待核实' : state.listing ? "正在读取会话" : "新建会话开始对话", group: "历史" as const,
     summary: "", messages: [],
   };
   let statusLabel = "未选择会话";
@@ -67,6 +67,15 @@ export function useConversations(session: BackendSession | null, previewMode = f
       setPreviewId(item.id);
     },
     send: (message: string) => store.send(message),
+    submission: state.submissions[activeId],
+    confirmSend: (seq:number, id:string) => store.confirmSend(seq, id),
+    sendAsNewTask: (id:string) => store.sendAsNewTask(id),
+    canSendAsNewTask: !previewMode && store.canSendAsNewTask(),
+    submittedUserMessages: view.messages.filter(message => message.content.type === 'human' && !message.preview),
+    canConfirmSend: view.verified && view.history === 'ready',
+    missing: view.missing,
+    copyDraftToNewConversation: store.copyDraftToNewConversation,
+    storageIssue: state.storageIssue,
     draft: (previewMode ? previewDrafts[activeId] : state.drafts[activeId]) ?? "",
     updateDraft: (value: string) => {
       if (!activeId) return;

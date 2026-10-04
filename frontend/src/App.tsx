@@ -14,6 +14,7 @@ import {
 import { Navigation, History } from "./components/Sidebar";
 import { Conversation, Composer } from "./components/Conversation";
 import { Overlay } from "./components/Overlay";
+import { SendRecovery, DraftCopy } from './components/SendRecovery';
 import type { BackendSession } from "./backend-client";
 import { useConversations } from "./useConversations";
 
@@ -239,7 +240,18 @@ function Workspace({ session, conversations }: {
             {conversations.error && <p className="business-notice" role="alert">{conversations.error}</p>}
             {conversations.notice && <p className="business-notice" role="status">{conversations.notice}</p>}
             {conversations.verifying && <p className="business-notice" role="status">正在核实当前运行状态…</p>}
-            {conversations.approvalStatus && <p className="business-notice" role="status">{conversations.approvalStatus}</p>}
+            {conversations.approvalStatus && <p id="current-approval-status" tabIndex={-1} className="business-notice" role="status">{conversations.approvalStatus}</p>}
+            {conversations.storageIssue && <p className="business-notice" role="alert">{conversations.storageIssue}</p>}
+            {conversations.missing && <section className="business-notice" aria-label="会话文字保留">
+              <p>会话不存在；草稿和提交原文仍保留，可以复制到新会话后手动发送。</p>
+              <DraftCopy text={conversations.draft || conversations.submission?.text || ''}
+                onTransfer={() => void conversations.copyDraftToNewConversation()} />
+            </section>}
+            {conversations.submission?.status === 'unknown' && <SendRecovery key={`${activeId}:${conversations.submission.id}`}
+              record={conversations.submission} messages={conversations.submittedUserMessages}
+              ready={conversations.canConfirmSend} canStart={conversations.canSendAsNewTask}
+              loading={conversations.loading} status={conversations.statusLabel} onQuery={conversations.reload}
+              onConfirm={conversations.confirmSend} onNewTask={conversations.sendAsNewTask} />}
             {conversations.protocolIssue && <details className="business-notice">
               <summary>最近协议问题（只读原文）</summary>
               <p>{conversations.protocolIssue.message}</p>
@@ -261,14 +273,21 @@ function Workspace({ session, conversations }: {
               canSend={conversations.canSend}
               sending={conversations.sending}
               onSend={() => {
-                const text = conversations.draft.trim();
-                if (text && conversations.send(text)) updateDraft("");
+                conversations.send(conversations.draft);
               }}
               draft={conversations.draft}
               hasConversation={Boolean(activeId)}
               onChange={updateDraft}
               onCommands={() => setOverlay("commands")}
               shortcut={shortcut}
+              runStatus={conversations.run?.status}
+              storageIssue={conversations.storageIssue}
+              sendUnknown={conversations.submission?.status === 'unknown'}
+              onApproval={() => {
+                const target = document.getElementById('current-approval-status');
+                target?.scrollIntoView({block:'nearest'});
+                target?.focus();
+              }}
             />
           </main>
         </div>

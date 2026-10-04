@@ -1,4 +1,5 @@
 import asyncio
+import json
 import tempfile
 import unittest
 from contextlib import asynccontextmanager
@@ -168,6 +169,32 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
       ).status_code,
       404,
     )
+
+  async def test_original_chat_text_and_surrogate_replacement(
+    self,
+  ):
+    for original, expected in (
+      ("  中文原文\n    缩进与空白  \n", "  中文原文\n    缩进与空白  \n"),
+      ("  中文\udcff\n", "  中文\ufffd\n"),
+    ):
+      with self.subTest(original=ascii(original)):
+        thread = (await self.client.post("/api/threads")).json()["thread_id"]
+        response = await self.client.post(
+          f"/api/threads/{thread}/stream",
+          content=json.dumps({"message": original}, ensure_ascii=True),
+          headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(response.status_code, 200)
+        metadata = parse_sse_frames(response.text)[0]["data"]
+        history = (await self.client.get(f"/api/threads/{thread}/messages")).json()[
+          "data"
+        ]
+        users = [
+          message for message in history if message["content"]["type"] == "human"
+        ]
+        self.assertEqual(len(users), 1)
+        self.assertEqual(users[0]["content"]["content"], expected)
+        self.assertEqual(users[0]["run_id"], metadata["run_id"])
 
   async def test_get_existing_stream_rebuilds_and_rejects_cursors(self):
     thread = await self.runtime.threads.create_thread()

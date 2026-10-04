@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { composerEnter } from '../composer-keyboard';
+import type { RunStatus } from '../backend-client';
 import {
   ArrowUp,
   Copy,
@@ -149,6 +151,10 @@ export function Composer({
   sending = false,
   onSend,
   hasConversation = true,
+  runStatus,
+  onApproval,
+  storageIssue,
+  sendUnknown = false,
 }: {
   backendReady: boolean;
   draft: string;
@@ -159,7 +165,12 @@ export function Composer({
   sending?: boolean;
   onSend: () => void;
   hasConversation?: boolean;
+  runStatus?: RunStatus;
+  onApproval?: () => void;
+  storageIssue?: string | null;
+  sendUnknown?: boolean;
 }) {
+  const composition = useRef({active:false, endedAt:-Infinity});
   return (
     <div className="composer-area">
       <div className="composer">
@@ -171,24 +182,33 @@ export function Composer({
           rows={3}
           value={draft}
           onChange={(event) => onChange(event.target.value)}
+          onCompositionStart={() => { composition.current.active = true; }}
+          onCompositionEnd={event => { composition.current = {active:false, endedAt:event.timeStamp}; }}
+          onKeyDown={event => composerEnter(event.nativeEvent, canSend && Boolean(draft.trim()), onSend,
+            composition.current.active, composition.current.endedAt)}
         />
         <div className="composer-toolbar">
           <span className="composer-status">
             <span className="status-dot" />
             {backendReady ? "后端已就绪" : "后端未连接"} · 可编辑草稿
           </span>
-          <button
+          {runStatus === 'interrupted' ? <button className="primary-button" onClick={onApproval}>处理审批</button>
+            : runStatus === 'running' ? <button className="primary-button" disabled title="取消操作暂不可用">取消运行</button>
+            : <button
             className="primary-button"
             disabled={!canSend || !draft.trim()}
             onClick={onSend}
           >
-            {sending ? "运行中…" : "发送"}
+            {sending ? "确认发送中…" : "发送"}
             <ArrowUp size={16} />
-          </button>
+          </button>}
         </div>
       </div>
       <div className="composer-footer">
-        <span>草稿保留至本次应用关闭</span>
+        <span role="status" aria-live="polite" aria-atomic="true">{sending ? '确认发送中，可继续编辑草稿'
+          : sendUnknown ? '发送结果待确认，请核对已提交消息；可编辑草稿'
+          : storageIssue ? '草稿仅在本次应用中保留' : runStatus === 'running' || runStatus === 'interrupted'
+          ? '可编辑草稿，运行结束后手动发送' : '草稿在本地保存，重启后保留'}</span>
         <button className="text-button" onClick={onCommands}>
           <kbd>{shortcut} K</kbd>命令面板
         </button>
