@@ -1,4 +1,5 @@
 export interface Message {
+  preview?: boolean;
   id: string;
   role: "user" | "assistant";
   text: string;

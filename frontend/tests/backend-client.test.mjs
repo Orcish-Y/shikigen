@@ -12,7 +12,7 @@ test('history preserves complete records and snapshot identity is normalized and
   const record = {id: 9, thread_id: 't', run_id: 'r', seq: 7, run_status: 'completed',
     event_type: 'tool_message', category: 'message', event_key: 'tool:x', metadata: {source:'kept'},
     created_at: '2026-10-04T00:00:00Z',
-    content: {type:'tool', message_id:'m', content:'原文', status:'error', artifact:{file:'报告'}}};
+    content: {type:'tool', message_id:'m', tool_call_id:'call', content:'原文', status:'error', artifact:{file:'报告'}}};
   let snapshot = {id:'r', thread_id:'t', status:'completed', usage:null, usage_pending:false};
   const client = new BackendClient(async (url, init) => {
     assert.equal(init.cache, 'no-store');

@@ -119,8 +119,11 @@ test('a confirmed creation is retained after list failure and does not steal a n
   client.update(null);
 });
 
-const stream = frames => new Response(frames.map(([event, data]) =>
-  `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`).join(''), {headers:{'content-type':'text/event-stream'}});
+const stream = (frames, keepOpen = false) => {
+  const text = frames.map(([event, data]) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`).join('');
+  const body = keepOpen ? new ReadableStream({start(controller) {controller.enqueue(new TextEncoder().encode(text));}}) : text;
+  return new Response(body, {headers:{'content-type':'text/event-stream'}});
+};
 
 test('running and interrupted history reopens the existing stream; replay cannot override metadata', async () => {
   for (const status of ['running', 'interrupted']) {
@@ -129,14 +132,15 @@ test('running and interrupted history reopens the existing stream; replay cannot
       assert.notEqual(init.method, 'POST');
       if (new URL(url).pathname === '/api/threads') return Response.json({data:[thread('t')], next_cursor:null});
       if (url.endsWith('/messages')) return Response.json({data:[message('t', '已有任务', status)]});
+      if (url.endsWith('/runs/run-t')) return Response.json({data:{id:'run-t',thread_id:'t',status}});
       observations++;
       assert.ok(url.endsWith('/runs/run-t/stream'));
       return stream([
         ['metadata', {thread_id:'t', run_id:'run-t', status:'running'}],
-        ['event', {seq:2, category:'message', payload:message('t', '已有任务', status).content}],
-        ['event', {seq:4, category:'lifecycle', payload:{status:'interrupted'}}],
+        ['event', {seq:2, created_at:message('t','').created_at, event_type:'created', category:'message', payload:message('t', '已有任务', status).content}],
+        ['event', {seq:4, created_at:message('t','').created_at, event_type:'status_changed', category:'lifecycle', payload:{status:'interrupted'}}],
         ['metadata', {thread_id:'t', run_id:'run-t', status}],
-      ]);
+      ], status === 'running');
     });
     const store = new ConversationStore();
     client.update(ready(1));
@@ -162,7 +166,7 @@ test('new run metadata does not inherit the previous failed runs error, usage or
     if (new URL(url).pathname === '/api/threads') return Response.json({data:[thread('t')], next_cursor:null});
     if (url.endsWith('/messages')) return Response.json({data:[message('t', '旧任务', 'error')]});
     return Response.json({data:{id:'run-t', thread_id:'t', status:'error', error:'上一轮失败',
-      completed_at:'2026-10-04T01:00:00Z', usage:{total_tokens:99}}});
+      completed_at:'2026-10-04T01:00:00Z', usage:{total_input:90, total_output:9, total_tokens:99}}});
   });
   const store = new ConversationStore();
   client.update(ready(1));
@@ -186,7 +190,7 @@ test('normal send remains explicit and committed history is readable after the s
       sent = true;
       return stream([
         ['metadata', {thread_id:'t', run_id:'run-t', status:'running'}],
-        ['event', {seq:2, category:'message', payload:saved.content}],
+        ['event', {seq:2, created_at:saved.created_at, event_type:'created', category:'message', payload:saved.content}],
         ['metadata', {thread_id:'t', run_id:'run-t', status:'completed'}],
       ]);
     }

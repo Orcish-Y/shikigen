@@ -87,6 +87,7 @@ export function Conversation({
                     {preview && message.role === "assistant" && (
                       <span className="badge">示例</span>
                     )}
+                    {message.preview && <span className="badge">生成中 · 尚未保存</span>}
                   </div>
                   <div className="message-text">
                     {message.text.split("\n\n").map((paragraph, index) => (

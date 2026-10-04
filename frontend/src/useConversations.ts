@@ -15,6 +15,7 @@ function displayMessage(message: ConversationMessage): Message {
   const text = messageText(content.content);
   return {
     id: String(message.seq),
+    preview: message.preview === true,
     role: content.type === "human" ? "user" : "assistant",
     text: content.type === "tool" ? "" : text + (content.tool_calls?.length
       ? "\n" + content.tool_calls.map(call => `${call.name}(${JSON.stringify(call.args)})`).join("\n") : ""),
@@ -78,6 +79,11 @@ export function useConversations(session: BackendSession | null, previewMode = f
     verifying: Boolean(view.run && !view.verified && !view.error),
     creating: state.creating, sending: view.sending,
     error: view.error,
+    protocolIssue:view.protocolIssue,
+    approvalStatus: previewMode || view.run?.status !== 'interrupted' ? null
+      : view.approval?.verified ? '审批请求已核实，等待处理。'
+      : view.observation === 'connecting' || view.observation === 'open' ? '正在重建审批请求…'
+      : '审批尚未恢复，请刷新数据重新核实。',
     pagination: previewMode ? undefined : {
       loaded: state.listLoaded, refreshing: state.listing, loadingMore: state.loadingMore,
       hasMore: state.nextCursor !== null, listError: state.listError, pageError: state.pageError,

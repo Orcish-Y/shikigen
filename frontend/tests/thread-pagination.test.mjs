@@ -180,7 +180,9 @@ test('current same-run metadata wins over an older list projection that complete
       return refresh.promise;
     }
     if (url.pathname.endsWith('/messages')) {
-      return json({ data: [{ id: 1, thread_id: 't', run_id: 'run-1', run_status: 'running', seq: 1 }] });
+      return json({ data: [{ id: 1, thread_id: 't', run_id: 'run-1', run_status: 'running', seq: 1,
+        category:'message', event_type:'human_message', event_key:'human:m', metadata:{}, created_at:instant,
+        content:{type:'human', message_id:'m', content:'正在运行的任务'} }] });
     }
     if (url.pathname.endsWith('/runs/run-1/stream')) {
       return new Response(new ReadableStream({ start(controller) {

@@ -1,4 +1,5 @@
 import type { BackendSnapshot } from "./backend-state";
+import { RunProtocolError, validStatus, validateFrame, validateMessage, validateRun } from './run-protocol.ts';
 
 export interface Thread {
   id: string;
@@ -16,7 +17,7 @@ export interface Run {
   run_id: string;
   status: RunStatus;
   usage?: { total_input: number; total_output: number; total_tokens: number } | null;
-  usage_pending?: boolean;
+  usage_pending?: boolean | null;
   error?: string | null;
   error_code?: string | null;
   created_at?: string;
@@ -52,14 +53,8 @@ export const runStatusLabels: Record<RunStatus, string> = {
   cancelled: "已取消", error: "运行失败",
 };
 
-function validStatus(value: unknown): value is RunStatus {
-  return typeof value === "string" && Object.hasOwn(runStatusLabels, value);
-}
-
 function verifiedRun(value: Run, threadId: string, runId?: string): Run {
-  if (value.thread_id !== threadId || typeof value.run_id !== "string" || !value.run_id.trim()
-      || (runId !== undefined && value.run_id !== runId)) throw new Error("运行身份与请求不一致");
-  if (!validStatus(value.status)) throw new Error("无法识别运行状态");
+  validateRun(value, threadId, runId);
   return value;
 }
 
@@ -72,13 +67,22 @@ export class BackendRequestError extends Error {
     this.retryAfter = retryAfter;
   }
 }
+export interface Checkpoint { configurable: { thread_id: string; checkpoint_ns: string; checkpoint_id: string } }
+export interface ApprovalRequired {
+  status: 'required'; checkpoint: Checkpoint;
+  interrupts: { id: string; namespace: string; value: unknown }[];
+}
+export type ApprovalPayload = ApprovalRequired
+  | { status:'resolved'; checkpoint:Checkpoint; responses:Record<string, {decisions:({type:'approve'} | {type:'reject'; message?:string | null})[]}> }
+  | { status:'invalidated'; checkpoint:Checkpoint; interrupt_ids:string[]; reason:'run_cancelled' };
+export type RunEvent = {seq:number; created_at:string} & (
+  | {category:'message'; event_type:'created'; payload:MessageContent}
+  | {category:'lifecycle'; event_type:'status_changed'; payload:{status:RunStatus; message?:string | null; error_code?:string | null}}
+  | {category:'approval'; event_type:'required' | 'resolved' | 'invalidated'; payload:ApprovalPayload});
 export type RunFrame =
   | { event: "metadata"; data: Run }
   | { event: "delta"; data: { seq: number; message_id: string; field: "content" | "reasoning"; value: string } }
-  | { event: "event"; data:
-    | { seq: number; category: "message"; payload: MessageContent }
-    | { seq: number; category: "lifecycle"; payload: { status: RunStatus; message?: string; error_code?: string } }
-    | { seq: number; category: "approval"; payload: unknown } }
+  | { event: "event"; data: RunEvent }
   | { event: "error"; data: { code: string; message: string; recoverable: boolean } };
 
 /** One address lease. Retained callers can never use it after the host revokes it. */
@@ -152,17 +156,25 @@ export class BackendSession {
   async messages(threadId: string, signal?: AbortSignal) {
     const { data } = await this.json<{ data: StoredMessage[] }>(
       `/api/threads/${encodeURIComponent(threadId)}/messages`, { cache: "no-store" }, signal);
-    if (!Array.isArray(data)) throw new Error("会话历史格式无效");
+    if (!Array.isArray(data)) throw new RunProtocolError("会话历史格式无效", data);
     const statuses = new Map<string, RunStatus>();
     const sequences = new Set<number>();
     for (const message of data) {
-      if (message.thread_id !== threadId || typeof message.run_id !== "string" || !message.run_id.trim()) {
-        throw new Error("消息身份与会话不一致");
+      if (!message || message.thread_id !== threadId || typeof message.run_id !== "string" || !message.run_id.trim()) {
+        throw new RunProtocolError("消息身份与会话不一致", message);
       }
       if (!validStatus(message.run_status) || (statuses.has(message.run_id) && statuses.get(message.run_id) !== message.run_status)) {
-        throw new Error("消息所属运行状态无效或不一致");
+        throw new RunProtocolError("消息所属运行状态无效或不一致", message);
       }
-      if (!Number.isSafeInteger(message.seq) || message.seq < 1 || sequences.has(message.seq)) throw new Error("消息顺序无效");
+      if (!Number.isSafeInteger(message.seq) || message.seq < 1 || sequences.has(message.seq)) throw new RunProtocolError("消息顺序无效", message);
+      if (!Number.isSafeInteger(message.id) || message.id < 1 || message.category !== 'message'
+        || typeof message.event_type !== 'string' || !message.event_type.trim()
+        || !(message.event_key === null || typeof message.event_key === 'string')
+        || !message.metadata || typeof message.metadata !== 'object' || Array.isArray(message.metadata)
+        || typeof message.created_at !== 'string' || !Number.isFinite(Date.parse(message.created_at))) {
+        throw new RunProtocolError('历史消息公开字段无效', message);
+      }
+      validateMessage(message.content);
       statuses.set(message.run_id, message.run_status);
       sequences.add(message.seq);
     }
@@ -187,11 +199,14 @@ export class BackendSession {
   }
 
   private runReceiver(threadId: string, receive: (frame: RunFrame) => void, runId?: string) {
+    let metadata = false;
     return (frame: RunFrame) => {
+      frame = validateFrame(frame.event, frame.data, threadId, runId);
       if (frame.event === "metadata") {
-        verifiedRun(frame.data, threadId, runId);
         runId = frame.data.run_id;
+        metadata = true;
       }
+      if (!metadata && frame.event !== 'metadata' && frame.event !== 'error') throw new RunProtocolError('事件流缺少有效运行身份', frame.data);
       receive(frame);
     };
   }
@@ -220,7 +235,10 @@ export class BackendSession {
           if (!line) {
             request.signal.throwIfAborted();
             if (data.length && ["metadata", "delta", "event", "error"].includes(event)) {
-              receive({ event, data: JSON.parse(data.join("\n")) } as RunFrame);
+              const raw = data.join('\n');
+              let payload: unknown;
+              try { payload = JSON.parse(raw); } catch { throw new RunProtocolError('SSE JSON 无法解析', raw); }
+              receive({ event, data: payload } as RunFrame);
             }
             event = "";
             data = [];
@@ -228,6 +246,7 @@ export class BackendSession {
           else if (line.startsWith("data:")) data.push(line.slice(5).replace(/^ /, ""));
         }
       }
+      if (buffer.trim() || data.length) throw new RunProtocolError('SSE 在完整帧结束前断开', buffer || data.join('\n'));
     } finally {
       request.signal.removeEventListener("abort", cancel);
       await reader.cancel().catch(() => {});

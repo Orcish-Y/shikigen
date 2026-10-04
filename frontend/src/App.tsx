@@ -239,6 +239,13 @@ function Workspace({ session, conversations }: {
             {conversations.error && <p className="business-notice" role="alert">{conversations.error}</p>}
             {conversations.notice && <p className="business-notice" role="status">{conversations.notice}</p>}
             {conversations.verifying && <p className="business-notice" role="status">正在核实当前运行状态…</p>}
+            {conversations.approvalStatus && <p className="business-notice" role="status">{conversations.approvalStatus}</p>}
+            {conversations.protocolIssue && <details className="business-notice">
+              <summary>最近协议问题（只读原文）</summary>
+              <p>{conversations.protocolIssue.message}</p>
+              <pre style={{maxHeight:320, overflow:'auto', whiteSpace:'pre-wrap'}}>{typeof conversations.protocolIssue.raw === 'string'
+                ? conversations.protocolIssue.raw : JSON.stringify(conversations.protocolIssue.raw, null, 2)}</pre>
+            </details>}
             {session && <button className="text-button" onClick={conversations.reload} disabled={conversations.sending || conversations.loading}>刷新数据</button>}
             <Conversation
               preview={!session}
