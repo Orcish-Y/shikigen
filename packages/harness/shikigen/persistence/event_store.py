@@ -15,6 +15,8 @@ from shikigen.contracts.runs import (
   EventWriteResult,
   MessageConflict,
   RunNotFound,
+  RunStatus,
+  ThreadMessage,
 )
 from shikigen.persistence.database import Database, _now, integrity_error
 
@@ -302,6 +304,24 @@ class EventStore:
     )
     rows = await cursor.fetchall()
     return [self._decode_event(row) for row in rows]
+
+  async def list_thread_history(self, thread_id: str) -> list[ThreadMessage]:
+    # 单条 JOIN 在同一读取快照中投影状态，避免逐消息读取时状态变化。
+    async with self._db.lock:
+      async with self._db.connection.execute(
+        """SELECT e.*, r.status AS run_status
+        FROM run_events e LEFT JOIN runs r
+          ON r.id = e.run_id AND r.thread_id = e.thread_id
+        WHERE e.thread_id = ? AND e.category = 'message'
+        ORDER BY e.seq ASC""",
+        (thread_id,),
+      ) as cursor:
+        return [
+          ThreadMessage(
+            **self._decode_event(row), run_status=RunStatus(row["run_status"])
+          )
+          for row in await cursor.fetchall()
+        ]
 
   async def list_thread_messages(self, thread_id: str) -> list[CommittedEvent]:
     async with self._db.lock:

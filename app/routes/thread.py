@@ -1,6 +1,8 @@
-from fastapi import APIRouter, HTTPException, Request
-from shikigen.contracts.runs import StorageConflict, ThreadNotFound
+from fastapi import APIRouter, HTTPException, Request, Response
+from shikigen.contracts.runs import StorageConflict
 from shikigen.runtime import Runtime
+
+from app.routes.queries import query_response_policy
 
 router = APIRouter(prefix="/api/threads")
 
@@ -43,10 +45,9 @@ async def create_thread(request: Request) -> dict[str, str]:
 async def get_thread_messages(
   thread_id: str,
   request: Request,
+  response: Response,
 ) -> dict[str, object]:
   runtime: Runtime = request.app.state.runtime
-  try:
+  with query_response_policy(response):
     messages = await runtime.threads.list_thread_messages(thread_id)
-  except ThreadNotFound as error:
-    raise HTTPException(status_code=404, detail=str(error)) from error
   return {"data": messages}

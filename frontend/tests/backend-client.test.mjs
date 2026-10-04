@@ -7,6 +7,32 @@ import { subscribeBackendState } from '../src/backend-state.ts';
 
 const ready = (revision, startup_id, base_url) => ({revision, startup_id, base_url, state:'ready', can_retry:false, error:null});
 const tick = () => new Promise(resolve => setImmediate(resolve));
+
+test('history preserves complete records and snapshot identity is normalized and verified', async () => {
+  const record = {id: 9, thread_id: 't', run_id: 'r', seq: 7, run_status: 'completed',
+    event_type: 'tool_message', category: 'message', event_key: 'tool:x', metadata: {source:'kept'},
+    created_at: '2026-10-04T00:00:00Z',
+    content: {type:'tool', message_id:'m', content:'原文', status:'error', artifact:{file:'报告'}}};
+  let snapshot = {id:'r', thread_id:'t', status:'completed', usage:null, usage_pending:false};
+  const client = new BackendClient(async (url, init) => {
+    assert.equal(init.cache, 'no-store');
+    return Response.json({data: url.endsWith('/messages') ? [record] : snapshot});
+  });
+  client.update(ready(1, 'host', 'http://127.0.0.1:1'));
+  assert.deepEqual(await client.session.messages('t'), [record]);
+  const run = await client.session.runSnapshot('t', 'r');
+  assert.equal(run.run_id, 'r');
+  assert.equal(run.thread_id, 't');
+  assert.equal(run.status, 'completed');
+  assert.equal(run.usage, null);
+  snapshot = {...snapshot, thread_id:'other'};
+  await assert.rejects(client.session.runSnapshot('t', 'r'), /身份/);
+  snapshot = {...snapshot, thread_id:'t', id:'other'};
+  await assert.rejects(client.session.runSnapshot('t', 'r'), /身份/);
+  snapshot = {...snapshot, id:'r', status:'unknown'};
+  await assert.rejects(client.session.runSnapshot('t', 'r'), /状态/);
+  client.update(null);
+});
 async function server(t, handler) {
   const http = createServer(handler).listen(0, '127.0.0.1');
   await once(http, 'listening');
@@ -79,7 +105,7 @@ test('delayed JSON and SSE headers from a revoked startup are discarded and rele
 
 test('queued SSE frames cannot publish after revocation, even within the same network chunk', async () => {
   const bytes = new TextEncoder().encode(
-    'event: metadata\r\ndata: {"status":"running"}\r\n\r\n' +
+    'event: metadata\r\ndata: {"thread_id":"t","run_id":"r","status":"running"}\r\n\r\n' +
     'event: delta\ndata: {"value":"旧启动迟到事件"}\n\n');
   let cancelled = false;
   const client = new BackendClient(async () => new Response(new ReadableStream({

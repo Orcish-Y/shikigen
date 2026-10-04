@@ -31,6 +31,10 @@ class RunNotFound(RunError):
   pass
 
 
+class QueryUnavailable(RunError):
+  """持久数据暂不可读；不改变运行事实，调用方稍后重试。"""
+
+
 class StorageConflict(RunError):
   """持久身份或排他约束冲突，可由 HTTP 映射为 409。"""
 
@@ -86,6 +90,12 @@ class CommittedEvent(TypedDict):
   content: Any
   metadata: dict[str, Any]
   created_at: str
+
+
+class ThreadMessage(CommittedEvent):
+  """完整会话消息及查询时所属 Run 的状态，不修改已保存的正文。"""
+
+  run_status: RunStatus
 
 
 @dataclass(frozen=True, slots=True)

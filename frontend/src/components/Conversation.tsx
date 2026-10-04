@@ -51,14 +51,18 @@ export function Conversation({
   session,
   onSuggestion,
   preview = false,
+  readState = "ready",
 }: {
   session: Session;
   onSuggestion: (text: string) => void;
   preview?: boolean;
+  readState?: "idle" | "loading" | "ready" | "error";
 }) {
   return (
     <div className="timeline" key={session.id}>
       <div className="message-container">
+        {(readState === "loading" || readState === "idle") && <p className="timeline-caption" role="status">正在读取会话历史…</p>}
+        {readState === "error" && <p className="business-notice" role="alert">会话历史读取失败，请刷新重试。已有记录已保留。</p>}
         {session.messages.length ? (
           <>
             {preview && <div className="timeline-caption">示例对话 · 仅用于布局预览</div>}
@@ -110,7 +114,7 @@ export function Conversation({
               </article>
             ))}
           </>
-        ) : (
+        ) : readState === "ready" ? (
           <div className="empty-conversation">
             <img src="/logo.svg" alt="" />
             <h2>从一个想法开始</h2>
@@ -128,7 +132,7 @@ export function Conversation({
               ))}
             </div>
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );
@@ -143,6 +147,7 @@ export function Composer({
   canSend = false,
   sending = false,
   onSend,
+  hasConversation = true,
 }: {
   backendReady: boolean;
   draft: string;
@@ -152,6 +157,7 @@ export function Composer({
   canSend?: boolean;
   sending?: boolean;
   onSend: () => void;
+  hasConversation?: boolean;
 }) {
   return (
     <div className="composer-area">
@@ -159,7 +165,8 @@ export function Composer({
         <textarea
           id="message-draft"
           aria-label="消息草稿"
-          placeholder="向 shikigen 发送指令或提问…"
+          placeholder={hasConversation ? "向 shikigen 发送指令或提问…" : "请先新建或选择会话"}
+          disabled={!hasConversation}
           rows={3}
           value={draft}
           onChange={(event) => onChange(event.target.value)}
@@ -180,7 +187,7 @@ export function Composer({
         </div>
       </div>
       <div className="composer-footer">
-        <span>草稿仅保留在当前页面</span>
+        <span>草稿保留至本次应用关闭</span>
         <button className="text-button" onClick={onCommands}>
           <kbd>{shortcut} K</kbd>命令面板
         </button>

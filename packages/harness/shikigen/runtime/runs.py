@@ -43,6 +43,7 @@ from shikigen.core.execution import (
   RunExecution,
 )
 from shikigen.persistence import ChatStore
+from shikigen.persistence.database import committed_query
 from shikigen.runtime.lifecycle import ApplicationLifecycle
 from shikigen.runtime.recovery import RunRecoveryCoordinator
 from shikigen.runtime.run_events import RunEventIngestor
@@ -540,6 +541,13 @@ class RunService:
     lock = self._thread_locks.setdefault(thread_id, asyncio.Lock())
     async with lock:
       return await read()
+
+  async def get_run_snapshot(self, thread_id: str, run_id: str) -> RunSnapshot:
+    """只读已提交快照；不校验 checkpoint、不恢复执行、不写恢复错误。"""
+    with committed_query():
+      run = await self._read_run(thread_id, run_id)
+      RunStatus(run["status"])
+      return run
 
   async def _read_run(self, thread_id: str, run_id: str) -> RunSnapshot:
     row = await self._store.get_run(run_id, thread_id)

@@ -1,11 +1,14 @@
 """各业务存储共享的连接、锁和 SQLite 错误转换。"""
 
 import asyncio
+import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 
 import aiosqlite
 
-from shikigen.contracts.runs import StorageConflict, ThreadBusy
+from shikigen.contracts.runs import QueryUnavailable, StorageConflict, ThreadBusy
 
 
 class Database:
@@ -14,6 +17,32 @@ class Database:
   def __init__(self, connection: aiosqlite.Connection):
     self.connection = connection
     self.lock = asyncio.Lock()
+
+
+def temporary_storage_error(error: Exception) -> bool:
+  if isinstance(error, OSError):
+    return True
+  if isinstance(error, sqlite3.OperationalError):
+    return getattr(error, "sqlite_errorcode", 0) & 0xFF in {
+      sqlite3.SQLITE_BUSY,
+      sqlite3.SQLITE_LOCKED,
+      sqlite3.SQLITE_IOERR,
+      sqlite3.SQLITE_CANTOPEN,
+      sqlite3.SQLITE_FULL,
+      sqlite3.SQLITE_READONLY,
+    }
+  return False
+
+
+@contextmanager
+def committed_query() -> Iterator[None]:
+  """纯读查询的故障边界；只有暂时存储故障可重试，损坏原样抛出。"""
+  try:
+    yield
+  except Exception as error:
+    if temporary_storage_error(error):
+      raise QueryUnavailable("Committed data unavailable; retry later") from error
+    raise
 
 
 def _now() -> str:

@@ -3,8 +3,9 @@
 import uuid
 from typing import Any
 
-from shikigen.contracts.runs import CommittedEvent, ThreadNotFound
+from shikigen.contracts.runs import ThreadMessage, ThreadNotFound
 from shikigen.persistence import ChatStore
+from shikigen.persistence.database import committed_query
 from shikigen.runtime.lifecycle import ApplicationLifecycle
 
 
@@ -29,7 +30,8 @@ class ThreadService:
   async def list_threads(self) -> list[dict[str, Any]]:
     return await self._store.list_threads()
 
-  async def list_thread_messages(self, thread_id: str) -> list[CommittedEvent]:
-    if not await self._store.thread_exists(thread_id):
-      raise ThreadNotFound("Thread not found")
-    return await self._store.list_thread_messages(thread_id)
+  async def list_thread_messages(self, thread_id: str) -> list[ThreadMessage]:
+    with committed_query():
+      if not await self._store.thread_exists(thread_id):
+        raise ThreadNotFound("Thread not found")
+      return await self._store.list_thread_history(thread_id)

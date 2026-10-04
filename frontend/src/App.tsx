@@ -29,6 +29,7 @@ function initialCollapsed() {
 
 export default function App() {
   const backend = useBackendState();
+  const conversations = useConversations(backend.session, !backend.desktop);
   if (backend.desktop && (backend.error || backend.snapshot?.state !== "ready" || !backend.session)) {
     const state = backend.snapshot;
     const labels = {
@@ -65,15 +66,16 @@ export default function App() {
     );
   }
 
-  return <Workspace key={backend.session?.startupId ?? "preview"} session={backend.session} />;
+  return <Workspace session={backend.session} conversations={conversations} />;
 }
 
-function Workspace({ session }: { session: BackendSession | null }) {
+function Workspace({ session, conversations }: {
+  session: BackendSession | null;
+  conversations: ReturnType<typeof useConversations>;
+}) {
   const backendReady = Boolean(session);
-  const conversations = useConversations(session);
   const { sessions, active, activeId } = conversations;
   const [collapsed, setCollapsed] = useState(initialCollapsed);
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [query, setQuery] = useState("");
   const [mobilePanel, setMobilePanel] = useState<
     "navigation" | "history" | null
@@ -91,7 +93,7 @@ function Workspace({ session }: { session: BackendSession | null }) {
     setOverlay(null);
   }
   function updateDraft(value: string) {
-    setDrafts((current) => ({ ...current, [activeId]: value }));
+    conversations.updateDraft(value);
   }
   function exportSession() {
     const content =
@@ -209,9 +211,9 @@ function Workspace({ session }: { session: BackendSession | null }) {
               >
                 <ClockCounterClockwise />
               </button>
-              <h1>{active.title}</h1>
+              <h1 title={activeId ? `${active.title}\n会话 ID：${activeId}` : undefined}>{active.title}</h1>
               <span className="badge toolbar-badge">
-                {session ? conversations.run?.status ?? (conversations.loading ? "读取中" : "就绪") : "示例会话"}
+                {conversations.statusLabel}
               </span>
               <div className="toolbar-actions">
                 <button
@@ -234,10 +236,13 @@ function Workspace({ session }: { session: BackendSession | null }) {
               </div>
             </div>
             {conversations.error && <p className="business-notice" role="alert">{conversations.error}</p>}
+            {conversations.notice && <p className="business-notice" role="status">{conversations.notice}</p>}
+            {conversations.verifying && <p className="business-notice" role="status">正在核实当前运行状态…</p>}
             {session && <button className="text-button" onClick={conversations.reload} disabled={conversations.sending || conversations.loading}>刷新数据</button>}
             <Conversation
               preview={!session}
               session={active}
+              readState={activeId ? conversations.historyState : "ready"}
               onSuggestion={(text) => {
                 updateDraft(text);
                 document.getElementById("message-draft")?.focus();
@@ -248,10 +253,11 @@ function Workspace({ session }: { session: BackendSession | null }) {
               canSend={conversations.canSend}
               sending={conversations.sending}
               onSend={() => {
-                const text = drafts[activeId]?.trim();
+                const text = conversations.draft.trim();
                 if (text && conversations.send(text)) updateDraft("");
               }}
-              draft={drafts[activeId] ?? ""}
+              draft={conversations.draft}
+              hasConversation={Boolean(activeId)}
               onChange={updateDraft}
               onCommands={() => setOverlay("commands")}
               shortcut={shortcut}
@@ -296,12 +302,13 @@ function Workspace({ session }: { session: BackendSession | null }) {
         {overlay === "details" && (
           <Overlay title="运行详情" drawer onClose={() => setOverlay(null)}>
             <div className="details-content">
-              <span className="badge">{conversations.run?.status ?? "尚无真实运行"}</span>
+              <span className="badge">{conversations.statusLabel}</span>
               <h3>{active.title}</h3>
               <dl>
                 {[
+                  ["会话 ID", activeId || undefined],
                   ["Run ID", conversations.run?.run_id],
-                  ["状态", conversations.run?.status],
+                  ["状态", conversations.statusLabel],
                   ["输入 Token", conversations.run?.usage?.total_input],
                   ["输出 Token", conversations.run?.usage?.total_output],
                 ].map(([label, value]) => (
@@ -309,6 +316,7 @@ function Workspace({ session }: { session: BackendSession | null }) {
                 ))}
               </dl>
               {conversations.run?.status === "interrupted" && <p>此运行正在等待审批。</p>}
+              {conversations.run?.error && <p role="alert">{conversations.run.error}</p>}
               {conversations.error && <p role="alert">{conversations.error}</p>}
 
             </div>

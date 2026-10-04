@@ -3,7 +3,6 @@
 import asyncio
 import json
 import logging
-import sqlite3
 from typing import TYPE_CHECKING, Any
 
 from shikigen.contracts.events import ApprovalRequired
@@ -16,27 +15,12 @@ from shikigen.contracts.runs import (
 from shikigen.core.execution import ExecutionRegistry
 from shikigen.core.graph_pause import GraphPauseCollector, InvalidCheckpoint
 from shikigen.persistence import ChatStore
+from shikigen.persistence.database import temporary_storage_error
 
 if TYPE_CHECKING:
   from shikigen.runtime.runs import RunTransitions
 
 logger = logging.getLogger(__name__)
-
-
-def _temporary_storage_error(error: Exception) -> bool:
-  if isinstance(error, OSError):
-    return True
-  if isinstance(error, sqlite3.OperationalError):
-    # 扩展错误码的低 8 位是主错误码；SQL/表结构错误不能靠重试解决。
-    return getattr(error, "sqlite_errorcode", 0) & 0xFF in {
-      sqlite3.SQLITE_BUSY,
-      sqlite3.SQLITE_LOCKED,
-      sqlite3.SQLITE_IOERR,
-      sqlite3.SQLITE_CANTOPEN,
-      sqlite3.SQLITE_FULL,
-      sqlite3.SQLITE_READONLY,
-    }
-  return False
 
 
 class RunRecoveryCoordinator:
@@ -66,7 +50,7 @@ class RunRecoveryCoordinator:
       try:
         runs = await self._store.list_nonterminal_runs()
       except Exception as error:
-        if not _temporary_storage_error(error):
+        if not temporary_storage_error(error):
           logger.exception("recovery_scan_failed")
           raise
         logger.warning(
@@ -89,7 +73,7 @@ class RunRecoveryCoordinator:
     except RunNotFound:
       raise
     except Exception as error:
-      if not _temporary_storage_error(error):
+      if not temporary_storage_error(error):
         logger.exception("recovery_failed thread_id=%s run_id=%s", thread_id, run_id)
         raise
       logger.warning(

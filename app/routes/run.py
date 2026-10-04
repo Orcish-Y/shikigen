@@ -1,6 +1,6 @@
 from collections.abc import AsyncGenerator
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ValidationError
 from shikigen.contracts.events import ApprovalSubmission
@@ -16,6 +16,7 @@ from shikigen.runtime import Runtime
 from shikigen.runtime.run_observation import RunObservation
 from starlette.types import Receive, Scope, Send
 
+from app.routes.queries import query_response_policy
 from app.run_contract import (
   MetadataData,
   MetadataEnvelope,
@@ -25,6 +26,16 @@ from app.run_contract import (
 )
 
 router = APIRouter(prefix="/api/threads/{thread_id}")
+
+
+@router.get("/runs/{run_id}", summary="只读获取已提交运行快照")
+async def get_run_snapshot(
+  thread_id: str, run_id: str, request: Request, response: Response
+) -> dict[str, object]:
+  runtime: Runtime = request.app.state.runtime
+  with query_response_policy(response):
+    snapshot = await runtime.runs.get_run_snapshot(thread_id, run_id)
+  return {"data": snapshot}
 
 
 @router.get(

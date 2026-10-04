@@ -12,7 +12,7 @@ from window_acceptance import REPO, WindowAcceptance, wait_until
 
 
 class ClientAcceptance(WindowAcceptance):
-  artifact_root = REPO / ".scratch/windows-backend-lifecycle/client-acceptance"
+  artifact_root = REPO / ".scratch/frontend-completion/ticket-01-native"
 
   def body(self):
     return self.evaluate("document.body.innerText")
@@ -66,7 +66,7 @@ class ClientAcceptance(WindowAcceptance):
       self.screenshot()
       raise
     self.click("运行详情")
-    wait_until(lambda: "completed" in self.body())
+    wait_until(lambda: "已完成" in self.body())
     self.assertIn("Run ID", self.body())
     self.evaluate("document.querySelector('[aria-label=关闭]').click()")
     self.send("由页面显式发送")
@@ -86,15 +86,10 @@ class ClientAcceptance(WindowAcceptance):
   def send(self, message):
     wait_until(
       lambda: self.evaluate(
-        "document.querySelector('.chat-toolbar h1')?.textContent.startsWith('会话 ')"
+        "Boolean(document.querySelector('.session[aria-current=true]'))"
       )
     )
-    self.evaluate(
-      "(() => { const input = document.getElementById('message-draft');"
-      "Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set"
-      f".call(input, {json.dumps(message)});"
-      "input.dispatchEvent(new Event('input', {bubbles:true})); })()"
-    )
+    self.set_draft(message)
     wait_until(
       lambda: self.evaluate(
         "[...document.querySelectorAll('button')]"
@@ -102,6 +97,23 @@ class ClientAcceptance(WindowAcceptance):
       )
     )
     self.click("发送")
+
+  def set_draft(self, message):
+    self.evaluate(
+      "(() => { const input = document.getElementById('message-draft');"
+      "Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set"
+      f".call(input, {json.dumps(message)});"
+      "input.dispatchEvent(new Event('input', {bubbles:true})); })()"
+    )
+
+  def select_thread(self, thread_id):
+    wait_until(
+      lambda: self.evaluate(
+        "(() => { const button = [...document.querySelectorAll('.session')]"
+        f".find(b => b.title.includes({json.dumps(thread_id)}));"
+        "if (!button) return false; button.click(); return true; })()"
+      )
+    )
 
   def instrument_fetch(self, hold_messages=False):
     # Transport boundary only: actual server responses still supply every fact.
@@ -165,12 +177,19 @@ class ClientAcceptance(WindowAcceptance):
     self.click("新建")
     self.send("运行中刷新后不重发")
     wait_until(lambda: (self.root / "executing").exists())
-    wait_until(lambda: "running" in self.body())
+    wait_until(lambda: "运行中" in self.body())
     self.instrument_fetch()
-    wait_until(lambda: "运行中刷新后不重发" in self.body() and "running" in self.body())
+    wait_until(lambda: "运行中刷新后不重发" in self.body() and "运行中" in self.body())
+    self.set_draft("宿主恢复后保留的草稿\n  缩进")
     self.assertEqual(self.counts(), (1, 1))
     retried = self.kill_and_retry_on_next_port(ready)
-    wait_until(lambda: "运行中刷新后不重发" in self.body() and "error" in self.body())
+    wait_until(
+      lambda: "运行中刷新后不重发" in self.body() and "运行失败" in self.body()
+    )
+    self.assertEqual(
+      self.evaluate("document.getElementById('message-draft').value"),
+      "宿主恢复后保留的草稿\n  缩进",
+    )
     requests = self.evaluate("window.__requests")
     old_streams = [
       r
@@ -221,6 +240,7 @@ class ClientAcceptance(WindowAcceptance):
       timeout=20,
     ).raise_for_status()
     retried = self.kill_and_retry_on_next_port(ready)
+    self.select_thread(new_thread)
     wait_until(lambda: "新启动选择的持久事实" in self.body())
     self.evaluate("window.__releaseLate()")
     self.assertNotIn("旧请求迟到内容", self.body())
@@ -281,12 +301,12 @@ class ClientAcceptance(WindowAcceptance):
         # The tool is still blocked: historical interrupted then running must
         # not replace the current metadata snapshot with a stale pause.
         self.assertNotIn("此运行正在等待审批", self.body())
-        self.assertIn("running", self.body())
+        self.assertIn("运行中", self.body())
         self.record(ready=ready, body=self.body(), run_id=run_id)
       finally:
         (self.root / "continue-task").touch()
         pending.result(timeout=15).raise_for_status()
-    wait_until(lambda: "completed" in self.body())
+    wait_until(lambda: "已完成" in self.body())
     self.quit(host)
     self.assertEqual(host.wait(timeout=10), 0)
 

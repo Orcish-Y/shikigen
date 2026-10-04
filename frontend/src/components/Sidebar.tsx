@@ -139,6 +139,7 @@ export function History({
                   <button
                     className={`session ${activeId === session.id ? "selected" : ""}`}
                     key={session.id}
+                    title={`${session.title}\n会话 ID：${session.id}`}
                     onClick={() => onSelect(session.id)}
                     aria-current={activeId === session.id ? "true" : undefined}
                   >

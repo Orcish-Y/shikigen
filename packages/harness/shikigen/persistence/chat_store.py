@@ -12,6 +12,7 @@ from shikigen.contracts.runs import (
   CommittedEvent,
   EventWriteResult,
   RunSnapshot,
+  ThreadMessage,
 )
 from shikigen.persistence.database import Database, integrity_error
 from shikigen.persistence.event_store import EventStore
@@ -200,6 +201,9 @@ class ChatStore:
     return await self._events.list_thread_messages(
       thread_id,
     )
+
+  async def list_thread_history(self, thread_id: str) -> list[ThreadMessage]:
+    return await self._events.list_thread_history(thread_id)
 
   async def list_run_events(self, thread_id: str, run_id: str) -> list[CommittedEvent]:
     return await self._events.list_run_events(
