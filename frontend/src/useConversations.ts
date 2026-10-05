@@ -2,6 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { runStatusLabels, type BackendSession, type MessageContent } from "./backend-client";
 import { ConversationStore, emptyConversation, type ConversationMessage } from "./conversation-state";
 import { demoSessions, type Message, type Session } from "./data/demo";
+import { observationLabels } from './observation-recovery';
 
 function messageText(content: MessageContent["content"]): string {
   return typeof content === "string" ? content : content.map(block => {
@@ -89,6 +90,11 @@ export function useConversations(session: BackendSession | null, previewMode = f
     creating: state.creating, sending: view.sending,
     error: view.error,
     protocolIssue:view.protocolIssue,
+    sendFailure:view.sendFailure,
+    observationView:view,
+    observationLabel:previewMode ? '示例观察' : observationLabels[view.observation],
+    reconnect:store.reconnect,
+    queryStatus:store.queryStatus,
     approvalStatus: previewMode || view.run?.status !== 'interrupted' ? null
       : view.approval?.verified ? '审批请求已核实，等待处理。'
       : view.observation === 'connecting' || view.observation === 'open' ? '正在重建审批请求…'

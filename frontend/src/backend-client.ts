@@ -60,10 +60,12 @@ function verifiedRun(value: Run, threadId: string, runId?: string): Run {
 
 export class BackendRequestError extends Error {
   readonly status: number;
+  readonly detail: string;
   readonly retryAfter: string | null;
   constructor(status: number, detail: string, retryAfter: string | null) {
     super(`HTTP ${status}: ${detail}`);
     this.status = status;
+    this.detail = detail;
     this.retryAfter = retryAfter;
   }
 }
@@ -215,7 +217,8 @@ export class BackendSession {
     const request = await this.request(path, init, signal);
     const response = request.response;
     if (!response.body || !response.headers.get("content-type")?.startsWith("text/event-stream")) {
-      throw new Error("后端未返回事件流");
+      await response.body?.cancel().catch(() => {});
+      throw new RunProtocolError("后端未返回事件流", response.headers.get('content-type'));
     }
     const reader = response.body.getReader();
     const cancel = () => { void reader.cancel().catch(() => {}); };

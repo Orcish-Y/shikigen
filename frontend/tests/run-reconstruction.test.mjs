@@ -147,7 +147,7 @@ test('pre-metadata failure keeps preview; error plus EOF cannot verify an approv
   await until(() => streams.length === 2);
   streams[1].push('error', {code:'unavailable', message:'观察失败', recoverable:true});
   streams[1].close();
-  await until(() => view().observation === 'failed');
+  await until(() => view().observation === 'retry_wait');
   assert.equal(view().messages.at(-1).content.content, '已显示正文');
   store.reload();
   await until(() => streams.length === 3);
@@ -220,6 +220,7 @@ test('public SSE rejects malformed envelopes, wrong identities, missing metadata
 });
 
 test('new POST identity survives a sparse follow-up query and starts with its own facts', async t => {
+  t.mock.timers.enable({apis:['Date','setTimeout'], now:Date.now()});
   let postStream, getStream;
   const client = new BackendClient(async (url, init) => {
     const path = new URL(url).pathname;
@@ -240,6 +241,9 @@ test('new POST identity survives a sparse follow-up query and starts with its ow
   await until(() => postStream);
   postStream.push('metadata', {...metadata(),run_id:'new'});
   postStream.close();
+  await until(() => store.getSnapshot().views.t.observation === 'retry_wait');
+  assert.equal(getStream, undefined, '断流后先等待，不立即重新 GET');
+  t.mock.timers.tick(1000);
   await until(() => getStream);
   getStream.push('metadata', {...metadata(),run_id:'new'});
   await until(() => store.getSnapshot().views.t.verified);

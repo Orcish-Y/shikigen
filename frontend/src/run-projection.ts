@@ -31,12 +31,17 @@ export class RunProjection {
   }
 
   mergeHistory(records: StoredMessage[]) {
-    for (const record of records) this.message(record);
+    this.mergeMessages(records);
     const last = this.snapshot().messages.filter(message => !message.preview).at(-1);
     const discovered = records.find(record => record.run_id === last?.run_id);
     if (discovered && (!this.run || discovered.run_id === this.run.run_id || last!.seq > this.runFloor)) {
       this.metadata({ thread_id: discovered.thread_id, run_id: discovered.run_id, status: discovered.run_status });
     }
+  }
+
+  /** 只补正文事实；已接受 POST／已核实观察的状态继续以 metadata 为准。 */
+  mergeMessages(records:StoredMessage[]) {
+    for (const record of records) this.message(record);
   }
 
   metadata(incoming: Run) {

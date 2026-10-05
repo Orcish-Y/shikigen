@@ -253,7 +253,7 @@ class WindowAcceptance(unittest.TestCase):
     # command or event-handler shortcut: exercise its actual Win32 dispatch.
     win32gui.PostMessage(self.tray_window(host), 6002, 0, button)
 
-  def tray_menu(self, host, label):
+  def tray_menu(self, host, label, *, native_command=False):
     self.tray_click(host, win32con.WM_RBUTTONUP)
 
     def popup():
@@ -280,6 +280,25 @@ class WindowAcceptance(unittest.TestCase):
       )
       labels.append(text.value)
     self.assertEqual(labels, ["打开主窗口", "退出应用"])
+    if native_command:
+      # TrackPopupMenu 的选择向 tray-icon 宿主发送 WM_COMMAND，Muda 按菜单 ID
+      # 分发真实菜单事件。锁屏时仅用于退出清理，不代表物理鼠标／键盘验收。
+      owner = self.tray_window(host)
+      index = labels.index(label)
+      item_id = win32gui.GetMenuItemID(menu, index)
+      self.assertGreater(item_id, 0)
+      self.assertLessEqual(item_id, 0xFFFF)
+      self.assertFalse(
+        win32gui.GetMenuState(menu, index, win32con.MF_BYPOSITION)
+        & (win32con.MF_DISABLED | win32con.MF_GRAYED)
+      )
+      win32gui.PostMessage(owner, win32con.WM_CANCELMODE, 0, 0)
+      wait_until(
+        lambda: not win32gui.IsWindow(hwnd) or not win32gui.IsWindowVisible(hwnd),
+        timeout=5,
+      )
+      win32gui.PostMessage(owner, win32con.WM_COMMAND, item_id, 0)
+      return
     rect = wintypes.RECT()
     self.assertTrue(
       USER32.GetMenuItemRect(0, menu, labels.index(label), ctypes.byref(rect))
@@ -312,7 +331,8 @@ class WindowAcceptance(unittest.TestCase):
     )
 
   def quit(self, host):
-    self.tray_menu(host, "退出应用")
+    # 保留真实菜单身份及正常退出断言；物理输入另由默认路径在解锁后验收。
+    self.tray_menu(host, "退出应用", native_command=True)
 
   def reopen(self, first):
     window = self.window(first)

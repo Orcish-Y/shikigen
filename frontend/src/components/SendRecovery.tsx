@@ -23,6 +23,9 @@ export function SendRecovery({record, messages, ready, canStart, loading, status
   return <section className="business-notice" aria-label="发送结果核对" style={{maxHeight:'40vh', overflow:'auto', flexShrink:0}}>
     <strong>发送结果待确认</strong>
     <p>{record.error} 查询未发现新消息也不能证明此前请求未执行。</p>
+    {record.failure && <details><summary>发送请求错误详情</summary>
+      <pre style={{whiteSpace:'pre-wrap', maxHeight:240, overflow:'auto'}}>{JSON.stringify(record.failure, null, 2)}</pre>
+    </details>}
     <details>
       <summary>查看本次提交原文</summary>
       <pre style={{whiteSpace:'pre-wrap', maxHeight:320, overflow:'auto'}}>{record.text}</pre>

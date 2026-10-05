@@ -1,3 +1,5 @@
+import type { ObservationFailure } from './observation-recovery.ts';
+
 /** 只持久保存输入与提交线索。后端地址、连接及运行事实由应用重新查询。 */
 export interface DraftStorage {
   getItem(key: string): string | null;
@@ -8,6 +10,7 @@ export interface MessageSubmission {
   id: string; text: string; version: number; previousRunId: string | null;
   status: 'pending' | 'unknown' | 'accepted'; runId: string | null;
   error: string | null; retryAt: number;
+  failure?:ObservationFailure;
 }
 const STORAGE_KEY = 'shikigen.message-drafts.v1';
 const STORAGE_WARNING = '本地保存不可用；文字暂存于本次应用内，请及时复制。';
@@ -47,7 +50,9 @@ export class MessageDrafts {
           || value.status === 'accepted' && !value.runId) throw new Error('提交线索字段无效');
         return [entry[0], {id:value.id, text:value.text, version:value.version, previousRunId:value.previousRunId,
           status:value.status === 'pending' ? 'unknown' : value.status, runId:value.runId,
-          error:value.status === 'pending' ? '应用重开，旧请求的接受情况待核实。' : value.error, retryAt:value.retryAt}];
+          error:value.status === 'pending' ? '应用重开，旧请求的接受情况待核实。' : value.error, retryAt:value.retryAt,
+          ...(value.failure && typeof value.failure.message === 'string' && typeof value.failure.recoverable === 'boolean'
+            && ['http','sse','network','protocol','eof','unknown'].includes(value.failure.kind) ? {failure:value.failure} : {})}];
       }));
       this.selected = saved.selected;
     } catch {
@@ -76,10 +81,10 @@ export class MessageDrafts {
     return submission;
   }
 
-  markSubmissionUnknown(threadId: string, error: string, retryAt = 0) {
+  markSubmissionUnknown(threadId: string, error: string, retryAt = 0, failure?:ObservationFailure) {
     const record = this.submissions[threadId];
     if (record?.status !== 'pending') return;
-    this.submissions = {...this.submissions, [threadId]:{...record, status:'unknown', error, retryAt}};
+    this.submissions = {...this.submissions, [threadId]:{...record, status:'unknown', error, retryAt, ...(failure ? {failure} : {})}};
     this.save();
   }
 

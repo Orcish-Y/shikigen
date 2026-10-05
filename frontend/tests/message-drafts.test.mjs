@@ -272,22 +272,32 @@ test('切换中止未确认 POST，迟到接受不能修改旧会话或新会话
 });
 
 test('503 遵守 Retry-After，400/409/422 不自动重发且保留草稿', async t => {
-  for (const status of [503,400,409,422]) await t.test(String(status), async () => {
+  for (const status of [503,400,409,422]) await t.test(String(status), async child => {
+    child.mock.timers.enable({apis:['Date','setTimeout'], now:Date.now()});
     let posts = 0;
-    const {store, close} = setup(memory(), async (url, init) => {
+    const storage = memory();
+    const {store, close} = setup(storage, async (url, init) => {
       if (init.method === 'POST') { posts++; return Response.json({detail:'原始错误'}, {status, headers:{'Retry-After':'300'}}); }
       return new URL(url).pathname === '/api/threads'
         ? Response.json({data:[thread('a')], next_cursor:null}) : Response.json({data:[]});
     });
+    child.after(close);
     await until(() => store.canSend());
     store.updateDraft('请求正文'); store.send('请求正文');
-    await until(() => !store.getSnapshot().views.a.sending && store.getSnapshot().views.a.verified);
+    await until(() => !store.getSnapshot().views.a.sending);
     assert.equal(store.getSnapshot().drafts.a, '请求正文');
     if (status === 503) {
       assert.equal(store.getSnapshot().submissions.a.status, 'unknown');
+      assert.deepEqual(store.getSnapshot().submissions.a.failure, {kind:'http', message:'HTTP 503: {"detail":"原始错误"}',
+        status:503, detail:'{"detail":"原始错误"}', retryAfter:'300', recoverable:true});
+      const reopened = new ConversationStore({storage});
+      assert.deepEqual(reopened.getSnapshot().submissions.a.failure, store.getSnapshot().submissions.a.failure);
       assert.equal(store.canSendAsNewTask(), false);
       assert.equal(store.sendAsNewTask(store.getSnapshot().submissions.a.id), false);
-    } else assert.equal(store.canSend(), true);
+      assert.equal(store.getSnapshot().views.a.verified, false, 'Retry-After 到期前不绕过等待查询');
+      child.mock.timers.tick(300000);
+      await until(() => store.getSnapshot().views.a.verified);
+    } else {await until(() => store.canSend()); assert.equal(store.canSend(), true);}
     assert.equal(posts, 1);
     close();
   });

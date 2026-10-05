@@ -57,11 +57,13 @@ function ListError({ failure, onRetry, onReload }: {
 
 export function Navigation({
   backendReady,
+  observationLabel,
   collapsed,
   onToggle,
   onCommands,
 }: {
   backendReady: boolean;
+  observationLabel: string;
   collapsed: boolean;
   onToggle: () => void;
   onCommands: () => void;
@@ -103,9 +105,9 @@ export function Navigation({
         ))}
       </nav>
       <div className="navigation-footer">
-        <div className="connection-card">
+        <div className="connection-card" title={`${backendReady ? '后端已就绪' : '后端尚未连接'} · ${observationLabel}`}>
           <span className="status-dot" />
-          <span className="nav-label">{backendReady ? "后端已就绪" : "后端尚未连接"}</span>
+          <span className="nav-label">{backendReady ? "后端已就绪" : "后端尚未连接"}<br />{observationLabel}</span>
         </div>
         <button className="nav-item" onClick={onCommands} title="命令面板">
           <Terminal size={19} />

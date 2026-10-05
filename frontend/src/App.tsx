@@ -15,6 +15,7 @@ import { Navigation, History } from "./components/Sidebar";
 import { Conversation, Composer } from "./components/Conversation";
 import { Overlay } from "./components/Overlay";
 import { SendRecovery, DraftCopy } from './components/SendRecovery';
+import { ObservationStatus } from './components/ObservationStatus';
 import type { BackendSession } from "./backend-client";
 import { useConversations } from "./useConversations";
 
@@ -157,7 +158,7 @@ function Workspace({ session, conversations }: {
           </div>
           <span className="app-connection">
             <span className="status-dot" />
-            {backendReady ? "后端已就绪" : "后端未连接"}
+            {backendReady ? "后端已就绪" : "后端未连接"} · {conversations.observationLabel}
           </span>
           <button
             className="text-button"
@@ -180,6 +181,7 @@ function Workspace({ session, conversations }: {
           )}
           <Navigation
             backendReady={backendReady}
+            observationLabel={conversations.observationLabel}
             collapsed={collapsed}
             onToggle={toggleNavigation}
             onCommands={() => setOverlay("commands")}
@@ -238,7 +240,12 @@ function Workspace({ session, conversations }: {
               </div>
             </div>
             {conversations.error && <p className="business-notice" role="alert">{conversations.error}</p>}
+            {session && <ObservationStatus view={conversations.observationView} onReconnect={conversations.reconnect} onQuery={conversations.queryStatus} />}
             {conversations.notice && <p className="business-notice" role="status">{conversations.notice}</p>}
+            {conversations.sendFailure && conversations.submission?.status !== 'unknown' && <details className="business-notice">
+              <summary>发送请求错误详情</summary>
+              <pre style={{maxHeight:240, overflow:'auto', whiteSpace:'pre-wrap'}}>{JSON.stringify(conversations.sendFailure, null, 2)}</pre>
+            </details>}
             {conversations.verifying && <p className="business-notice" role="status">正在核实当前运行状态…</p>}
             {conversations.approvalStatus && <p id="current-approval-status" tabIndex={-1} className="business-notice" role="status">{conversations.approvalStatus}</p>}
             {conversations.storageIssue && <p className="business-notice" role="alert">{conversations.storageIssue}</p>}

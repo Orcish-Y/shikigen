@@ -2,6 +2,7 @@ import { BackendRequestError, type BackendSession, type Run, type RunFrame, type
 import { RunProjection, terminalRun, type ApprovalProjection, type ConversationMessage } from './run-projection.ts';
 import { RunProtocolError } from './run-protocol.ts';
 import { MessageDrafts, type DraftStorage, type MessageSubmission } from './message-drafts.ts';
+import { ObservationRecovery, StreamObservationError, UnexpectedObservationEnd, observationFailure, retryAfterTime, waitUntil, type ObservationState, type ObservationFailure, type RecoveryUpdate } from './observation-recovery.ts';
 export type { ConversationMessage } from './run-projection.ts';
 
 const THREAD_PAGE_SIZE = 20;
@@ -9,8 +10,7 @@ const THREAD_PAGE_SIZE = 20;
 export interface ListFailure { message: string; retryAt: number; invalidCursor: boolean }
 function listFailure(error: unknown): ListFailure {
   const retry = error instanceof BackendRequestError ? error.retryAfter : null;
-  const retryAt = retry === null ? 0 : /^\d+$/.test(retry)
-    ? Date.now() + Number(retry) * 1000 : Date.parse(retry);
+  const retryAt = retryAfterTime(retry);
   return { message: `读取会话列表失败：${String(error)}`,
     retryAt: Number.isFinite(retryAt) ? retryAt : 0,
     invalidCursor: error instanceof BackendRequestError && error.status === 422 };
@@ -26,7 +26,12 @@ export interface ConversationView {
   sending: boolean;
   events: ReturnType<RunProjection['snapshot']>['events'];
   approval: ApprovalProjection | null;
-  observation: 'idle' | 'connecting' | 'open' | 'closed' | 'paused' | 'failed';
+  observation: ObservationState;
+  retry: RecoveryUpdate['retry'];
+  observationFailure: ObservationFailure | null;
+  querying: boolean;
+  queryFailure: ObservationFailure | null;
+  sendFailure: ObservationFailure | null;
   protocolIssue: {message:string; raw:unknown} | null;
   missing: boolean;
 }
@@ -47,7 +52,7 @@ export interface ConversationState {
   submissions: Record<string, MessageSubmission>;
 }
 export const emptyConversation: ConversationView = {
-  messages: [], run: null, history: "idle", verified: false, error: null, sending: false, events:{}, approval:null, observation:'idle', protocolIssue:null, missing:false,
+  messages: [], run: null, history: "idle", verified: false, error: null, sending: false, events:{}, approval:null, observation:'idle', retry:null, observationFailure:null, querying:false, queryFailure:null, sendFailure:null, protocolIssue:null, missing:false,
 };
 
 interface ObservationAttempt {
@@ -68,6 +73,9 @@ export class ConversationStore {
   private listRequest: AbortController | null = null;
   private moreRequest: AbortController | null = null;
   private observing: ObservationAttempt | null = null;
+  private recovery: ObservationRecovery | null = null;
+  private retryDeadlines = new Map<string, number>();
+  private queryRequest: AbortController | null = null;
   private statusVersions = new Map<string, number>();
   private creation: object | null = null;
   private intent = 0;
@@ -116,7 +124,10 @@ export class ConversationStore {
     this.selection?.abort();
     this.selection = null;
     this.observing = null;
-    if (id && this.state.views[id]) this.view(id, { sending: false, observation:'paused',
+    this.recovery = null;
+    this.queryRequest?.abort();
+    this.queryRequest = null;
+    if (id && this.state.views[id]) this.view(id, { sending: false, observation:'paused', retry:null, querying:false,
       approval:this.state.views[id].approval ? {...this.state.views[id].approval!, verified:false} : null });
   }
 
@@ -345,8 +356,10 @@ export class ConversationStore {
     const controller = this.selection = new AbortController();
     const submission = this.inputs.begin(threadId, message, this.state.views[threadId].run?.run_id ?? null, version);
     this.publishInputs();
-    this.view(threadId, { sending: true, error: null });
+    this.view(threadId, { sending: true, error: null, sendFailure:null });
     const receive = this.receiver(session, controller, threadId);
+    let normal = false;
+    let failure:unknown;
     void session.send(threadId, message, frame => {
       if (!this.live(session, controller) || this.state.activeId !== threadId) return;
       if (frame.event === 'metadata' && frame.data.run_id === submission.previousRunId) {
@@ -360,23 +373,42 @@ export class ConversationStore {
         this.view(threadId, {sending:false});
       }
     }, controller.signal)
-      .then(() => { if (this.live(session, controller)) this.finishObservation(controller); })
+      .then(() => { if (this.live(session, controller)) normal = this.finishObservation(controller); })
       .catch(error => {
+        failure = error;
         if (this.live(session, controller)) {
           if (error instanceof BackendRequestError && [400,409,422].includes(error.status)) this.inputs.rejected(threadId);
-          else this.inputs.markSubmissionUnknown(threadId, String(error), listFailure(error).retryAt);
+          else this.inputs.markSubmissionUnknown(threadId, String(error), listFailure(error).retryAt, observationFailure(error));
           this.publishInputs();
-          this.view(threadId, {verified:false, observation:'failed',
+          this.view(threadId, {verified:false, observation:'failed', sendFailure:observationFailure(error),
             ...(error instanceof RunProtocolError ? {protocolIssue:{message:error.message, raw:error.raw}} : {})});
           this.publish({notice: `发送请求异常：${String(error)}。正在读取已保存的结果；不会自动重发。`});
         }
-      }).finally(() => {
+      }).finally(async () => {
         if (!this.live(session, controller)) return;
         this.inputs.markSubmissionUnknown(threadId, '发送流在确认接受前结束，请核对已保存消息。');
         this.publishInputs();
         this.view(threadId, { sending: false });
-        // 发出 POST 后只用 GET 核实，包括连接结果未知的情况。
-        this.reload();
+        if (this.observing?.controller === controller) this.observing = null;
+        const accepted = this.inputs.submissions[threadId];
+        if (accepted?.id === submission.id && accepted.status === 'accepted' && accepted.runId) {
+          if (!normal) {
+            const recovering = this.observeRun(session, controller, threadId, accepted.runId,
+              failure ?? new UnexpectedObservationEnd('已接受发送，观察连接意外结束。'));
+            // 首 metadata 后即断流也补读真实正文，不把已接受发送显示为空会话。
+            // 正文 JSON 与同 Run SSE 分工读取；观察仍只有一个恢复任务。
+            void this.readCommittedHistory(session, controller, threadId);
+            normal = await recovering;
+          }
+          if (normal && this.live(session, controller)) {
+            await this.readCommittedHistory(session, controller, threadId);
+            await this.readSnapshot(session, controller, threadId, accepted.runId);
+            void this.loadThreads(false);
+          }
+        } else {
+          // 接受前结果未知，只 GET 核实；不重发 POST。
+          this.reload();
+        }
       });
     return true;
   }
@@ -385,6 +417,59 @@ export class ConversationStore {
     void this.loadThreads();
     void this.openSelected();
   };
+
+  reconnect = () => {
+    const session = this.session;
+    const threadId = this.state.activeId;
+    const view = this.state.views[threadId];
+    if (!session || session.signal.aborted || !view?.run || view.history !== 'ready'
+      || view.sending || this.recovery || this.observing || this.queryRequest) return;
+    const runId = view.run.run_id;
+    this.stopSelection();
+    const controller = this.selection = new AbortController();
+    this.view(threadId, {verified:false, error:null});
+    void this.observeRun(session, controller, threadId, runId).then(async normal => {
+      if (normal && this.live(session, controller)) {
+        await this.readCommittedHistory(session, controller, threadId);
+        await this.readSnapshot(session, controller, threadId, runId);
+      }
+    });
+  };
+
+  queryStatus = async () => {
+    const session = this.session;
+    const threadId = this.state.activeId;
+    const view = this.state.views[threadId];
+    if (!session || session.signal.aborted || !view?.run || this.queryRequest
+      || view.sending || view.history !== 'ready' || this.recovery || this.observing) return;
+    const controller = this.queryRequest = new AbortController();
+    const runId = view.run.run_id;
+    this.view(threadId, {querying:true, queryFailure:null});
+    try {
+      await waitUntil(this.retryDeadlines.get(`${threadId}:${runId}`) ?? 0, AbortSignal.any([controller.signal, session.signal]));
+      if (this.live(session, controller)) await this.readSnapshot(session, controller, threadId, runId);
+    } catch (error) {
+      if (this.live(session, controller)) this.view(threadId, {queryFailure:observationFailure(error)});
+    } finally {
+      if (this.queryRequest === controller) {
+        this.queryRequest = null;
+        this.view(threadId, {querying:false});
+      }
+    }
+  };
+
+  private async readCommittedHistory(session:BackendSession, controller:AbortController, threadId:string) {
+    try {
+      const messages = await session.messages(threadId, controller.signal);
+      if (!this.live(session, controller)) return;
+      const projection = this.projection(threadId);
+      projection.mergeMessages(messages);
+      this.view(threadId, {...projection.snapshot(), history:'ready'});
+    } catch (error) {
+      if (this.live(session, controller)) this.view(threadId, {error:`读取已保存消息失败：${String(error)}`,
+        ...(error instanceof RunProtocolError ? {protocolIssue:{message:error.message, raw:error.raw}} : {})});
+    }
+  }
 
   private async openSelected() {
     const session = this.session;
@@ -395,6 +480,7 @@ export class ConversationStore {
     this.view(threadId, { history: "loading", verified: false, error: null, missing:false });
     let historyRead = false;
     try {
+      await waitUntil(this.inputs.submissions[threadId]?.retryAt ?? 0, AbortSignal.any([controller.signal, session.signal]));
       const messages = await session.messages(threadId, controller.signal);
       if (!this.live(session, controller)) return;
       historyRead = true;
@@ -410,15 +496,9 @@ export class ConversationStore {
       }
       const run = projection.run;
       this.view(threadId, { ...projection.snapshot(), history: "ready", verified: !run });
-      if (!run) return;
+      if (!run) {this.view(threadId, {observation:'idle', retry:null, observationFailure:null}); return;}
       if (run.status === "running" || run.status === "interrupted") {
-        let completed = false;
-        try {
-          await session.observe(threadId, run.run_id, this.receiver(session, controller, threadId, run.run_id), controller.signal);
-          if (this.live(session, controller)) completed = this.finishObservation(controller);
-        } finally {
-          if (this.observing?.controller === controller) this.observing = null;
-        }
+        const completed = await this.observeRun(session, controller, threadId, run.run_id);
         if (completed) await this.readSnapshot(session, controller, threadId, run.run_id);
       } else {
         await this.readSnapshot(session, controller, threadId, run.run_id);
@@ -434,6 +514,32 @@ export class ConversationStore {
     }
   }
 
+  private async observeRun(session:BackendSession, controller:AbortController, threadId:string, runId:string, initialFailure?:unknown) {
+    const key = `${threadId}:${runId}`;
+    const recovery = new ObservationRecovery(AbortSignal.any([controller.signal, session.signal]), this.retryDeadlines.get(key) ?? 0, update => {
+      if (!this.live(session, controller) || this.recovery !== recovery) return;
+      this.retryDeadlines.set(key, recovery.retryAt);
+      this.view(threadId, {...update,
+        ...(update.observation === 'retry_wait' || update.observation === 'failed' ? {verified:false,
+          error:update.observationFailure?.status === 404 ? `运行不可读取：${update.observationFailure.message}` : update.observationFailure?.message ?? null,
+          ...(update.observationFailure?.kind === 'protocol' ? {protocolIssue:{message:update.observationFailure.message, raw:update.observationFailure.raw}} : {}),
+          approval:this.state.views[threadId].approval ? {...this.state.views[threadId].approval!, verified:false} : null} : {})});
+    });
+    this.recovery = recovery;
+    try {
+      return await recovery.run(async () => {
+        try {
+          await session.observe(threadId, runId, this.receiver(session, controller, threadId, runId), controller.signal);
+          return this.live(session, controller) && this.finishObservation(controller);
+        } finally {
+          if (this.observing?.controller === controller) this.observing = null;
+        }
+      }, initialFailure);
+    } finally {
+      if (this.recovery === recovery) this.recovery = null;
+    }
+  }
+
   private async readSnapshot(session: BackendSession, controller: AbortController, threadId: string, runId: string) {
     const version = this.statusVersions.get(threadId);
     try {
@@ -443,18 +549,24 @@ export class ConversationStore {
       const projection = this.projection(threadId);
       projection.applySnapshot(snapshot);
       const approval = this.state.views[threadId].approval;
-      this.view(threadId, {...projection.snapshot(), verified:true,
+      this.view(threadId, {...projection.snapshot(), verified:true, queryFailure:null,
         approval:approval ? {...approval, verified:approval.verified && projection.run?.status === 'interrupted'} : null});
       this.syncRun(threadId, projection.run!);
     } catch (error) {
-      if (this.live(session, controller)) this.view(threadId, {error:`读取运行快照失败：${String(error)}`,
+      if (this.live(session, controller)) {
+        const failure = observationFailure(error);
+        const key = `${threadId}:${runId}`;
+        this.retryDeadlines.set(key, Math.max(this.retryDeadlines.get(key) ?? 0, retryAfterTime(failure.retryAfter ?? null)));
+        this.view(threadId, {error:`读取运行快照失败：${String(error)}`, queryFailure:failure,
         ...(error instanceof RunProtocolError ? {protocolIssue:{message:error.message, raw:error.raw}} : {})});
+      }
     }
   }
 
   private finishObservation(controller: AbortController) {
     const attempt = this.observing;
     if (!attempt || attempt.controller !== controller) return false;
+    if (!attempt.metadata) throw new RunProtocolError('事件流结束前未收到有效运行身份。', null);
     const projection = this.projection(attempt.threadId);
     const normal = !attempt.failed && attempt.metadata && projection.run
       && (projection.run.status === 'interrupted' || terminalRun(projection.run));
@@ -477,16 +589,16 @@ export class ConversationStore {
         projection.metadata(frame.data);
         attempt.runId = frame.data.run_id;
         attempt.metadata = true;
+        this.recovery?.established();
         this.syncRun(threadId, projection.run!);
         if (!this.live(session, controller) || this.observing !== attempt) return;
-        this.view(threadId, { ...projection.snapshot(), verified: !attempt.failed, observation:'open',
+        this.view(threadId, { ...projection.snapshot(), verified: !attempt.failed, observation:'open', retry:null, error:null,
           approval:projection.approval(attempt.replay.values(), false) });
         return;
       }
       if (frame.event === "error") {
         attempt.failed = true;
-        this.view(threadId, { verified: false, observation:'failed', error: `${frame.data.message} (${frame.data.code})` });
-        return;
+        throw new StreamObservationError(frame.data);
       }
       if (!attempt.metadata || !attempt.runId) throw new Error("事件流缺少有效运行身份");
       if (frame.event === 'event') {
