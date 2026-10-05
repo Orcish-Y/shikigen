@@ -1058,6 +1058,8 @@ textarea::placeholder {
 .cancel-confirmation { padding: 0 20px 20px; color: var(--slate-600, #475569); font-size: 13px; line-height: 1.7; }
 .confirmation-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 20px; }
 .generation-cancelled { color: #64748b; background: #f1f5f9; }
+.generation-error { color: #b91c1c; background: #fef2f2; }
+.run-failure { color: #b91c1c; }
 .danger-button { color: #fff; background: #b91c1c; border-color: #b91c1c; }
 .danger-button:hover { background: #991b1b; }
 .request-error { max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }

@@ -43,6 +43,7 @@ from shikigen.core.execution import (
   RunExecution,
 )
 from shikigen.persistence import ChatStore
+from shikigen.persistence.chat_store import RunTransaction
 from shikigen.persistence.database import committed_query
 from shikigen.runtime.lifecycle import ApplicationLifecycle
 from shikigen.runtime.recovery import RunRecoveryCoordinator
@@ -55,8 +56,8 @@ from shikigen.utils.text_safety import replace_surrogates
 class RunTransitions:
   """持久 Run 的状态变更；检查、状态与事件在同一事务内完成。
 
-  不启动 Graph 或停止本地任务。返回已提交结果，由 RunService 和执行
-  编排负责后续动作；事件写入统一经过 RunEventIngestor。
+  不启动 Graph 或停止本地任务。独立入口返回已提交结果；事务内入口由
+  调用方提交后发布。消息使用 EventStore 的统一写入入口。
   """
 
   def __init__(self, store: ChatStore) -> None:
@@ -98,14 +99,10 @@ class RunTransitions:
         f"running:{run_id}",
         {"status": "running"},
       )
-      await RunEventIngestor.write_in_transaction(
-        tx,
-        thread_id,
-        run_id,
-        "human_message",
-        "message",
-        f"human:{entry_message.id}",
-        {
+      await tx.events.write_message_in_transaction(
+        thread_id=thread_id,
+        run_id=run_id,
+        message={
           "type": "human",
           "content": entry_message.content,
           "message_id": entry_message.id,
@@ -127,7 +124,30 @@ class RunTransitions:
     invocation_seq: int | None = None,
     usage: UsageData | None = None,
   ) -> CommittedRunState:
-    """只有 running 能结算；已有终态或暂停事实原样返回，禁止覆盖。"""
+    """独立结算入口；事务成功退出后返回已提交的状态与事实。"""
+    async with self._store.transaction() as transaction:
+      return await self.settle_execution_in_transaction(
+        transaction,
+        thread_id=thread_id,
+        run_id=run_id,
+        outcome=outcome,
+        error_code=error_code,
+        invocation_seq=invocation_seq,
+        usage=usage,
+      )
+
+  async def settle_execution_in_transaction(
+    self,
+    transaction: RunTransaction,
+    *,
+    thread_id: str,
+    run_id: str,
+    outcome: ExecutionOutcome,
+    error_code: str | None = None,
+    invocation_seq: int | None = None,
+    usage: UsageData | None = None,
+  ) -> CommittedRunState:
+    """事务内结算状态；不提交、不接入消息，调用方提交后才能发布结果。"""
     target = {
       ExecutionReason.COMPLETED: RunStatus.COMPLETED,
       ExecutionReason.ABORTED: RunStatus.CANCELLED,
@@ -151,100 +171,105 @@ class RunTransitions:
       )
       if approval.checkpoint.configurable.thread_id != thread_id:
         raise ValueError("Approval checkpoint belongs to another Thread")
-    async with self._store.transaction() as tx:
-      row = await tx.runs.read_run(run_id, thread_id)
-      if row is None:
-        raise RunNotFound("Run not found")
-      history = await tx.events.read_events(thread_id, run_id)
-      running = next(e for e in reversed(history) if e["event_type"] == "run_running")
-      if invocation_seq is not None and invocation_seq != running["seq"]:
-        raise InvalidRunState("A stale invocation cannot settle the current execution")
-      if usage is not None:
-        validated = Usage.model_validate(usage).model_dump(mode="json")
-        previous = await tx.runs.read_invocation_usage(
-          thread_id, run_id, running["seq"]
-        )
-        if previous is not None and previous != validated:
-          raise InvalidRunState("Invocation usage conflicts with its settled usage")
-        if previous is None:
-          await tx.runs.insert_usage(thread_id, run_id, running["seq"], validated)
-      total_usage, _ = await tx.runs.read_usage(run_id, thread_id)
-      settlement_key = f"settled:{run_id}:{running['seq']}"
-      if row["status"] != RunStatus.RUNNING:
-        event = None
-        if row["status"] == RunStatus.CANCELLED:
-          event = await tx.events.event_by_key(thread_id, run_id, f"cancelled:{run_id}")
-        if event is None:
-          event = await tx.events.event_by_key(thread_id, run_id, settlement_key)
-        if event is None or event["content"].get("status") != row["status"]:
-          raise InvalidRunState("Run is missing its matching settlement fact")
-        events = [event]
-        if row["status"] == RunStatus.CANCELLED:
-          events = [
-            e for e in history if e["event_type"] == "approval_invalidated"
-          ] + events
-        if row["status"] == RunStatus.INTERRUPTED:
-          events = [
-            e
-            for e in history
-            if e["event_type"] == "approval_required" and e["seq"] > running["seq"]
-          ] + events
-          if len(events) != 2:
-            raise InvalidRunState("Paused Run is missing its approval fact")
-        committed = CommittedRunState(
-          RunStatus(row["status"]),
-          row["error"],
-          row["error_code"],
-          tuple(events),
-          changed=False,
-          usage=total_usage,
-        )
-        return committed
-      changed = await tx.runs.update_state(
-        run_id,
-        thread_id,
-        status=target,
-        error=error,
-        error_code=error_code,
-        terminal=target.terminal,
-        expected_status=RunStatus.RUNNING,
+    row = await transaction.runs.read_run(run_id, thread_id)
+    if row is None:
+      raise RunNotFound("Run not found")
+    history = await transaction.events.read_events(thread_id, run_id)
+    running_event = next(
+      e for e in reversed(history) if e["event_type"] == "run_running"
+    )
+    if invocation_seq is not None and invocation_seq != running_event["seq"]:
+      raise InvalidRunState("A stale invocation cannot settle the current execution")
+    if usage is not None:
+      validated = Usage.model_validate(usage).model_dump(mode="json")
+      previous = await transaction.runs.read_invocation_usage(
+        thread_id, run_id, running_event["seq"]
       )
-      if not changed:
-        raise InvalidRunState("Run state changed during settlement")
-      content: dict[str, Any] = {"status": target}
-      if error is not None:
-        content["message"] = error
-        content["error_code"] = error_code
-      events = []
-      if approval is not None:
-        key = f"approval:required:{approval.checkpoint.configurable.checkpoint_id}"
-        await RunEventIngestor.write_in_transaction(
-          tx,
-          thread_id,
-          run_id,
-          "approval_required",
-          "approval",
-          key,
-          approval.model_dump(mode="json"),
+      if previous is not None and previous != validated:
+        raise InvalidRunState("Invocation usage conflicts with its settled usage")
+      if previous is None:
+        await transaction.runs.insert_usage(
+          thread_id, run_id, running_event["seq"], validated
         )
-        required = await tx.events.event_by_key(thread_id, run_id, key)
-        assert required is not None
-        events.append(required)
+    total_usage, _ = await transaction.runs.read_usage(run_id, thread_id)
+    settlement_key = f"settled:{run_id}:{running_event['seq']}"
+    if row["status"] != RunStatus.RUNNING:
+      event = None
+      if row["status"] == RunStatus.CANCELLED:
+        event = await transaction.events.event_by_key(
+          thread_id, run_id, f"cancelled:{run_id}"
+        )
+      if event is None:
+        event = await transaction.events.event_by_key(thread_id, run_id, settlement_key)
+      if event is None or event["content"].get("status") != row["status"]:
+        raise InvalidRunState("Run is missing its matching settlement fact")
+      events = [event]
+      if row["status"] == RunStatus.CANCELLED:
+        events = [
+          e for e in history if e["event_type"] == "approval_invalidated"
+        ] + events
+      if row["status"] == RunStatus.INTERRUPTED:
+        events = [
+          e
+          for e in history
+          if e["event_type"] == "approval_required" and e["seq"] > running_event["seq"]
+        ] + events
+        if len(events) != 2:
+          raise InvalidRunState("Paused Run is missing its approval fact")
+      settlement = CommittedRunState(
+        RunStatus(row["status"]),
+        row["error"],
+        row["error_code"],
+        tuple(events),
+        changed=False,
+        usage=total_usage,
+      )
+      return settlement
+    events = []
+    changed = await transaction.runs.update_state(
+      run_id,
+      thread_id,
+      status=target,
+      error=error,
+      error_code=error_code,
+      terminal=target.terminal,
+      expected_status=RunStatus.RUNNING,
+    )
+    if not changed:
+      raise InvalidRunState("Run state changed during settlement")
+    content: dict[str, Any] = {"status": target}
+    if target is RunStatus.ERROR:
+      content["message"] = error
+      content["error_code"] = error_code
+    if approval is not None:
+      key = f"approval:required:{approval.checkpoint.configurable.checkpoint_id}"
       await RunEventIngestor.write_in_transaction(
-        tx,
+        transaction,
         thread_id,
         run_id,
-        f"run_{target}",
-        "lifecycle",
-        settlement_key,
-        content,
+        "approval_required",
+        "approval",
+        key,
+        approval.model_dump(mode="json"),
       )
-      await tx.runs.touch_thread(thread_id)
-      event = await tx.events.event_by_key(thread_id, run_id, settlement_key)
-      assert event is not None
-      return CommittedRunState(
-        target, error, error_code, (*events, event), usage=total_usage
-      )
+      required = await transaction.events.event_by_key(thread_id, run_id, key)
+      assert required is not None
+      events.append(required)
+    await RunEventIngestor.write_in_transaction(
+      transaction,
+      thread_id,
+      run_id,
+      f"run_{target}",
+      "lifecycle",
+      settlement_key,
+      content,
+    )
+    await transaction.runs.touch_thread(thread_id)
+    event = await transaction.events.event_by_key(thread_id, run_id, settlement_key)
+    assert event is not None
+    return CommittedRunState(
+      target, error, error_code, (*events, event), usage=total_usage
+    )
 
   async def fail_recovery(
     self, expected: RunSnapshot, error_code: str, message: str
@@ -280,78 +305,76 @@ class RunTransitions:
       assert updated is not None
       return updated
 
-  async def cancel_run(
+  async def cancel_run(self, *, thread_id: str, run_id: str) -> RunWriteResult:
+    """独立取消入口；事务成功退出后返回实际已提交的状态与事实。"""
+    async with self._store.transaction() as transaction:
+      return await self.cancel_run_in_transaction(
+        transaction, thread_id=thread_id, run_id=run_id
+      )
+
+  async def cancel_run_in_transaction(
     self,
+    transaction: RunTransaction,
     *,
     thread_id: str,
     run_id: str,
-    partial_messages: tuple[dict[str, Any], ...] = (),
   ) -> RunWriteResult:
-    """原子取消运行或暂停；终态幂等返回，不覆盖第一次有效提交。"""
-    async with self._store.transaction() as tx:
-      run = await tx.runs.read_run(run_id, thread_id)
-      if run is None:
-        raise RunNotFound("Run not found")
-      if RunStatus(run["status"]).terminal:
-        return RunWriteResult(run, ())
-      history = await tx.events.read_events(thread_id, run_id)
-      keys = []
-      for message in partial_messages:
-        event_type, key = message_identity(message)
-        if await tx.events.message_by_key(thread_id, key) is not None:
-          continue  # 正常完整消息先提交时，保留其原事实。
-        await RunEventIngestor.write_in_transaction(
-          tx, thread_id, run_id, event_type, "message", key, message
-        )
-        keys.append(key)
-      if run["status"] == "interrupted":
-        pending = next(
-          (e for e in reversed(history) if e["category"] == "approval"), None
-        )
-        if pending is None or pending["event_type"] != "approval_required":
-          raise InvalidRunState("Paused Run is missing its pending approval")
-        required = ApprovalRequired.model_validate(pending["content"])
-        invalidated = ApprovalInvalidated(
-          checkpoint=required.checkpoint,
-          interrupt_ids=[item.id for item in required.interrupts],
-        )
-        key = f"approval:invalidated:{required.checkpoint.configurable.checkpoint_id}"
-        await RunEventIngestor.write_in_transaction(
-          tx,
-          thread_id,
-          run_id,
-          "approval_invalidated",
-          "approval",
-          key,
-          invalidated.model_dump(mode="json"),
-        )
-        keys.append(key)
-      key = f"cancelled:{run_id}"
+    """事务内取消运行或暂停；不提交、不接入消息，已有终态原样返回。"""
+    run = await transaction.runs.read_run(run_id, thread_id)
+    if run is None:
+      raise RunNotFound("Run not found")
+    if RunStatus(run["status"]).terminal:
+      return RunWriteResult(run, ())
+    history = await transaction.events.read_events(thread_id, run_id)
+    keys = []
+    if run["status"] == "interrupted":
+      pending = next(
+        (e for e in reversed(history) if e["category"] == "approval"), None
+      )
+      if pending is None or pending["event_type"] != "approval_required":
+        raise InvalidRunState("Paused Run is missing its pending approval")
+      required = ApprovalRequired.model_validate(pending["content"])
+      invalidated = ApprovalInvalidated(
+        checkpoint=required.checkpoint,
+        interrupt_ids=[item.id for item in required.interrupts],
+      )
+      key = f"approval:invalidated:{required.checkpoint.configurable.checkpoint_id}"
       await RunEventIngestor.write_in_transaction(
-        tx,
+        transaction,
         thread_id,
         run_id,
-        "run_cancelled",
-        "lifecycle",
+        "approval_invalidated",
+        "approval",
         key,
-        {"status": "cancelled"},
+        invalidated.model_dump(mode="json"),
       )
       keys.append(key)
-      await tx.runs.update_state(
-        run_id,
-        thread_id,
-        status=RunStatus.CANCELLED,
-        terminal=True,
-      )
-      await tx.runs.touch_thread(thread_id)
-      updated = await tx.runs.read_run(run_id, thread_id)
-      assert updated is not None
-      events = []
-      for key in keys:
-        event = await tx.events.event_by_key(thread_id, run_id, key)
-        assert event is not None
-        events.append(event)
-      return RunWriteResult(updated, tuple(events))
+    key = f"cancelled:{run_id}"
+    await RunEventIngestor.write_in_transaction(
+      transaction,
+      thread_id,
+      run_id,
+      "run_cancelled",
+      "lifecycle",
+      key,
+      {"status": "cancelled"},
+    )
+    keys.append(key)
+    await transaction.runs.update_state(
+      run_id,
+      thread_id,
+      status=RunStatus.CANCELLED,
+      terminal=True,
+    )
+    await transaction.runs.touch_thread(thread_id)
+    updated = await transaction.runs.read_run(run_id, thread_id)
+    assert updated is not None
+    events = []
+    for key in keys:
+      event = await transaction.events.event_by_key(thread_id, run_id, key)
+      assert event is not None
+      events.append(event)
+    return RunWriteResult(updated, tuple(events))
 
   async def accept_approval_decisions(
     self,

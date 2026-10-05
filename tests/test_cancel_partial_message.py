@@ -485,15 +485,15 @@ class CancelPartialMessageTests(unittest.IsolatedAsyncioTestCase):
   async def test_disconnected_cancel_caller_still_saves_text_and_terminal_once(self):
     await self.start()
     entered, release = asyncio.Event(), asyncio.Event()
-    original = self.runtime.runs._transitions.cancel_run
+    original = self.runtime.runs._transitions.cancel_run_in_transaction
 
-    async def delayed(**kwargs):
+    async def delayed(*args, **kwargs):
       entered.set()
       await release.wait()
-      return await original(**kwargs)
+      return await original(*args, **kwargs)
 
     with patch.object(
-      self.runtime.runs._transitions, "cancel_run", side_effect=delayed
+      self.runtime.runs._transitions, "cancel_run_in_transaction", side_effect=delayed
     ):
       with patch.object(app.state, "runtime", self.runtime, create=True):
         async with httpx.AsyncClient(

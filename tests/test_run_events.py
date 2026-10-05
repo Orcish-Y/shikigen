@@ -168,7 +168,7 @@ class RunEventTests(unittest.IsolatedAsyncioTestCase):
         with (
           patch.object(
             runtime.runs._transitions,
-            "settle_execution",
+            "settle_execution_in_transaction",
             side_effect=OSError("disk failed"),
           ),
           patch.object(Stream, "publish", publish),

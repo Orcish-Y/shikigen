@@ -89,7 +89,9 @@ export function Conversation({
                     )}
                     {message.preview && <span className="badge">{['cancelled','completed','error'].includes(session.runStatuses?.[message.record?.run_id ?? ''] ?? '')
                       ? '预览 · 尚未读取保存事实' : '生成中 · 尚未保存'}</span>}
-                    {!message.preview && message.record?.content.type === 'ai' && message.record.content.generation_status === 'cancelled' && <span className="badge generation-cancelled">因取消中止</span>}
+                    {!message.preview && message.record?.content.type === 'ai'
+                      && ['cancelled','error'].includes(message.record.content.generation_status ?? '')
+                      && <span className={`badge generation-${message.record.content.generation_status}`}>{message.record.content.generation_status === 'error' ? '因失败中止' : '因取消中止'}</span>}
                   </div>
                   {message.role !== 'tool' && <MessageBody role={message.role} content={message.content ?? message.text}
                     identity={`${session.id}:${message.id}`} preview={message.preview}

@@ -297,16 +297,18 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
     for cancel_consumer in (False, True):
       with self.subTest(cancel_consumer=cancel_consumer):
         entered, release, received = asyncio.Event(), asyncio.Event(), asyncio.Event()
-        original = self.runtime.runs._transitions.settle_execution
+        ingestor = self.runtime.runs._coordinator._ingestor
+        assert ingestor is not None
+        original = ingestor.settle
 
-        async def settle(entered=entered, release=release, original=original, **kwargs):
+        async def settle(
+          *args, entered=entered, release=release, original=original, **kwargs
+        ):
           entered.set()
           await release.wait()
-          return await original(**kwargs)
+          return await original(*args, **kwargs)
 
-        with patch.object(
-          self.runtime.runs._transitions, "settle_execution", side_effect=settle
-        ):
+        with patch.object(ingestor, "settle", side_effect=settle):
           thread = await self.runtime.threads.create_thread()
           response = await stream_chat(
             thread,
@@ -346,7 +348,7 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
     with (
       patch.object(
         self.runtime.runs._transitions,
-        "settle_execution",
+        "settle_execution_in_transaction",
         side_effect=OSError("disk failed"),
       ),
       self.assertLogs("shikigen.runtime.run_execution", level="ERROR"),

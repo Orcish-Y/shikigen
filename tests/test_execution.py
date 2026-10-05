@@ -77,6 +77,12 @@ class ControlledSettlement:
       ),
     )
 
+  async def settle_execution_in_transaction(self, transaction, **kwargs):
+    return await self.settle_execution(**kwargs)
+
+  async def cancel_run_in_transaction(self, transaction, **kwargs):
+    return await self.cancel_run(**kwargs)
+
 
 class ExecutionTests(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):

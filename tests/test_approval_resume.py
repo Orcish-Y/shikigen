@@ -241,17 +241,17 @@ class ApprovalResumeTests(unittest.IsolatedAsyncioTestCase):
   async def test_waits_for_previous_cleanup_and_survives_caller_cancellation(self):
     # 下一次暂停已经提交，但旧 invocation 仍在发布/清理。
     settled, release = asyncio.Event(), asyncio.Event()
-    original = self.runtime.runs._transitions.settle_execution
+    ingestor = self.runtime.runs._coordinator._ingestor
+    assert ingestor is not None
+    original = ingestor.settle
 
-    async def settle(**kwargs):
-      result = await original(**kwargs)
+    async def settle(*args, **kwargs):
+      result = await original(*args, **kwargs)
       settled.set()
       await release.wait()
       return result
 
-    with patch.object(
-      self.runtime.runs._transitions, "settle_execution", side_effect=settle
-    ):
+    with patch.object(ingestor, "settle", side_effect=settle):
       second = await self.runtime.runs.resume_run(
         self.thread, self.run_id, await self.responses()
       )

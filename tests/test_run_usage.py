@@ -247,7 +247,9 @@ class RunUsageTests(unittest.IsolatedAsyncioTestCase):
   async def test_storage_failure_is_observable_without_false_completion(self):
     runtime = self.runtime(create_agent(ToolModel(responses=[reply()]), tools=[]))
     with patch.object(
-      runtime.runs._transitions, "settle_execution", side_effect=OSError("disk failed")
+      runtime.runs._transitions,
+      "settle_execution_in_transaction",
+      side_effect=OSError("disk failed"),
     ):
       with self.assertLogs("shikigen.runtime.run_execution", level="ERROR") as logs:
         execution = await runtime.runs.start_run("t", "work")

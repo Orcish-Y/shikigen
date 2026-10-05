@@ -127,15 +127,15 @@ class RunCancelTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_disconnected_cancel_still_commits(self):
     entered, release = asyncio.Event(), asyncio.Event()
-    original = self.runtime.runs._transitions.cancel_run
+    original = self.runtime.runs._transitions.cancel_run_in_transaction
 
-    async def blocked(**kwargs):
+    async def blocked(*args, **kwargs):
       entered.set()
       await release.wait()
-      return await original(**kwargs)
+      return await original(*args, **kwargs)
 
     with patch.object(
-      self.runtime.runs._transitions, "cancel_run", side_effect=blocked
+      self.runtime.runs._transitions, "cancel_run_in_transaction", side_effect=blocked
     ):
       caller = asyncio.create_task(
         self.runtime.runs.cancel_run(self.thread, self.run_id)
@@ -194,22 +194,22 @@ class RunCancelTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_completion_commit_blocks_cancel_until_publication(self):
     entered, release = asyncio.Event(), asyncio.Event()
-    original = self.runtime.runs._transitions.settle_execution
+    ingestor = self.runtime.runs._coordinator._ingestor
+    assert ingestor is not None
+    original = ingestor.settle
 
     async def complete(*args, **kwargs):
       return ExecutionOutcome(ExecutionReason.COMPLETED)
 
-    async def delayed(**kwargs):
-      committed = await original(**kwargs)
+    async def delayed(*args, **kwargs):
+      settlement = await original(*args, **kwargs)
       entered.set()
       await release.wait()
-      return committed
+      return settlement
 
     with (
       patch("shikigen.runtime.run_execution.execute_agent_loop", side_effect=complete),
-      patch.object(
-        self.runtime.runs._transitions, "settle_execution", side_effect=delayed
-      ),
+      patch.object(ingestor, "settle", side_effect=delayed),
     ):
       execution = await self.runtime.runs.resume_run(
         self.thread, self.run_id, await self.responses()

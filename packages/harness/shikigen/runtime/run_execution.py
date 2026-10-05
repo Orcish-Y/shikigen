@@ -31,6 +31,7 @@ from shikigen.core.execution import (
   RunExecution,
 )
 from shikigen.core.loop import execute_agent_loop
+from shikigen.persistence.chat_store import RunTransaction
 from shikigen.runtime.run_events import RunEventIngestor
 
 logger = logging.getLogger(__name__)
@@ -55,9 +56,28 @@ class RunSettlement(Protocol):
     *,
     thread_id: str,
     run_id: str,
-    partial_messages: tuple[dict[str, Any], ...] = (),
   ) -> RunWriteResult:
     """原子取消；返回实际已提交的状态与本次新增事实。"""
+    ...
+
+  async def settle_execution_in_transaction(
+    self,
+    transaction: RunTransaction,
+    *,
+    thread_id: str,
+    run_id: str,
+    outcome: ExecutionOutcome,
+    error_code: str | None = None,
+    invocation_seq: int | None = None,
+    usage: UsageData | None = None,
+  ) -> CommittedRunState:
+    """参与调用方结算事务；不提交或广播，不接收消息正文。"""
+    ...
+
+  async def cancel_run_in_transaction(
+    self, transaction: RunTransaction, *, thread_id: str, run_id: str
+  ) -> RunWriteResult:
+    """参与调用方取消事务；不提交或广播，不接收消息正文。"""
     ...
 
 
@@ -79,6 +99,7 @@ class RunExecutionCoordinator:
     self._ingestor = ingestor
     self._locks: WeakKeyDictionary[RunExecution, asyncio.Lock] = WeakKeyDictionary()
     self._cleanups: set[asyncio.Task[None]] = set()
+    self._settlements: set[asyncio.Task[None]] = set()
 
   def _lock(self, execution: RunExecution) -> asyncio.Lock:
     return self._locks.setdefault(execution, asyncio.Lock())
@@ -116,15 +137,42 @@ class RunExecutionCoordinator:
       execution.retain(task)
       task.add_done_callback(partial(self._on_done, execution))
     except BaseException as error:
-      await self._finish(execution)
-      if isinstance(error, Exception):
-        await self._settlement.settle_execution(
-          thread_id=thread_id,
-          run_id=run_id,
-          outcome=ExecutionOutcome(ExecutionReason.FAILED, error=error),
-          error_code="resume_start_failed" if isinstance(message, Command) else None,
-          invocation_seq=invocation_seq,
-        )
+      if not isinstance(error, Exception):
+        await self._finish(execution)
+        raise
+      attempted = asyncio.Event()
+      failed_outcome = ExecutionOutcome(ExecutionReason.FAILED, error=error)
+
+      async def settle_start_failure() -> None:
+        try:
+          await self._settle_outcome(
+            execution,
+            failed_outcome,
+            error_code="resume_start_failed" if isinstance(message, Command) else None,
+            invocation_seq=invocation_seq,
+            attempted=attempted,
+          )
+        finally:
+          try:
+            await self._finish(execution)
+          finally:
+            attempted.set()
+
+      coroutine = settle_start_failure()
+      try:
+        task = asyncio.create_task(coroutine, name=f"settle:{run_id}")
+      except BaseException:
+        coroutine.close()
+        await self._finish(execution)
+        raise
+      execution.retain(task)
+      self._settlements.add(task)
+      task.add_done_callback(self._settlements.discard)
+      task.add_done_callback(partial(self._on_done, execution))
+      # 首次提交后交付启动错误；存储回滚时由后台所有者重试，接收操作不悬挂。
+      await attempted.wait()
+      if task.done():
+        await task
       raise
     return execution
 
@@ -158,28 +206,9 @@ class RunExecutionCoordinator:
           else None
         ),
       )
-      async with self._lock(execution):
-        try:
-          commit = partial(
-            self._settlement.settle_execution,
-            **identity,
-            outcome=outcome,
-            usage=tracker.summary(),
-            invocation_seq=invocation_seq,
-          )
-          committed = (
-            await self._ingestor.settle(execution, commit)
-            if self._ingestor is not None
-            else await commit()
-          )
-        except Exception:
-          RunEventIngestor.notify_failure(execution.stream, "run_persistence_failed")
-          raise
-        if committed.usage is not None:
-          execution.stream.publish("usage", committed.usage)
-        RunEventIngestor.publish(
-          execution.stream, committed.events, settlement=committed
-        )
+      await self._settle_outcome(
+        execution, outcome, usage=tracker.summary(), invocation_seq=invocation_seq
+      )
     except asyncio.CancelledError:
       # 进程关闭／强制停止不等于用户提交了 cancelled。
       RunEventIngestor.notify_failure(execution.stream, "execution_stopped")
@@ -187,12 +216,80 @@ class RunExecutionCoordinator:
     finally:
       await self._finish(execution)
 
+  async def _settle_outcome(
+    self,
+    execution: RunExecution,
+    outcome: ExecutionOutcome,
+    *,
+    invocation_seq: int | None,
+    usage: UsageData | None = None,
+    error_code: str | None = None,
+    attempted: asyncio.Event | None = None,
+  ) -> None:
+    # 失败结算回滚后，由原任务持有 outcome 和缓冲，仅重试事务，不重跑 Graph。
+    # 等待期间释放协调锁，用户取消仍能竞争；shutdown 可取消此所有者。
+    failed = outcome.reason is ExecutionReason.FAILED
+    delay = 1
+    while True:
+      async with self._lock(execution):
+        try:
+          if self._ingestor is not None:
+            settle_fn = partial(
+              self._settlement.settle_execution_in_transaction,
+              thread_id=execution.thread_id,
+              run_id=execution.run_id,
+              outcome=outcome,
+              usage=usage,
+              error_code=error_code,
+              invocation_seq=invocation_seq,
+            )
+            settlement = await self._ingestor.settle(
+              execution, settle_fn, failed=failed
+            )
+          else:
+            settlement = await self._settlement.settle_execution(
+              thread_id=execution.thread_id,
+              run_id=execution.run_id,
+              outcome=outcome,
+              usage=usage,
+              error_code=error_code,
+              invocation_seq=invocation_seq,
+            )
+        except Exception:
+          RunEventIngestor.notify_failure(execution.stream, "run_persistence_failed")
+          if not failed:
+            raise
+          logger.exception(
+            "Failed Run settlement will retry without executing Graph: %s/%s",
+            execution.thread_id,
+            execution.run_id,
+          )
+          if attempted is not None:
+            attempted.set()
+        else:
+          if settlement.usage is not None:
+            execution.stream.publish("usage", settlement.usage)
+          RunEventIngestor.publish(
+            execution.stream, settlement.events, settlement=settlement
+          )
+          return
+      await asyncio.sleep(delay)
+      delay = min(delay * 2, 10)
+
   async def cancel(self, thread_id: str, run_id: str) -> RunSnapshot:
     """先提交并发布取消，再请求协作停止；没有本地执行也能持久取消。"""
     execution = self._registry.get(thread_id, run_id)
     async with self._lock(execution) if execution is not None else nullcontext():
       result = (
-        await self._ingestor.cancel(thread_id, run_id, self._settlement.cancel_run)
+        await self._ingestor.cancel(
+          thread_id,
+          run_id,
+          partial(
+            self._settlement.cancel_run_in_transaction,
+            thread_id=thread_id,
+            run_id=run_id,
+          ),
+        )
         if self._ingestor is not None
         else await self._settlement.cancel_run(thread_id=thread_id, run_id=run_id)
       )
@@ -251,12 +348,12 @@ class RunExecutionCoordinator:
   async def shutdown(self) -> None:
     """停止接收、停止本地 Task 并收完资源；不推断产品取消状态。"""
     executions = self._registry.stop_accepting()
+    tasks = {e.task for e in executions if e.task is not None} | self._settlements
     for execution in executions:
       execution.request_cancel()
-      if execution.task is not None and not execution.task.done():
-        execution.task.cancel()
-    await asyncio.gather(
-      *(e.task for e in executions if e.task is not None), return_exceptions=True
-    )
+    for task in tasks:
+      if not task.done():
+        task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
     await asyncio.gather(*(self._finish(e) for e in executions))
     await asyncio.gather(*tuple(self._cleanups))

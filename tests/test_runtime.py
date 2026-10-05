@@ -18,7 +18,6 @@ from shikigen.contracts.runs import (
 from shikigen.core.execution import ExecutionOutcome, ExecutionReason
 from shikigen.persistence import ChatStore
 from shikigen.runtime.composition import assemble_runtime, open_runtime
-from shikigen.runtime.run_events import RunEventIngestor
 from shikigen.runtime.runs import RunTransitions
 from test_loop import BlockingAgent, FailingAgent, MessageAgent
 
@@ -66,16 +65,16 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_waiter_cancellation_does_not_stop_execution_or_settlement(self):
     entered, release = asyncio.Event(), asyncio.Event()
-    original = self.runtime.runs._transitions.settle_execution
+    ingestor = self.runtime.runs._coordinator._ingestor
+    assert ingestor is not None
+    original = ingestor.settle
 
-    async def settle(**kwargs):
+    async def settle(*args, **kwargs):
       entered.set()
       await release.wait()
-      return await original(**kwargs)
+      return await original(*args, **kwargs)
 
-    with patch.object(
-      self.runtime.runs._transitions, "settle_execution", side_effect=settle
-    ):
+    with patch.object(ingestor, "settle", side_effect=settle):
       execution = await self.runtime.runs.start_run(self.thread_id, "hello")
       waiter = asyncio.create_task(self.runtime.runs.wait_run(execution))
       await asyncio.wait_for(entered.wait(), 2)
@@ -122,7 +121,7 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
     with (
       patch.object(
         self.runtime.runs._transitions,
-        "settle_execution",
+        "settle_execution_in_transaction",
         side_effect=OSError("disk failed"),
       ),
       self.assertLogs("shikigen.runtime.run_execution", level="ERROR"),
@@ -242,17 +241,17 @@ class TransactionTests(unittest.IsolatedAsyncioTestCase):
   async def test_creation_failure_and_cancellation_roll_back_all_facts(self):
     for error in (OSError("disk failed"), asyncio.CancelledError()):
       with self.subTest(error=type(error)):
-        original = RunEventIngestor.write_in_transaction
-        count = 0
+        writer = self.first._events.write_message_in_transaction
 
-        async def insert(*args, original=original, error=error):
-          nonlocal count
-          count += 1
-          await original(*args)
-          if count == 2:
-            raise error
+        async def write_then_fail(*, writer=writer, error=error, **kwargs):
+          await writer(**kwargs)
+          raise error
 
-        with patch.object(RunEventIngestor, "write_in_transaction", side_effect=insert):
+        with patch.object(
+          self.first._events,
+          "write_message_in_transaction",
+          side_effect=write_then_fail,
+        ):
           with self.assertRaises(type(error)):
             await self.create(self.first, "run")
         self.assertIsNone(await self.second.get_run("run", "thread"))

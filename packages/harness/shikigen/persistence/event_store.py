@@ -176,6 +176,72 @@ class EventStore:
       ("run_", "approval_")
     ):
       raise ValueError("Lifecycle and approval events require a run transaction")
+    async with self._db.lock:
+      try:
+        await self._db.connection.execute("BEGIN IMMEDIATE")
+        if category == "message" or event_type.endswith("_message"):
+          expected_type, expected_key = message_identity(content)
+          if (category, event_type, event_key) != (
+            "message",
+            expected_type,
+            expected_key,
+          ):
+            raise ValueError("Message type, category and identity must agree")
+          write_result = await self.write_message_in_transaction(
+            thread_id=thread_id, run_id=run_id, message=content, metadata=metadata
+          )
+        else:
+          write_result = await self._write_event_in_transaction(
+            thread_id=thread_id,
+            run_id=run_id,
+            event_type=event_type,
+            category=category,
+            content=content,
+            metadata=metadata,
+            event_key=event_key,
+          )
+        await self._db.connection.commit()
+        return write_result
+      except aiosqlite.IntegrityError as error:
+        await self._db.connection.rollback()
+        raise integrity_error(error) from error
+      except BaseException:
+        await self._db.connection.rollback()
+        raise
+
+  async def write_message_in_transaction(
+    self,
+    *,
+    thread_id: str,
+    run_id: str,
+    message: dict[str, Any],
+    metadata: dict[str, Any] | None = None,
+  ) -> EventWriteResult:
+    """统一写入规范消息；调用方持有事务，本方法不加锁、提交或广播。"""
+    message = normalize_message(message)
+    event_type, event_key = message_identity(message)
+    return await self._write_event_in_transaction(
+      thread_id=thread_id,
+      run_id=run_id,
+      event_type=event_type,
+      category="message",
+      content=message,
+      metadata=metadata,
+      event_key=event_key,
+    )
+
+  async def _write_event_in_transaction(
+    self,
+    *,
+    thread_id: str,
+    run_id: str,
+    event_type: str,
+    category: str,
+    content: Any,
+    metadata: dict[str, Any] | None,
+    event_key: str | None,
+  ) -> EventWriteResult:
+    """事务内校验、幂等检查与写入；不改变调用方事务的生命周期。"""
     if category == "message" or event_type.endswith("_message"):
       content = normalize_message(content)
       expected_type, expected_key = self.message_identity(content)
@@ -186,65 +252,55 @@ class EventStore:
     # 严格序列化，不把任意对象静默转换成字符串。
     content_json = self._json(content)
     metadata_json = self._json(metadata if metadata is not None else {})
-    async with self._db.lock:
-      try:
-        await self._db.connection.execute("BEGIN IMMEDIATE")
-        if not await self._run_exists(run_id, thread_id):
-          raise RunNotFound("Run not found")
-        existing = (
-          await self.message_by_key(thread_id, event_key)
+    if not await self._run_exists(run_id, thread_id):
+      raise RunNotFound("Run not found")
+    existing_event = (
+      await self.message_by_key(thread_id, event_key)
+      if category == "message"
+      else await self.event_by_key(thread_id, run_id, event_key)
+    )
+    if existing_event is not None:
+      if (
+        existing_event["event_type"] != event_type
+        or existing_event["category"] != category
+        or self._json(
+          normalize_message(existing_event["content"])
           if category == "message"
-          else await self.event_by_key(thread_id, run_id, event_key)
+          else existing_event["content"]
         )
-        if existing is not None:
-          if (
-            existing["event_type"] != event_type
-            or existing["category"] != category
-            or self._json(
-              normalize_message(existing["content"])
-              if category == "message"
-              else existing["content"]
-            )
-            != content_json
-            or self._json(existing["metadata"]) != metadata_json
-          ):
-            raise MessageConflict("Event identity already has different content")
-          result = EventWriteResult(existing, inserted=False)
-        else:
-          seq = (
-            await self.reserved_sequence(thread_id, run_id, event_key)
-            if category == "message"
-            else None
-          )
-          if seq is None:
-            seq = await self.allocate_sequence(thread_id)
-          cursor = await self._db.connection.execute(
-            """INSERT INTO run_events(
-              thread_id, run_id, seq, event_type, category, event_key,
-              content_json, metadata_json, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *""",
-            (
-              thread_id,
-              run_id,
-              seq,
-              event_type,
-              category,
-              event_key,
-              content_json,
-              metadata_json,
-              _now(),
-            ),
-          )
-          rows = list(await cursor.fetchall())
-          result = EventWriteResult(self._decode_event(rows[0]), inserted=True)
-        await self._db.connection.commit()
-        return result
-      except aiosqlite.IntegrityError as error:
-        await self._db.connection.rollback()
-        raise integrity_error(error) from error
-      except BaseException:
-        await self._db.connection.rollback()
-        raise
+        != content_json
+        or self._json(existing_event["metadata"]) != metadata_json
+      ):
+        raise MessageConflict("Event identity already has different content")
+      write_result = EventWriteResult(existing_event, inserted=False)
+    else:
+      seq = (
+        await self.reserved_sequence(thread_id, run_id, event_key)
+        if category == "message"
+        else None
+      )
+      if seq is None:
+        seq = await self.allocate_sequence(thread_id)
+      cursor = await self._db.connection.execute(
+        """INSERT INTO run_events(
+          thread_id, run_id, seq, event_type, category, event_key,
+          content_json, metadata_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *""",
+        (
+          thread_id,
+          run_id,
+          seq,
+          event_type,
+          category,
+          event_key,
+          content_json,
+          metadata_json,
+          _now(),
+        ),
+      )
+      rows = list(await cursor.fetchall())
+      write_result = EventWriteResult(self._decode_event(rows[0]), inserted=True)
+    return write_result
 
   @staticmethod
   def _json(value: Any) -> str:

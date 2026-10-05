@@ -18,6 +18,7 @@ import { ContentViewer } from './components/ContentViewer';
 import type { ContentView } from './components/MessageBody';
 import { SendRecovery, DraftCopy } from './components/SendRecovery';
 import { ObservationStatus } from './components/ObservationStatus';
+import { RunFailure } from './components/RunFailure';
 import type { BackendSession } from "./backend-client";
 import type { CancelTarget } from './conversation-state';
 import { useConversations } from "./useConversations";
@@ -270,6 +271,7 @@ function Workspace({ session, conversations }: {
               </div>
             </div>
             {conversations.error && <p className="business-notice" role="alert">{conversations.error}</p>}
+            <RunFailure run={conversations.run} onView={setOverlay} />
             {session && <ObservationStatus view={conversations.observationView} onReconnect={conversations.reconnect} onQuery={conversations.queryStatus} />}
             {conversations.notice && <p className="business-notice" role="status">{conversations.notice}</p>}
             {conversations.write && <section className="business-notice" aria-label="取消结果核实">
@@ -419,7 +421,7 @@ function Workspace({ session, conversations }: {
                 ))}
               </dl>
               {conversations.run?.status === "interrupted" && <p>此运行正在等待审批。</p>}
-              {conversations.run?.error && <p role="alert">{conversations.run.error}</p>}
+              <RunFailure run={conversations.run} onView={setOverlay} />
               {conversations.error && <p role="alert">{conversations.error}</p>}
 
             </div>
