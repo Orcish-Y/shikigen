@@ -478,12 +478,21 @@ small {
   display: flex;
   gap: 8px;
 }
+.conversation-timeline { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
+.reading-controls {
+  display: flex; justify-content: flex-end; align-items: center; gap: 8px;
+  flex-shrink: 0; padding: 4px 24px; font-size: 12px; color: var(--muted);
+  border-top: 1px solid var(--border); background: var(--canvas);
+}
 .timeline {
   min-height: 0;
   overflow-y: auto;
   flex: 1;
   scrollbar-gutter: stable;
+  overflow-anchor: none;
+  overscroll-behavior: contain;
 }
+.content-block pre, .tool-result-body, .table-scroll { overscroll-behavior: contain; }
 .message-container {
   max-width: 840px;
   margin: 0 auto;

@@ -27,7 +27,7 @@ export function ToolCard({record, preferences, onView}: {
   const returned = Boolean(record.result);
   const title = record.call?.value.name ?? content?.name ?? '工具结果';
   const ended = record.runStatus && ['completed', 'cancelled', 'error'].includes(record.runStatus);
-  return <div className="tool-block" data-tool-id={record.call?.value.id ?? content?.tool_call_id} data-tool-identity={record.identity}>
+  return <div className="tool-block" data-reading-anchor={`tool:${record.identity}`} data-tool-id={record.call?.value.id ?? content?.tool_call_id} data-tool-identity={record.identity}>
     <button className="tool-summary" aria-expanded={expanded.card} aria-controls={panelId} onClick={() => toggle('card')}>
       <Terminal size={17} /><strong>{title}</strong>
       <span className={`tool-status ${failed ? 'tool-error' : returned ? 'success' : 'tool-waiting'}`}>

@@ -1,8 +1,9 @@
-import { useRef, useState } from "react";
+import { useImperativeHandle, useRef, useState, type Ref } from "react";
 import { composerEnter } from '../composer-keyboard';
 import type { RunStatus } from '../backend-client';
 import {
   ArrowUp,
+  ArrowDown,
   ChatCircle,
 } from "@phosphor-icons/react";
 import type { Session } from "../data/demo";
@@ -11,6 +12,10 @@ import { ContentBlock } from './ContentViewer';
 import { toolRows } from '../tool-records';
 import { ToolCard } from './ToolCard';
 import { ToolCardPreferences } from '../tool-card-preferences';
+import { ChatReadingPositions } from '../chat-reading-position';
+import { useChatReading } from '../useChatReading';
+
+export interface ConversationHandle { remember:() => void; locateApproval:() => void }
 
 export function Conversation({
   session,
@@ -19,6 +24,13 @@ export function Conversation({
   readState = "ready",
   onView,
   toolPreferences,
+  readingPositions,
+  factsReady = readState === 'ready',
+  visible = true,
+  acceptedSendId = null,
+  approvalStatus,
+  approvalIdentity,
+  ref,
 }: {
   session: Session;
   onSuggestion: (text: string) => void;
@@ -26,10 +38,24 @@ export function Conversation({
   readState?: "idle" | "loading" | "ready" | "error";
   onView:(view:ContentView) => void;
   toolPreferences?:ToolCardPreferences;
+  readingPositions?:ChatReadingPositions;
+  factsReady?:boolean;
+  visible?:boolean;
+  acceptedSendId?:string | null;
+  approvalStatus?:string | null;
+  approvalIdentity?:string;
+  ref?:Ref<ConversationHandle>;
 }) {
   const [localPreferences] = useState(() => new ToolCardPreferences());
+  const [localReading] = useState(() => new ChatReadingPositions());
+  const reading = useChatReading(session, readingPositions ?? localReading, factsReady, visible, acceptedSendId);
+  useImperativeHandle(ref, () => ({remember:reading.remember, locateApproval:() => {
+    const target = reading.timeline.current?.querySelector<HTMLElement>('#current-approval-status');
+    if (target) reading.locate(target);
+  }}));
   return (
-    <div className="timeline" key={session.id}>
+    <div className="conversation-timeline">
+    <div className="timeline" key={session.id} ref={reading.timeline} tabIndex={0} aria-label="聊天消息">
       <div className="message-container">
         {(readState === "loading" || readState === "idle") && <p className="timeline-caption" role="status">正在读取会话历史…</p>}
         {readState === "error" && <p className="business-notice" role="alert">会话历史读取失败，请刷新重试。已有记录已保留。</p>}
@@ -37,7 +63,7 @@ export function Conversation({
           <>
             {preview && <div className="timeline-caption">示例对话 · 仅用于布局预览</div>}
             {toolRows(session).map(({message, tools}) => (
-              <article className={`message ${message.role}`} key={message.id}>
+              <article className={`message ${message.role}`} key={message.id} data-reading-anchor={`message:${message.id}`}>
                 <div
                   className={`avatar ${message.role === "assistant" ? "agent-avatar" : ""}`}
                 >
@@ -87,7 +113,14 @@ export function Conversation({
             </div>
           </div>
         ) : null}
+        {approvalStatus && <p id="current-approval-status" data-reading-anchor={`approval:${approvalIdentity}`}
+          tabIndex={-1} className="business-notice" role="status">{approvalStatus}</p>}
       </div>
+    </div>
+    {!reading.following && <div className="reading-controls">
+      {reading.hasNewContent && <span role="status">有新内容</span>}
+      <button className="secondary-button" onClick={reading.latest}><ArrowDown size={15} />回到最新</button>
+    </div>}
     </div>
   );
 }

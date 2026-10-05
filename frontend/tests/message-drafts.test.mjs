@@ -34,6 +34,7 @@ test('会话草稿按原文跨切换和应用重启保留，恢复不发出 POST
   const storage = memory();
   const first = setup(storage);
   await until(() => first.store.canSend());
+  assert.equal(first.store.getSnapshot().views.a.acceptedSendId, null, 'GET 不发起跟随意图');
   first.store.updateDraft('  第一条\n    中文缩进\n');
   first.store.select('b');
   await until(() => first.store.canSend());
@@ -91,6 +92,8 @@ test('确认接受清对应版本，已知运行断流/重开仅 GET，稀疏历
   await until(() => stream);
   stream.enqueue(encode('metadata', {thread_id:'a', run_id:'accepted', status:'running'}));
   await until(() => first.store.getSnapshot().drafts.a === '');
+  assert.equal(first.store.getSnapshot().views.a.acceptedSendId, first.store.getSnapshot().submissions.a.id,
+    '仅本次有效 POST metadata 标记发送接受');
   first.store.updateDraft('下一条草稿');
   first.close();
   const reads = [];

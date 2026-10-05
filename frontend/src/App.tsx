@@ -12,7 +12,7 @@ import {
   Plus,
 } from "@phosphor-icons/react";
 import { Navigation, History } from "./components/Sidebar";
-import { Conversation, Composer } from "./components/Conversation";
+import { Conversation, Composer, type ConversationHandle } from "./components/Conversation";
 import { Overlay } from "./components/Overlay";
 import { ContentViewer } from './components/ContentViewer';
 import type { ContentView } from './components/MessageBody';
@@ -88,6 +88,7 @@ function Workspace({ session, conversations }: {
   >(null);
   const [overlay, setOverlay] = useState<"commands" | "details" | ContentView | null>(null);
   const previousConversation = useRef(activeId);
+  const timeline = useRef<ConversationHandle>(null);
   useEffect(() => {
     if (previousConversation.current !== activeId) {
       setOverlay(null);
@@ -100,6 +101,7 @@ function Workspace({ session, conversations }: {
     setCollapsed((value) => !value);
   }
   function createSession() {
+    timeline.current?.remember();
     void conversations.create();
     setQuery("");
     setMobilePanel(null);
@@ -209,6 +211,7 @@ function Workspace({ session, conversations }: {
             query={query}
             onQuery={setQuery}
             onSelect={(id) => {
+              timeline.current?.remember();
               conversations.select(id);
               setMobilePanel(null);
             }}
@@ -264,7 +267,6 @@ function Workspace({ session, conversations }: {
               <pre style={{maxHeight:240, overflow:'auto', whiteSpace:'pre-wrap'}}>{JSON.stringify(conversations.sendFailure, null, 2)}</pre>
             </details>}
             {conversations.verifying && <p className="business-notice" role="status">正在核实当前运行状态…</p>}
-            {conversations.approvalStatus && <p id="current-approval-status" tabIndex={-1} className="business-notice" role="status">{conversations.approvalStatus}</p>}
             {conversations.storageIssue && <p className="business-notice" role="alert">{conversations.storageIssue}</p>}
             {conversations.missing && <section className="business-notice" aria-label="会话文字保留">
               <p>会话不存在；草稿和提交原文仍保留，可以复制到新会话后手动发送。</p>
@@ -284,6 +286,13 @@ function Workspace({ session, conversations }: {
             </details>}
             {session && <button className="text-button" onClick={conversations.reload} disabled={conversations.sending || conversations.loading}>刷新数据</button>}
             <Conversation
+              ref={timeline}
+              readingPositions={conversations.readingPositions}
+              factsReady={conversations.readingFactsReady}
+              visible={conversations.visible}
+              acceptedSendId={conversations.acceptedSendId}
+              approvalStatus={conversations.approvalStatus}
+              approvalIdentity={conversations.run?.run_id}
               toolPreferences={conversations.toolPreferences}
               preview={!session}
               session={active}
@@ -310,9 +319,7 @@ function Workspace({ session, conversations }: {
               storageIssue={conversations.storageIssue}
               sendUnknown={conversations.submission?.status === 'unknown'}
               onApproval={() => {
-                const target = document.getElementById('current-approval-status');
-                target?.scrollIntoView({block:'nearest'});
-                target?.focus();
+                timeline.current?.locateApproval();
               }}
             />
           </main>

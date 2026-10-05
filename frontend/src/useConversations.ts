@@ -4,12 +4,14 @@ import { ConversationStore, emptyConversation } from "./conversation-state";
 import { demoSessions, type Session } from "./data/demo";
 import { presentMessage } from './message-presentation';
 import { ToolCardPreferences } from './tool-card-preferences';
+import { ChatReadingPositions, readingHistoryReady } from './chat-reading-position';
 import { observationLabels } from './observation-recovery';
 
 /** 在 App 中挂载，工作台卸载或 BackendSession 换代不会重建会话所有者。 */
 export function useConversations(session: BackendSession | null, previewMode = false, visible = true) {
   const [store] = useState(() => new ConversationStore());
   const [toolPreferences] = useState(() => new ToolCardPreferences());
+  const [readingPositions] = useState(() => new ChatReadingPositions());
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const [preview, setPreview] = useState(demoSessions);
   const [previewId, setPreviewId] = useState(demoSessions[0].id);
@@ -41,7 +43,9 @@ export function useConversations(session: BackendSession | null, previewMode = f
     else statusLabel = "读取中";
   }
   return {
-    sessions, active, activeId, toolPreferences,
+    sessions, active, activeId, toolPreferences, readingPositions, visible,
+    readingFactsReady:previewMode || readingHistoryReady(view),
+    acceptedSendId:view.acceptedSendId,
     select: (id: string) => previewMode ? setPreviewId(id) : store.select(id),
     create: async () => {
       if (!previewMode) return store.create();

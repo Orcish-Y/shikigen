@@ -25,6 +25,7 @@ export interface ConversationView {
   verified: boolean;
   error: string | null;
   sending: boolean;
+  acceptedSendId: string | null;
   events: ReturnType<RunProjection['snapshot']>['events'];
   approval: ApprovalProjection | null;
   observation: ObservationState;
@@ -53,7 +54,7 @@ export interface ConversationState {
   submissions: Record<string, MessageSubmission>;
 }
 export const emptyConversation: ConversationView = {
-  messages: [], run: null, runStatuses:{}, history: "idle", verified: false, error: null, sending: false, events:{}, approval:null, observation:'idle', retry:null, observationFailure:null, querying:false, queryFailure:null, sendFailure:null, protocolIssue:null, missing:false,
+  messages: [], run: null, runStatuses:{}, history: "idle", verified: false, error: null, sending: false, acceptedSendId:null, events:{}, approval:null, observation:'idle', retry:null, observationFailure:null, querying:false, queryFailure:null, sendFailure:null, protocolIssue:null, missing:false,
 };
 
 interface ObservationAttempt {
@@ -429,7 +430,8 @@ export class ConversationStore {
       if (frame.event === 'metadata') {
         this.inputs.accept(threadId, submission.id, frame.data.run_id);
         this.publishInputs();
-        this.view(threadId, {sending:false});
+        // 仅本次 POST 的有效接受允许恢复阅读跟随；GET metadata 不发此信号。
+        this.view(threadId, {sending:false, acceptedSendId:submission.id});
       }
     }, controller.signal)
       .then(() => { if (this.live(session, controller)) normal = this.finishObservation(controller); })
