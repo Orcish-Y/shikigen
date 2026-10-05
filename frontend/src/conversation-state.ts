@@ -20,6 +20,7 @@ function listFailure(error: unknown): ListFailure {
 export interface ConversationView {
   messages: ConversationMessage[];
   run: Run | null;
+  runStatuses:Record<string, Run['status']>;
   history: "idle" | "loading" | "ready" | "error";
   verified: boolean;
   error: string | null;
@@ -52,7 +53,7 @@ export interface ConversationState {
   submissions: Record<string, MessageSubmission>;
 }
 export const emptyConversation: ConversationView = {
-  messages: [], run: null, history: "idle", verified: false, error: null, sending: false, events:{}, approval:null, observation:'idle', retry:null, observationFailure:null, querying:false, queryFailure:null, sendFailure:null, protocolIssue:null, missing:false,
+  messages: [], run: null, runStatuses:{}, history: "idle", verified: false, error: null, sending: false, events:{}, approval:null, observation:'idle', retry:null, observationFailure:null, querying:false, queryFailure:null, sendFailure:null, protocolIssue:null, missing:false,
 };
 
 interface ObservationAttempt {

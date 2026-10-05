@@ -26,7 +26,13 @@ export class RunProjection {
   run: Run | null = null;
 
   snapshot() {
-    return { messages: [...this.messages.values()].sort((a, b) => a.seq - b.seq), run: this.run,
+    const runStatuses:Record<string, Run['status']> = Object.create(null);
+    for (const message of this.messages.values()) if (message.run_status) runStatuses[message.run_id] = message.run_status;
+    for (const [id, run] of this.runs) {
+      // 保存过的终态不可被较早的历史／metadata 降级；此映射仅供各卡片说明所属运行。
+      if (terminalRun(run) || !['completed', 'cancelled', 'error'].includes(runStatuses[id])) runStatuses[id] = run.status;
+    }
+    return { messages: [...this.messages.values()].sort((a, b) => a.seq - b.seq), run: this.run, runStatuses,
       events: Object.fromEntries([...this.events].map(([id, events]) => [id, [...events.values()].sort((a, b) => a.seq - b.seq)])) };
   }
 

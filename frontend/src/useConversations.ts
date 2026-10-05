@@ -1,36 +1,15 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { runStatusLabels, type BackendSession, type MessageContent } from "./backend-client";
-import { ConversationStore, emptyConversation, type ConversationMessage } from "./conversation-state";
-import { demoSessions, type Message, type Session } from "./data/demo";
+import { runStatusLabels, type BackendSession } from "./backend-client";
+import { ConversationStore, emptyConversation } from "./conversation-state";
+import { demoSessions, type Session } from "./data/demo";
+import { presentMessage } from './message-presentation';
+import { ToolCardPreferences } from './tool-card-preferences';
 import { observationLabels } from './observation-recovery';
-
-function messageText(content: MessageContent["content"]): string {
-  return typeof content === "string" ? content : content.map(block => {
-    if (typeof block === "string") return block;
-    return typeof block.text === "string" ? block.text : JSON.stringify(block);
-  }).join("\n");
-}
-
-function displayMessage(message: ConversationMessage): Message {
-  const content = message.content;
-  const text = messageText(content.content);
-  return {
-    id: String(message.seq),
-    preview: message.preview === true,
-    role: content.type === "human" ? "user" : content.type === 'tool' ? 'tool' : "assistant",
-    content:content.content,
-    toolCalls:content.tool_calls,
-    text: content.type === "tool" ? "" : text,
-    ...(content.type === "tool" ? { tool: {
-      name: content.name ?? "工具", command: content.tool_call_id ?? "",
-      output: text, status: content.status,
-    } } : {}),
-  };
-}
 
 /** 在 App 中挂载，工作台卸载或 BackendSession 换代不会重建会话所有者。 */
 export function useConversations(session: BackendSession | null, previewMode = false, visible = true) {
   const [store] = useState(() => new ConversationStore());
+  const [toolPreferences] = useState(() => new ToolCardPreferences());
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const [preview, setPreview] = useState(demoSessions);
   const [previewId, setPreviewId] = useState(demoSessions[0].id);
@@ -47,7 +26,8 @@ export function useConversations(session: BackendSession | null, previewMode = f
     id: thread.id, title: thread.title?.trim() ? thread.title : "新会话", group: "历史",
     summary: thread.updated_at || "更新时间待核实",
     status: thread.run_status ? runStatusLabels[thread.run_status] : "未开始",
-    messages: (state.views[thread.id]?.messages ?? []).map(displayMessage),
+    messages: (state.views[thread.id]?.messages ?? []).map(presentMessage),
+    runStatuses:state.views[thread.id]?.runStatuses,
   }));
   const active = sessions.find(item => item.id === activeId) ?? {
     id: activeId, title: activeId ? '会话待核实' : state.listing ? "正在读取会话" : "新建会话开始对话", group: "历史" as const,
@@ -61,7 +41,7 @@ export function useConversations(session: BackendSession | null, previewMode = f
     else statusLabel = "读取中";
   }
   return {
-    sessions, active, activeId,
+    sessions, active, activeId, toolPreferences,
     select: (id: string) => previewMode ? setPreviewId(id) : store.select(id),
     create: async () => {
       if (!previewMode) return store.create();

@@ -631,20 +631,22 @@ pre {
   padding: 10px 12px;
   font-size: 12px;
 }
-.tool-block summary {
+.tool-summary {
+  width: 100%;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
   display: flex;
   align-items: center;
   gap: 8px;
   cursor: pointer;
   flex-wrap: wrap;
 }
-.tool-block summary::after {
-  content: "+";
+.tool-toggle {
   margin-left: auto;
   color: var(--muted);
-}
-.tool-block[open] summary::after {
-  content: "−";
 }
 .tool-block strong {
   font-family: "JetBrains Mono", monospace;
@@ -674,6 +676,17 @@ pre {
   color: var(--muted);
   line-height: 1.7;
 }
+.tool-block, .tool-content, .tool-section, .tool-result-body { min-width: 0; }
+.tool-block strong { overflow-wrap: anywhere; }
+.tool-note { color: var(--muted); font-size: 12px; line-height: 1.7; margin-top: 6px; overflow-wrap: anywhere; }
+.tool-status { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; font-size: 12px; padding: 1px 5px; border-radius: 4px; }
+.tool-error { color: #b91c1c; background: #fef2f2; }
+.tool-waiting { color: var(--muted); background: var(--hover); }
+.tool-section-heading { display: flex; justify-content: space-between; align-items: center; width: 100%; min-height: 44px; margin-top: 8px; background: transparent; border: 0; border-top: 1px solid var(--border); padding: 8px 0; text-align: left; font-size: 14px; }
+.tool-section-heading > span { color: var(--muted); }
+.tool-identity { font-family: 'JetBrains Mono', monospace; overflow-wrap: anywhere; }
+.tool-result-body > .message-content > .message-text { max-height: 320px; overflow: auto; }
+.tool-content [hidden] { display: none; }
 .composer-area {
   width: 100%;
   max-width: 888px;

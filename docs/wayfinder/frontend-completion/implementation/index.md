@@ -4,13 +4,15 @@ Status: ready-for-agent
 
 补齐首版真实聊天、运行恢复、审批／取消、中止正文保存、完整内容与资源、详情和导航；来源：[统一实施规格](../../../../.scratch/frontend-completion/PRD.md)。
 
-发布日期：2026-10-04。用户已确认 23 张票据的粒度、直接阻塞依赖及拆分安排，答复“按方案定稿并发布（推荐）”。共 156 条验收条件；第 1、2、3、4、5、6、7 票已实现并完成各票核心验收，其余票据待实施。完整仓库回归的未解决问题另行记录，不能将票据完成等同于所有仓库测试通过。
+发布日期：2026-10-04。用户已确认 23 张票据的粒度、直接阻塞依赖及拆分安排，答复“按方案定稿并发布（推荐）”。共 156 条验收条件；第 1、2、3、4、5、6、7、8 票已实现并完成各票核心验收，其余票据待实施。完整仓库回归的未解决问题另行记录，不能将票据完成等同于所有仓库测试通过。
 
 文件组织：2026-10-04 按用户提出的目录与粒度要求，每张实施票据独立保存于本目录。本索引汇总公共要求与直接依赖；原有 [Wayfinder 地图](../map.md)及 tickets/ 记录规划决策。
 
-工作 frontier：阻塞票全部完成的票即可开始，每次推进一票；以下按依赖顺序编排，独立分支可自行安排。2026-10-05 第 1–7 票已完成；本轮收尾：**第 7 票“安全 Markdown、网页链接与完整内容查看”**（角色正文、安全GFM、完整代码／JSON查看与复制、受控系统网页打开、单前景焦点恢复／循环及原稿焦点样式）。`gpt-6-luna / max` 最终前端全套 **111 通过**、Rust **25 通过**、类型／构建／Ruff通过；本票真实Tauri **2 项**及旧第03／04／05／06实机回归 **3／4／2／1 项**通过。后端完整 **291 项：289 通过、1 错误、1 环境跳过**，错误原用例隔离两次通过，仍独立追踪。当前下一票：**第8票“完整呈现工具调用、结果与附加数据”**，本轮未启动。物理Windows输入、系统IME、窗口边框及多尺寸联合验收仍归第23票，本票窄屏证据为真实WebView设备视口模拟。实现中焦点补修、样式检查与测试oracle的初次失败均保留于[第7票报告](../../../../.scratch/frontend-completion/ticket-07/report.md)；历史[第6票](../../../../.scratch/frontend-completion/ticket-06/report.md)、[第5票](../../../../.scratch/frontend-completion/ticket-05/report.md)及[第4票](../../../../.scratch/frontend-completion/ticket-04/report.md)证据保留。
+工作 frontier：阻塞票全部完成的票即可开始，每次推进一票；以下按依赖顺序编排，独立分支可自行安排。2026-10-05 第 1–8 票已完成；本轮收尾：**第 8 票“完整呈现工具调用、结果与附加数据”**（唯一关联、真实工具状态、独立结果、原 seq／完整记录、折叠偏好、全部非 null artifact 与完整查看／复制）。`gpt-6-luna / max` 最终前端全套 **117 通过**、Rust **25 通过**、类型／构建／Ruff 通过；真实 Tauri **16 个唯一用例通过**，本票 4 项、旧第 03／04／05／06／07 票分别 3／4／2／1／2 项。后端完整 **291 项：290 通过、0 失败／错误、1 环境跳过**；Standards／Spec 独立审查均无剩余 finding。当前下一票：**第 9 票“恢复聊天阅读位置与自动跟随”**，本轮未启动。物理 Windows 输入、系统 IME、窗口边框及多尺寸联合验收仍归第 23 票，本票窄屏证据为真实 WebView 设备视口模拟。开发初次失败、补充原生测试预期修正及证据归档／旧目录恢复均保留于[第 8 票报告](../../../../.scratch/frontend-completion/ticket-08/report.md)；历史[第 7 票](../../../../.scratch/frontend-completion/ticket-07/report.md)、[第 6 票](../../../../.scratch/frontend-completion/ticket-06/report.md)、[第 5 票](../../../../.scratch/frontend-completion/ticket-05/report.md)及[第 4 票](../../../../.scratch/frontend-completion/ticket-04/report.md)证据保留。
 
-**保留的回归问题：**第4票的审批恢复结算超时在第5、6、7票完整回归中未复现，但未修改路径或确认根因，[旧问题](../../../../.scratch/approval-cleanup-test-timeout/issues/01-approval-resume-settlement-timeout.md)仍为needs-triage。第7票完整回归另出现空宿主环境变量分支的进程退出等待超时，正式隔离两次通过，原因未确认，见[新的独立问题](../../../../.scratch/desktop-environment-exit-timeout/issues/01-empty-host-environment-startup-exit.md)及[本轮后端报告](../../../../.scratch/frontend-completion/ticket-07/backend-report.md)。历史失败不改算通过。
+**保留的回归问题：**第4票的审批恢复结算超时在第5、6、7票完整回归中未复现，但未修改路径或确认根因，[旧问题](../../../../.scratch/approval-cleanup-test-timeout/issues/01-approval-resume-settlement-timeout.md)仍为needs-triage。第7票完整回归另出现空宿主环境变量分支的进程退出等待超时，正式隔离两次通过，原因未确认，见[新的独立问题](../../../../.scratch/desktop-environment-exit-timeout/issues/01-empty-host-environment-startup-exit.md)及[第7票后端报告](../../../../.scratch/frontend-completion/ticket-07/backend-report.md)。历史失败不改算通过。
+
+第 8 票完整回归中上述两个正式用例均通过，未修改相关产品路径或确认根因，两份 needs-triage 记录继续保留。第 7 票的历史完整回归结果仍为 289 通过、1 错误、1 跳过，不能用本次通过覆盖，见[第 8 票后端报告](../../../../.scratch/frontend-completion/ticket-08/backend-report.md)。
 
 实施由用户主导。ready-for-agent 表示任务描述自足；每票使用“待实施／实施中／待验收／已验收”记录实施进度，验收完成后才能将该票 Status 改为 done。后续使用 /implement 时仍遵守代码自主权约定。
 

@@ -284,6 +284,7 @@ function Workspace({ session, conversations }: {
             </details>}
             {session && <button className="text-button" onClick={conversations.reload} disabled={conversations.sending || conversations.loading}>刷新数据</button>}
             <Conversation
+              toolPreferences={conversations.toolPreferences}
               preview={!session}
               session={active}
               readState={activeId ? conversations.historyState : "ready"}

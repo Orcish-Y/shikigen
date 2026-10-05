@@ -1,4 +1,7 @@
 import type { MessageContent } from '../backend-client';
+import type { RunStatus } from '../backend-client';
+import type { ConversationMessage } from '../run-projection';
+import { toolDemoMessages } from './tool-demo';
 
 export interface Message {
   preview?: boolean;
@@ -6,12 +9,14 @@ export interface Message {
   role: "user" | "assistant" | "tool";
   content?: MessageContent['content'];
   toolCalls?: MessageContent['tool_calls'];
+  record?: ConversationMessage;
   text: string;
   code?: { language: string; filename: string; content: string };
   tool?: { name: string; command: string; output: string; status?: "success" | "error" };
 }
 
 export interface Session {
+  runStatuses?: Record<string, RunStatus>;
   status?: string;
   id: string;
   title: string;
@@ -43,11 +48,6 @@ export const demoSessions: Session[] = [
           content:
             "type RunStatus =\n  | 'running'\n  | 'interrupted'\n  | 'completed'\n  | 'cancelled'\n  | 'error';\n\ninterface RunSnapshot {\n  threadId: string;\n  runId: string;\n  status: RunStatus;\n}",
         },
-        tool: {
-          name: "read_file",
-          command: "docs/frontend-prd.md",
-          output: "前端只消费 HTTP 和 SSE 契约，将持久事实投影为界面。",
-        },
       },
       {
         id: "m3",
@@ -63,21 +63,10 @@ export const demoSessions: Session[] = [
   },
   {
     id: "demo-tools",
-    title: "工具与 Middleware 设计",
+    title: "工具完整记录示例",
     group: "今天",
-    summary: "梳理工具注册与中间件边界",
-    messages: [
-      {
-        id: "t1",
-        role: "user",
-        text: "工具注册和 Middleware 链应该分别承担什么职责？",
-      },
-      {
-        id: "t2",
-        role: "assistant",
-        text: "工具注册表负责描述和查找工具；Middleware 链负责围绕调用执行统一的策略，例如日志、审批和异常处理。这样新增工具时，可以复用已有的执行规则。",
-      },
-    ],
+    summary: "同名、乱序、空值、未配对与失败示例",
+    messages: toolDemoMessages,
   },
   {
     id: "demo-checkpoint",

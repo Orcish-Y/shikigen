@@ -1,15 +1,16 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { composerEnter } from '../composer-keyboard';
 import type { RunStatus } from '../backend-client';
 import {
   ArrowUp,
-  Terminal,
-  Check,
   ChatCircle,
 } from "@phosphor-icons/react";
 import type { Session } from "../data/demo";
 import { MessageBody, type ContentView } from './MessageBody';
 import { ContentBlock } from './ContentViewer';
+import { toolRows } from '../tool-records';
+import { ToolCard } from './ToolCard';
+import { ToolCardPreferences } from '../tool-card-preferences';
 
 export function Conversation({
   session,
@@ -17,13 +18,16 @@ export function Conversation({
   preview = false,
   readState = "ready",
   onView,
+  toolPreferences,
 }: {
   session: Session;
   onSuggestion: (text: string) => void;
   preview?: boolean;
   readState?: "idle" | "loading" | "ready" | "error";
   onView:(view:ContentView) => void;
+  toolPreferences?:ToolCardPreferences;
 }) {
+  const [localPreferences] = useState(() => new ToolCardPreferences());
   return (
     <div className="timeline" key={session.id}>
       <div className="message-container">
@@ -32,7 +36,7 @@ export function Conversation({
         {session.messages.length ? (
           <>
             {preview && <div className="timeline-caption">示例对话 · 仅用于布局预览</div>}
-            {session.messages.map((message) => (
+            {toolRows(session).map(({message, tools}) => (
               <article className={`message ${message.role}`} key={message.id}>
                 <div
                   className={`avatar ${message.role === "assistant" ? "agent-avatar" : ""}`}
@@ -57,27 +61,9 @@ export function Conversation({
                   </div>
                   {message.role !== 'tool' && <MessageBody role={message.role} content={message.content ?? message.text}
                     identity={`${session.id}:${message.id}`} preview={message.preview} onView={onView} />}
-                  {Boolean(message.toolCalls?.length) && <ContentBlock title="工具调用 JSON"
-                    text={JSON.stringify(message.toolCalls, null, 2)} onView={onView} />}
+                  {tools.map(record => <ToolCard key={record.identity} record={record} preferences={toolPreferences ?? localPreferences} onView={onView} />)}
                   {message.code && <ContentBlock title={`${message.code.filename} · ${message.code.language}`}
                     text={message.code.content} onView={onView} />}
-                  {message.tool && (
-                    <details className="tool-block" open>
-                      <summary>
-                        <Terminal size={17} />
-                        <strong>{message.tool.name}</strong>
-                        <span className="success">
-                          <Check size={12} />
-                          {preview ? "示例结果" : message.tool.status === "error" ? "工具失败" : "工具结果"}
-                        </span>
-                      </summary>
-                      <div className="tool-content">
-                        <code>{message.tool.command}</code>
-                        <MessageBody role="tool" content={message.content ?? message.tool.output}
-                          identity={`${session.id}:${message.id}:tool`} onView={onView} />
-                      </div>
-                    </details>
-                  )}
                 </div>
               </article>
             ))}
