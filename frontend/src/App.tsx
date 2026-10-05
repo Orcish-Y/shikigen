@@ -1,7 +1,7 @@
 import { useBackendState } from "./useBackendState";
 import { TrayNotice } from "./TrayNotice";
 import { BackendLogs } from "./BackendLogs";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   IconContext,
   SidebarSimple,
@@ -14,6 +14,8 @@ import {
 import { Navigation, History } from "./components/Sidebar";
 import { Conversation, Composer } from "./components/Conversation";
 import { Overlay } from "./components/Overlay";
+import { ContentViewer } from './components/ContentViewer';
+import type { ContentView } from './components/MessageBody';
 import { SendRecovery, DraftCopy } from './components/SendRecovery';
 import { ObservationStatus } from './components/ObservationStatus';
 import type { BackendSession } from "./backend-client";
@@ -84,7 +86,14 @@ function Workspace({ session, conversations }: {
   const [mobilePanel, setMobilePanel] = useState<
     "navigation" | "history" | null
   >(null);
-  const [overlay, setOverlay] = useState<"commands" | "details" | null>(null);
+  const [overlay, setOverlay] = useState<"commands" | "details" | ContentView | null>(null);
+  const previousConversation = useRef(activeId);
+  useEffect(() => {
+    if (previousConversation.current !== activeId) {
+      setOverlay(null);
+      previousConversation.current = activeId;
+    }
+  }, [activeId]);
   const shortcut = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl";
 
   function toggleNavigation() {
@@ -131,6 +140,12 @@ function Workspace({ session, conversations }: {
         !event.altKey &&
         !event.isComposing
       ) {
+        if (document.querySelector('dialog[open]')) {
+          if (event.key.toLowerCase() === 'k' && overlay === 'commands') {
+            event.preventDefault(); setOverlay(null);
+          }
+          return;
+        }
         if (event.key.toLowerCase() === "k") {
           event.preventDefault();
           setOverlay((value) => (value === "commands" ? null : "commands"));
@@ -201,7 +216,7 @@ function Workspace({ session, conversations }: {
             creating={conversations.creating || conversations.loading}
             pagination={conversations.pagination}
           />
-          <main className="chat-workspace">
+          <main className="chat-workspace" tabIndex={-1}>
             <div className="chat-toolbar">
               <button
                 className="icon-button mobile-navigation"
@@ -272,6 +287,7 @@ function Workspace({ session, conversations }: {
               preview={!session}
               session={active}
               readState={activeId ? conversations.historyState : "ready"}
+              onView={view => { setMobilePanel(null); setOverlay(view); }}
               onSuggestion={(text) => {
                 updateDraft(text);
                 document.getElementById("message-draft")?.focus();
@@ -358,6 +374,9 @@ function Workspace({ session, conversations }: {
             </div>
           </Overlay>
         )}
+        {overlay && typeof overlay === 'object' && <Overlay title={overlay.title} drawer onClose={() => setOverlay(null)}>
+          <ContentViewer view={overlay} />
+        </Overlay>}
       </div>
     </IconContext.Provider>
   );

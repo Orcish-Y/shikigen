@@ -1,64 +1,28 @@
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import { composerEnter } from '../composer-keyboard';
 import type { RunStatus } from '../backend-client';
 import {
   ArrowUp,
-  Copy,
-  FileCode,
   Terminal,
   Check,
   ChatCircle,
 } from "@phosphor-icons/react";
-import type { Message, Session } from "../data/demo";
-
-function CodeBlock({ code }: { code: NonNullable<Message["code"]> }) {
-  const [copyState, setCopyState] = useState("复制");
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(code.content);
-      setCopyState("已复制");
-    } catch {
-      setCopyState("复制失败，请手动选择");
-    }
-  }
-  return (
-    <div className="code-block">
-      <div className="block-heading">
-        <span>
-          <FileCode size={16} />
-          {code.filename}
-        </span>
-        <button className="text-button" onClick={copy}>
-          <Copy size={14} />
-          {copyState}
-        </button>
-      </div>
-      <pre aria-label={code.language}>
-        <code>
-          {code.content.split("\n").map((line, i) => (
-            <span className="code-line" key={i}>
-              <span className="line-number" aria-hidden="true">
-                {i + 1}
-              </span>
-              {line || " "}
-            </span>
-          ))}
-        </code>
-      </pre>
-    </div>
-  );
-}
+import type { Session } from "../data/demo";
+import { MessageBody, type ContentView } from './MessageBody';
+import { ContentBlock } from './ContentViewer';
 
 export function Conversation({
   session,
   onSuggestion,
   preview = false,
   readState = "ready",
+  onView,
 }: {
   session: Session;
   onSuggestion: (text: string) => void;
   preview?: boolean;
   readState?: "idle" | "loading" | "ready" | "error";
+  onView:(view:ContentView) => void;
 }) {
   return (
     <div className="timeline" key={session.id}>
@@ -84,19 +48,19 @@ export function Conversation({
                     <strong>
                       {message.role === "user"
                         ? "Local Developer"
-                        : "shikigen Agent"}
+                        : message.role === 'tool' ? '工具结果' : "shikigen Agent"}
                     </strong>
                     {preview && message.role === "assistant" && (
                       <span className="badge">示例</span>
                     )}
                     {message.preview && <span className="badge">生成中 · 尚未保存</span>}
                   </div>
-                  <div className="message-text">
-                    {message.text.split("\n\n").map((paragraph, index) => (
-                      <p key={index}>{paragraph}</p>
-                    ))}
-                  </div>
-                  {message.code && <CodeBlock code={message.code} />}
+                  {message.role !== 'tool' && <MessageBody role={message.role} content={message.content ?? message.text}
+                    identity={`${session.id}:${message.id}`} preview={message.preview} onView={onView} />}
+                  {Boolean(message.toolCalls?.length) && <ContentBlock title="工具调用 JSON"
+                    text={JSON.stringify(message.toolCalls, null, 2)} onView={onView} />}
+                  {message.code && <ContentBlock title={`${message.code.filename} · ${message.code.language}`}
+                    text={message.code.content} onView={onView} />}
                   {message.tool && (
                     <details className="tool-block" open>
                       <summary>
@@ -109,7 +73,8 @@ export function Conversation({
                       </summary>
                       <div className="tool-content">
                         <code>{message.tool.command}</code>
-                        <p>{message.tool.output}</p>
+                        <MessageBody role="tool" content={message.content ?? message.tool.output}
+                          identity={`${session.id}:${message.id}:tool`} onView={onView} />
                       </div>
                     </details>
                   )}

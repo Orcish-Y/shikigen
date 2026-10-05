@@ -17,9 +17,10 @@ function displayMessage(message: ConversationMessage): Message {
   return {
     id: String(message.seq),
     preview: message.preview === true,
-    role: content.type === "human" ? "user" : "assistant",
-    text: content.type === "tool" ? "" : text + (content.tool_calls?.length
-      ? "\n" + content.tool_calls.map(call => `${call.name}(${JSON.stringify(call.args)})`).join("\n") : ""),
+    role: content.type === "human" ? "user" : content.type === 'tool' ? 'tool' : "assistant",
+    content:content.content,
+    toolCalls:content.tool_calls,
+    text: content.type === "tool" ? "" : text,
     ...(content.type === "tool" ? { tool: {
       name: content.name ?? "工具", command: content.tool_call_id ?? "",
       output: text, status: content.status,

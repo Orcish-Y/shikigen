@@ -4,13 +4,13 @@ Status: ready-for-agent
 
 补齐首版真实聊天、运行恢复、审批／取消、中止正文保存、完整内容与资源、详情和导航；来源：[统一实施规格](../../../../.scratch/frontend-completion/PRD.md)。
 
-发布日期：2026-10-04。用户已确认 23 张票据的粒度、直接阻塞依赖及拆分安排，答复“按方案定稿并发布（推荐）”。共 156 条验收条件；第 1、2、3、4、5、6 票已实现并完成各票核心验收，其余票据待实施。完整仓库回归的未解决问题另行记录，不能将票据完成等同于所有仓库测试通过。
+发布日期：2026-10-04。用户已确认 23 张票据的粒度、直接阻塞依赖及拆分安排，答复“按方案定稿并发布（推荐）”。共 156 条验收条件；第 1、2、3、4、5、6、7 票已实现并完成各票核心验收，其余票据待实施。完整仓库回归的未解决问题另行记录，不能将票据完成等同于所有仓库测试通过。
 
 文件组织：2026-10-04 按用户提出的目录与粒度要求，每张实施票据独立保存于本目录。本索引汇总公共要求与直接依赖；原有 [Wayfinder 地图](../map.md)及 tickets/ 记录规划决策。
 
-工作 frontier：阻塞票全部完成的票即可开始，每次推进一票；以下按依赖顺序编排，独立分支可自行安排。2026-10-05 第 1、2、3、4、5、6 票已完成；本轮收尾：**第 6 票“隐藏暂停读取并轮询会话状态”**（原生 revision／visible 桥接、5 秒第一页轮询、隐藏撤销读取而后台继续、显示／ready／选择合并定位、新 Run 摘要先读历史、终态恢复清理旧暂停文案）。`gpt-6-luna / max` 最终前端全套 **106 通过**、Rust **23 通过**、类型／构建／ruff 通过；本票真 Tauri **1 项**及旧第 03／04／05 票实机回归 **3／4／2 项**通过；后端完整 **291 项：290 通过、1 环境跳过、0 失败／错误**。当前下一票：**第 7 票“安全 Markdown、网页链接与完整内容查看”**，本轮未启动。物理 Windows 输入、系统 IME、窗口边框及多尺寸联合验收仍归第 23 票。原生权限环境差异、实施中三处补修和旧05测试同步整改的初次失败均保留于[第 6 票报告](../../../../.scratch/frontend-completion/ticket-06/report.md)；历史[第 5 票](../../../../.scratch/frontend-completion/ticket-05/report.md)及[第 4 票](../../../../.scratch/frontend-completion/ticket-04/report.md)证据保留。
+工作 frontier：阻塞票全部完成的票即可开始，每次推进一票；以下按依赖顺序编排，独立分支可自行安排。2026-10-05 第 1–7 票已完成；本轮收尾：**第 7 票“安全 Markdown、网页链接与完整内容查看”**（角色正文、安全GFM、完整代码／JSON查看与复制、受控系统网页打开、单前景焦点恢复／循环及原稿焦点样式）。`gpt-6-luna / max` 最终前端全套 **111 通过**、Rust **25 通过**、类型／构建／Ruff通过；本票真实Tauri **2 项**及旧第03／04／05／06实机回归 **3／4／2／1 项**通过。后端完整 **291 项：289 通过、1 错误、1 环境跳过**，错误原用例隔离两次通过，仍独立追踪。当前下一票：**第8票“完整呈现工具调用、结果与附加数据”**，本轮未启动。物理Windows输入、系统IME、窗口边框及多尺寸联合验收仍归第23票，本票窄屏证据为真实WebView设备视口模拟。实现中焦点补修、样式检查与测试oracle的初次失败均保留于[第7票报告](../../../../.scratch/frontend-completion/ticket-07/report.md)；历史[第6票](../../../../.scratch/frontend-completion/ticket-06/report.md)、[第5票](../../../../.scratch/frontend-completion/ticket-05/report.md)及[第4票](../../../../.scratch/frontend-completion/ticket-04/report.md)证据保留。
 
-**保留的回归问题：**第 4 票完整后端 291 项曾有 1 审批恢复结算超时错误，正式隔离复测两次仍失败；第 5、6 票完整回归同一用例通过，未复现旧错误。未修改该产品路径或正式用例，根因仍未确认，见[独立问题](../../../../.scratch/approval-cleanup-test-timeout/issues/01-approval-resume-settlement-timeout.md)及本轮[后端报告](../../../../.scratch/frontend-completion/ticket-06/backend-report.md)。历史失败不改算通过，问题仍保留 needs-triage。
+**保留的回归问题：**第4票的审批恢复结算超时在第5、6、7票完整回归中未复现，但未修改路径或确认根因，[旧问题](../../../../.scratch/approval-cleanup-test-timeout/issues/01-approval-resume-settlement-timeout.md)仍为needs-triage。第7票完整回归另出现空宿主环境变量分支的进程退出等待超时，正式隔离两次通过，原因未确认，见[新的独立问题](../../../../.scratch/desktop-environment-exit-timeout/issues/01-empty-host-environment-startup-exit.md)及[本轮后端报告](../../../../.scratch/frontend-completion/ticket-07/backend-report.md)。历史失败不改算通过。
 
 实施由用户主导。ready-for-agent 表示任务描述自足；每票使用“待实施／实施中／待验收／已验收”记录实施进度，验收完成后才能将该票 Status 改为 done。后续使用 /implement 时仍遵守代码自主权约定。
 

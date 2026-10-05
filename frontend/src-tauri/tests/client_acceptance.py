@@ -122,6 +122,7 @@ class ClientAcceptance(WindowAcceptance):
     self.call(
       "Page.addScriptToEvaluateOnNewDocument",
       source="""
+      (() => {
       window.__requests = [];
       const original = window.fetch.bind(window);
       window.fetch = async (input, init) => {
@@ -142,6 +143,7 @@ class ClientAcceptance(WindowAcceptance):
         }
         return response;
       };
+      })();
     """.replace("HOLD_MESSAGES", "true" if hold_messages else "false"),
     )
     self.call("Page.reload")

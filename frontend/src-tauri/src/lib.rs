@@ -2,9 +2,37 @@ pub mod backend;
 mod desktop;
 pub mod process;
 mod single_instance;
+pub mod web_open;
 use backend::{BackendManager, BackendSnapshot, LaunchPlan};
 use std::sync::Arc;
 use tauri::{Emitter, Manager};
+use tauri_plugin_opener::OpenerExt;
+
+#[tauri::command]
+async fn open_web_url(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    url: String,
+) -> Result<bool, web_open::WebOpenError> {
+    if window.label() != "main" {
+        return Err(web_open::WebOpenError {
+            code: "invalid_window",
+            message: "网页打开仅限主窗口".into(),
+        });
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        web_open::open_web_url(&url, |validated| {
+            app.opener()
+                .open_url(validated, None::<&str>)
+                .map_err(|error| error.to_string())
+        })
+    })
+    .await
+    .map_err(|error| web_open::WebOpenError {
+        code: "web_open_failed",
+        message: error.to_string(),
+    })?
+}
 
 #[tauri::command]
 fn get_backend_state(manager: tauri::State<'_, Arc<BackendManager>>) -> BackendSnapshot {
@@ -73,12 +101,18 @@ pub fn run_with_backend(
         desktop::activate(app);
     }));
     let app = builder
+        .plugin(
+            tauri_plugin_opener::Builder::new()
+                .open_js_links_on_click(false)
+                .build(),
+        )
         .invoke_handler(tauri::generate_handler![
             get_backend_state,
             get_backend_logs,
             retry_backend,
             get_tray_error,
-            get_workspace_visibility
+            get_workspace_visibility,
+            open_web_url
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {

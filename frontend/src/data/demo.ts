@@ -1,7 +1,11 @@
+import type { MessageContent } from '../backend-client';
+
 export interface Message {
   preview?: boolean;
   id: string;
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "tool";
+  content?: MessageContent['content'];
+  toolCalls?: MessageContent['tool_calls'];
   text: string;
   code?: { language: string; filename: string; content: string };
   tool?: { name: string; command: string; output: string; status?: "success" | "error" };
