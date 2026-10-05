@@ -13,12 +13,12 @@ export function CopyContent({text, label = '复制完整内容'}: {text:string; 
   </span>;
 }
 
-export function ContentBlock({title, text, preview, onView}: ContentView & {onView:(view:ContentView) => void}) {
+export function ContentBlock({title, text, preview, generating, onView}: ContentView & {onView:(view:ContentView) => void}) {
   return <div className="code-block content-block">
     <div className="block-heading">
       <span><FileCode size={16} />{title}</span>
       <div className="content-actions">
-        <button className="text-button" onClick={() => onView({title, text, preview})}>查看完整内容</button>
+        <button className="text-button" onClick={() => onView({title, text, preview, generating})}>查看完整内容</button>
         <CopyContent text={text} label={preview ? '复制当前片段' : '复制'} />
       </div>
     </div>
@@ -28,7 +28,7 @@ export function ContentBlock({title, text, preview, onView}: ContentView & {onVi
 
 export function ContentViewer({view}: {view:ContentView}) {
   return <div className="content-viewer">
-    {view.preview && <p>生成中 · 尚未保存，以下为当前片段。</p>}
+    {view.preview && <p>{view.generating === false ? '预览 · 尚未读取保存事实，以下为当前片段。' : '生成中 · 尚未保存，以下为当前片段。'}</p>}
     <CopyContent text={view.text} label={view.preview ? '复制当前片段' : '复制完整内容'} />
     <pre tabIndex={0} aria-label={view.title}>{view.text}</pre>
   </div>;

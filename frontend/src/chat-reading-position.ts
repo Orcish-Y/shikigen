@@ -13,11 +13,15 @@ export interface TimelineGeometry {
   anchors:{id:string; top:number}[];
 }
 
+// 浏览器缩放下的矩形测量可有亚像素抖动，不将其当作阅读位置变化。
+export const READING_POSITION_EPSILON = 0.5;
+
 /** 浏览器因布局收缩而夹紧 scrollTop，不是新的用户阅读意图。 */
 export function sameTimelineLayout(previous:TimelineGeometry, current:TimelineGeometry):boolean {
   return previous.height === current.height && previous.total === current.total
     && previous.anchors.length === current.anchors.length
-    && previous.anchors.every((anchor, index) => anchor.id === current.anchors[index].id && anchor.top === current.anchors[index].top);
+    && previous.anchors.every((anchor, index) => anchor.id === current.anchors[index].id
+      && Math.abs(anchor.top - current.anchors[index].top) <= READING_POSITION_EPSILON);
 }
 
 /** 需先有输入意图；尺寸变化造成的边界夹紧本身不代表用户移动。 */

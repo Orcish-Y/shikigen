@@ -23,8 +23,11 @@ export function validateMessage(value: unknown): asserts value is MessageContent
   requireValid(identity(value.message_id) && ['human','ai','tool'].includes(String(value.type))
     && (typeof value.content === 'string' || Array.isArray(value.content)
       && value.content.every(item => typeof item === 'string' || object(item))), '消息正文或身份无效', value);
-  if (value.type === 'ai') requireValid(Array.isArray(value.tool_calls) && value.tool_calls.every(call =>
-    object(call) && identity(call.id) && identity(call.name) && object(call.args)), '工具调用结构无效', value);
+  if (value.type === 'ai') {
+    requireValid(Array.isArray(value.tool_calls) && value.tool_calls.every(call =>
+      object(call) && identity(call.id) && identity(call.name) && object(call.args)), '工具调用结构无效', value);
+    requireValid(optional(value, 'generation_status', status => ['complete','cancelled','error'].includes(String(status))), '无法识别消息生成状态', value);
+  }
   if (value.type === 'tool') requireValid(identity(value.tool_call_id) && ['success','error'].includes(String(value.status))
     && optional(value, 'name', nullableText), '工具结果结构无效', value);
 }

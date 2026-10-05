@@ -5,6 +5,7 @@
 
 import time
 import unittest
+from urllib.parse import urlsplit
 
 import win32con
 import win32gui
@@ -93,7 +94,22 @@ class VisibilityAcceptance(MessageDraftAcceptance):
     self.assertEqual(len(writes), 1)
     self.assertEqual(writes[0]["method"], "POST")
     recovered = requests[frozen:]
-    self.assertEqual(len([r for r in recovered if "/messages" in r["url"]]), 1)
+    self.assertEqual(
+      len(
+        [r for r in recovered if urlsplit(r["url"]).path == urlsplit(history_url).path]
+      ),
+      1,
+    )
+    self.assertEqual(
+      len(
+        [
+          r
+          for r in recovered
+          if urlsplit(r["url"]).path == f"/api/threads/{thread}/runs/{run_id}/messages"
+        ]
+      ),
+      1,
+    )
     final = self.client.get(history_url).json()["data"]
     self.assertEqual(len([m for m in final if m["content"]["type"] == "human"]), 1)
     self.record(

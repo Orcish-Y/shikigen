@@ -31,6 +31,7 @@ class AIContent(StrictModel):
   message_id: Identity
   content: str | list[str | dict[str, JsonValue]]
   tool_calls: list[ToolCall]
+  generation_status: Literal["complete", "cancelled", "error"] = "complete"
 
 
 class ToolContent(StrictModel):
@@ -53,6 +54,8 @@ def normalize_message(content: Any) -> dict[str, Any]:
   """保留省略与显式 null；工具框架 ID 不参与产品身份。"""
   validated_msg = MESSAGE.validate_python(content)
   msg_dict = validated_msg.model_dump(mode="json", exclude_unset=True)
+  if isinstance(validated_msg, AIContent):
+    msg_dict["generation_status"] = validated_msg.generation_status
   if isinstance(validated_msg, ToolContent):
     msg_dict["message_id"] = f"tool-result:{validated_msg.tool_call_id}"
   return msg_dict

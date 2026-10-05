@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 from weakref import WeakKeyDictionary
@@ -15,6 +16,7 @@ from shikigen.contracts.runs import (
   CommittedRunState,
   MessageConflict,
   RunStatus,
+  RunWriteResult,
 )
 from shikigen.contracts.stream import MessageData
 from shikigen.core.execution import (
@@ -34,6 +36,7 @@ class _PreviewState:
   sequences: dict[str, int] = field(default_factory=dict)
   text: dict[str, list[str]] = field(default_factory=dict)
   committed: set[str] = field(default_factory=set)
+  sealed: bool = False
 
 
 class RunEventIngestor:
@@ -51,7 +54,8 @@ class RunEventIngestor:
   def __init__(self, store: ChatStore, executions: ExecutionRegistry) -> None:
     self._store = store
     self._executions: ExecutionRegistry = executions
-    self._previews: WeakKeyDictionary[RunExecution, _PreviewState] = WeakKeyDictionary()
+    # interrupted 或结算回滚后，正文仍由 Run 持有，不随 invocation 句柄移除。
+    self._previews: dict[tuple[str, str], _PreviewState] = {}
 
   @staticmethod
   async def write_in_transaction(
@@ -73,7 +77,33 @@ class RunEventIngestor:
     )
 
   def _state(self, execution: RunExecution) -> _PreviewState:
-    return self._previews.setdefault(execution, _PreviewState())
+    return self._previews.setdefault(
+      (execution.thread_id, execution.run_id), _PreviewState()
+    )
+
+  async def settle(
+    self,
+    execution: RunExecution,
+    commit: Callable[[], Awaitable[CommittedRunState]],
+  ) -> CommittedRunState:
+    """结算与接入互斥；终态提交后封口，暂停或回滚保留缓冲。"""
+    state = self._state(execution)
+    async with state.lock:
+      result = await commit()
+      if result.status.terminal:
+        state.sealed = True
+        state.text.clear()
+      return result
+
+  def release(self, execution: RunExecution) -> None:
+    key = (execution.thread_id, execution.run_id)
+    state = self._previews.get(key)
+    if state is not None and state.sealed:
+      self._previews.pop(key)
+
+  async def _terminal(self, thread_id: str, run_id: str) -> bool:
+    run = await self._store.get_run(run_id, thread_id)
+    return run is not None and RunStatus(run["status"]).terminal
 
   async def ingest_delta(
     self, data: MessageData, *, thread_id: str, run_id: str
@@ -85,10 +115,14 @@ class RunEventIngestor:
       raise ValueError("Message preview requires message_id")
     execution = self._executions.get(thread_id, run_id)
     if execution is None:
+      if await self._terminal(thread_id, run_id):
+        return
       raise RuntimeError("Delta ingestion requires an active execution")
     state = self._state(execution)
     # todo. 检查持锁后的事件顺序与并发行为。
     async with state.lock:
+      if state.sealed:
+        return
       if preview.message_id in state.committed:
         raise MessageConflict("Delta received after complete message was committed")
       seq = state.sequences.get(preview.message_id)
@@ -121,9 +155,21 @@ class RunEventIngestor:
   ) -> int:
     execution = self._executions.get(thread_id, run_id)
     if execution is None:
+      if await self._terminal(thread_id, run_id):
+        return 0
       raise RuntimeError("Message ingestion requires an active execution")
     state = self._state(execution)
     async with state.lock:
+      if state.sealed:
+        return state.sequences.get(content.get("message_id"), 0)
+      if category == "message" and content["type"] == "ai":
+        existing = await self._store.get_message(thread_id, event_key or "")
+        if (
+          existing is not None
+          and existing["content"].get("generation_status", "complete") != "complete"
+        ):
+          # 根 Graph 后续重放不得覆盖封存正文或把它归给下一 Run。
+          return existing["seq"]
       result = await self._store.append_committed_event(
         thread_id=thread_id,
         run_id=run_id,
@@ -149,6 +195,38 @@ class RunEventIngestor:
       if result.inserted and result.event["run_id"] == run_id:
         self.publish(execution.stream, (result.event,))
       return result.event["seq"]
+
+  async def cancel(
+    self,
+    thread_id: str,
+    run_id: str,
+    commit: Callable[..., Awaitable[RunWriteResult]],
+  ) -> RunWriteResult:
+    """冻结接入直到事务结束；失败保留缓冲，成功后封口。"""
+    execution = self._executions.get(thread_id, run_id)
+    # 首事件尚未接入时也要先建立锁，避免事务等待间隙创建未封口缓冲。
+    state = self._previews.setdefault((thread_id, run_id), _PreviewState())
+    async with state.lock:
+      messages = tuple(
+        {
+          "type": "ai",
+          "message_id": identity,
+          "content": "".join(parts),
+          "tool_calls": [],
+          "generation_status": "cancelled",
+        }
+        for identity, parts in state.text.items()
+        if identity not in state.committed and "".join(parts)
+      )
+      result = await commit(
+        thread_id=thread_id, run_id=run_id, partial_messages=messages
+      )
+      if RunStatus(result.run["status"]).terminal:
+        state.sealed = True
+        state.text.clear()
+        if execution is None:
+          self._previews.pop((thread_id, run_id), None)
+      return result
 
   async def ingest_message(
     self, content: dict[str, Any], *, thread_id: str, run_id: str

@@ -81,6 +81,14 @@ export function useConversations(session: BackendSession | null, previewMode = f
     observationLabel:previewMode ? '示例观察' : observationLabels[view.observation],
     reconnect:store.reconnect,
     queryStatus:store.queryStatus,
+    canCancel:!previewMode && store.canCancel(),
+    cancelTarget:() => store.cancelTarget(),
+    cancel:(target:Parameters<ConversationStore['cancel']>[0]) => store.cancel(target),
+    validCancelTarget:(target:Parameters<ConversationStore['canCancel']>[0]) => store.canCancel(target),
+    write:view.write,
+    savedContent:view.savedContent,
+    savedContentFailure:view.savedContentFailure,
+    retrySavedContent:store.retrySavedContent,
     approvalStatus: previewMode || view.run?.status !== 'interrupted' ? null
       : view.approval?.verified ? '审批请求已核实，等待处理。'
       : view.observation === 'connecting' || view.observation === 'open' ? '正在重建审批请求…'

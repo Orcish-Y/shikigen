@@ -30,6 +30,8 @@ export function Conversation({
   acceptedSendId = null,
   approvalStatus,
   approvalIdentity,
+  onCancel,
+  canCancel = false,
   ref,
 }: {
   session: Session;
@@ -44,6 +46,8 @@ export function Conversation({
   acceptedSendId?:string | null;
   approvalStatus?:string | null;
   approvalIdentity?:string;
+  onCancel?:() => void;
+  canCancel?:boolean;
   ref?:Ref<ConversationHandle>;
 }) {
   const [localPreferences] = useState(() => new ToolCardPreferences());
@@ -83,10 +87,13 @@ export function Conversation({
                     {preview && message.role === "assistant" && (
                       <span className="badge">示例</span>
                     )}
-                    {message.preview && <span className="badge">生成中 · 尚未保存</span>}
+                    {message.preview && <span className="badge">{['cancelled','completed','error'].includes(session.runStatuses?.[message.record?.run_id ?? ''] ?? '')
+                      ? '预览 · 尚未读取保存事实' : '生成中 · 尚未保存'}</span>}
+                    {!message.preview && message.record?.content.type === 'ai' && message.record.content.generation_status === 'cancelled' && <span className="badge generation-cancelled">因取消中止</span>}
                   </div>
                   {message.role !== 'tool' && <MessageBody role={message.role} content={message.content ?? message.text}
-                    identity={`${session.id}:${message.id}`} preview={message.preview} onView={onView} />}
+                    identity={`${session.id}:${message.id}`} preview={message.preview}
+                    generating={message.preview && !['cancelled','completed','error'].includes(session.runStatuses?.[message.record?.run_id ?? ''] ?? '')} onView={onView} />}
                   {tools.map(record => <ToolCard key={record.identity} record={record} preferences={toolPreferences ?? localPreferences} onView={onView} />)}
                   {message.code && <ContentBlock title={`${message.code.filename} · ${message.code.language}`}
                     text={message.code.content} onView={onView} />}
@@ -113,8 +120,11 @@ export function Conversation({
             </div>
           </div>
         ) : null}
-        {approvalStatus && <p id="current-approval-status" data-reading-anchor={`approval:${approvalIdentity}`}
-          tabIndex={-1} className="business-notice" role="status">{approvalStatus}</p>}
+        {approvalStatus && <section id="current-approval-status" data-reading-anchor={`approval:${approvalIdentity}`}
+          tabIndex={-1} className="business-notice" aria-label="当前审批">
+          <p role="status">{approvalStatus}</p>
+          <button className="secondary-button" disabled={!canCancel} onClick={onCancel}>取消运行</button>
+        </section>}
       </div>
     </div>
     {!reading.following && <div className="reading-controls">
@@ -139,6 +149,9 @@ export function Composer({
   onApproval,
   storageIssue,
   sendUnknown = false,
+  onCancel,
+  canCancel = false,
+  writePending = false,
 }: {
   backendReady: boolean;
   draft: string;
@@ -153,6 +166,9 @@ export function Composer({
   onApproval?: () => void;
   storageIssue?: string | null;
   sendUnknown?: boolean;
+  onCancel?:() => void;
+  canCancel?:boolean;
+  writePending?:boolean;
 }) {
   const composition = useRef({active:false, endedAt:-Infinity});
   return (
@@ -176,8 +192,8 @@ export function Composer({
             <span className="status-dot" />
             {backendReady ? "后端已就绪" : "后端未连接"} · 可编辑草稿
           </span>
-          {runStatus === 'interrupted' ? <button className="primary-button" onClick={onApproval}>处理审批</button>
-            : runStatus === 'running' ? <button className="primary-button" disabled title="取消操作暂不可用">取消运行</button>
+          {runStatus === 'interrupted' ? <button className="primary-button" disabled={writePending} onClick={onApproval}>处理审批</button>
+            : runStatus === 'running' ? <button className="primary-button" disabled={!canCancel} onClick={onCancel}>{writePending ? '确认取消中…' : '取消运行'}</button>
             : <button
             className="primary-button"
             disabled={!canSend || !draft.trim()}

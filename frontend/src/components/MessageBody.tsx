@@ -6,7 +6,7 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 import { codeTitle, messagePrefix, messageSchema, referenceKind, rehypeFootnoteScope, remarkMessageContent } from '../markdown-policy';
 import { ContentBlock, CopyContent } from './ContentViewer';
 
-export type ContentView = { title: string; text: string; preview?: boolean };
+export type ContentView = { title: string; text: string; preview?: boolean; generating?:boolean };
 export type MessageRole = 'assistant' | 'user' | 'tool';
 
 function Reference({reference, children, image = false}: {reference:string; children:ReactNode; image?:boolean}) {
@@ -41,7 +41,7 @@ class RenderBoundary extends Component<{text:string; children:ReactNode}, {faile
 }
 
 const MarkdownContext = createContext<{
-  identity:string; preview?:boolean; onView:(view:ContentView) => void;
+  identity:string; preview?:boolean; generating?:boolean; onView:(view:ContentView) => void;
 } | null>(null);
 
 // Keep renderer identities stable as the conversation and overlay state update.
@@ -52,11 +52,11 @@ const markdownComponents: Components = {
     tabIndex={node?.properties.id ? -1 : undefined} className={className}>{children}</li>,
   input:({checked}) => <input type="checkbox" disabled checked={checked ?? false} readOnly />,
   pre:function MarkdownCode({node}) {
-    const {preview, onView} = useContext(MarkdownContext)!;
+    const {preview, generating, onView} = useContext(MarkdownContext)!;
     const code = node?.children.find(child => child.type === 'element' && child.tagName === 'code');
     const props = code?.type === 'element' ? code.properties : {};
     return <ContentBlock title={codeTitle(String(props.dataLanguage ?? ''), String(props.dataMeta ?? ''))}
-      text={String(props.dataCode ?? '')} preview={preview} onView={onView} />;
+      text={String(props.dataCode ?? '')} preview={preview} generating={generating} onView={onView} />;
   },
   a:function MarkdownLink({node, children, href}) {
     const {identity} = useContext(MarkdownContext)!;
@@ -73,9 +73,9 @@ const markdownComponents: Components = {
   img:({node, alt}) => <Reference image reference={String(node?.properties.dataReference ?? '')}>{alt || '图片'}</Reference>,
 };
 
-function AgentText({text, identity, preview, onView}: ContentView & {identity:string; onView:(view:ContentView) => void}) {
+function AgentText({text, identity, preview, generating, onView}: ContentView & {identity:string; onView:(view:ContentView) => void}) {
   return <RenderBoundary key={text} text={text}>
-    <MarkdownContext.Provider value={{identity, preview, onView}}>
+    <MarkdownContext.Provider value={{identity, preview, generating, onView}}>
     <Markdown remarkPlugins={[remarkGfm, remarkMessageContent]}
       rehypePlugins={[[rehypeFootnoteScope, messagePrefix(identity)], [rehypeSanitize, messageSchema]]}
       remarkRehypeOptions={{clobberPrefix:messagePrefix(identity), footnoteLabel:'脚注'}}
@@ -85,29 +85,29 @@ function AgentText({text, identity, preview, onView}: ContentView & {identity:st
   </RenderBoundary>;
 }
 
-export function MessageBody({role, content, identity, preview, onView}: {
-  role: MessageRole; content: unknown; identity: string; preview?: boolean;
+export function MessageBody({role, content, identity, preview, generating, onView}: {
+  role: MessageRole; content: unknown; identity: string; preview?: boolean; generating?:boolean;
   onView: (view: ContentView) => void;
 }) {
   const text = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
   function block(value:unknown, index:number): ReactNode {
     if (typeof value === 'string') return role === 'assistant'
-      ? <AgentText key={index} title="正文" text={value} identity={`${identity}:${index}`} preview={preview} onView={onView} />
+      ? <AgentText key={index} title="正文" text={value} identity={`${identity}:${index}`} preview={preview} generating={generating} onView={onView} />
       : <div key={index} className="plain-content">{value}</div>;
     if (value && typeof value === 'object' && !Array.isArray(value)
       && 'type' in value && value.type === 'text' && 'text' in value && typeof value.text === 'string') {
       return <div key={index}>{block(value.text, index)}
         {Object.keys(value).some(key => key !== 'type' && key !== 'text') && <details className="raw-content">
-          <summary>查看原始文本块</summary><ContentBlock title="原始文本块 JSON" text={JSON.stringify(value, null, 2)} preview={preview} onView={onView} />
+          <summary>查看原始文本块</summary><ContentBlock title="原始文本块 JSON" text={JSON.stringify(value, null, 2)} preview={preview} generating={generating} onView={onView} />
         </details>}
       </div>;
     }
-    return <ContentBlock key={index} title="内容块 JSON" text={JSON.stringify(value, null, 2)} preview={preview} onView={onView} />;
+    return <ContentBlock key={index} title="内容块 JSON" text={JSON.stringify(value, null, 2)} preview={preview} generating={generating} onView={onView} />;
   }
   return <div className="message-content">
     <div className="message-text">{Array.isArray(content) ? content.map(block) : block(content, 0)}</div>
     <div className="message-content-actions">
-      <button className="text-button" onClick={() => onView({title:'完整正文', text, preview})}>查看完整内容</button>
+      <button className="text-button" onClick={() => onView({title:'完整正文', text, preview, generating})}>查看完整内容</button>
       <CopyContent text={text} label={preview ? '复制当前片段' : '复制完整内容'} />
     </div>
   </div>;

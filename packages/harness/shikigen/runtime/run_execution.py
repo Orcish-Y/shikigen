@@ -50,7 +50,13 @@ class RunSettlement(Protocol):
     """原子提交状态、事实与用量；迟到结果必须服从已提交状态。"""
     ...
 
-  async def cancel_run(self, *, thread_id: str, run_id: str) -> RunWriteResult:
+  async def cancel_run(
+    self,
+    *,
+    thread_id: str,
+    run_id: str,
+    partial_messages: tuple[dict[str, Any], ...] = (),
+  ) -> RunWriteResult:
     """原子取消；返回实际已提交的状态与本次新增事实。"""
     ...
 
@@ -154,11 +160,17 @@ class RunExecutionCoordinator:
       )
       async with self._lock(execution):
         try:
-          committed = await self._settlement.settle_execution(
+          commit = partial(
+            self._settlement.settle_execution,
             **identity,
             outcome=outcome,
             usage=tracker.summary(),
             invocation_seq=invocation_seq,
+          )
+          committed = (
+            await self._ingestor.settle(execution, commit)
+            if self._ingestor is not None
+            else await commit()
           )
         except Exception:
           RunEventIngestor.notify_failure(execution.stream, "run_persistence_failed")
@@ -179,7 +191,11 @@ class RunExecutionCoordinator:
     """先提交并发布取消，再请求协作停止；没有本地执行也能持久取消。"""
     execution = self._registry.get(thread_id, run_id)
     async with self._lock(execution) if execution is not None else nullcontext():
-      result = await self._settlement.cancel_run(thread_id=thread_id, run_id=run_id)
+      result = (
+        await self._ingestor.cancel(thread_id, run_id, self._settlement.cancel_run)
+        if self._ingestor is not None
+        else await self._settlement.cancel_run(thread_id=thread_id, run_id=run_id)
+      )
       if execution is not None and result.run["status"] == "cancelled":
         if result.events:
           RunEventIngestor.publish(
@@ -215,6 +231,8 @@ class RunExecutionCoordinator:
     async with self._lock(execution):
       execution.stream.close()
       self._registry.remove(execution)
+      if self._ingestor is not None:
+        self._ingestor.release(execution)
 
   def _on_done(self, execution: RunExecution, task: asyncio.Task[None]) -> None:
     # Task 可能在第一次运行前取消，或 finally 被再次取消；同一关闭协议兜底。

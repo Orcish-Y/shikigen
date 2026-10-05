@@ -6,17 +6,20 @@ export function Overlay({
   drawer = false,
   onClose,
   children,
+  initialFocus,
 }: {
   title: string;
   drawer?: boolean;
   onClose: () => void;
   children: ReactNode;
+  initialFocus?:string;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useLayoutEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     const dialog = ref.current!;
     dialog.showModal();
+    if (initialFocus) dialog.querySelector<HTMLElement>(initialFocus)?.focus();
     return () => {
       dialog.close();
       const valid = previous?.isConnected && previous !== document.body

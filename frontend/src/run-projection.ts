@@ -16,6 +16,8 @@ export function sameFact(a: unknown, b: unknown): boolean {
 }
 
 export const terminalRun = (run: Run) => ['completed', 'cancelled', 'error'].includes(run.status);
+const messageFact = (content:MessageContent) => content.type === 'ai'
+  ? {...content, generation_status:content.generation_status ?? 'complete'} : content;
 
 /** 一份会话事实。观察连接结束后仍保留，只有预览属于单次观察。 */
 export class RunProjection {
@@ -46,7 +48,7 @@ export class RunProjection {
   }
 
   /** 只补正文事实；已接受 POST／已核实观察的状态继续以 metadata 为准。 */
-  mergeMessages(records:StoredMessage[]) {
+  mergeMessages(records:ConversationMessage[]) {
     for (const record of records) this.message(record);
   }
 
@@ -115,14 +117,15 @@ export class RunProjection {
   private message(message: ConversationMessage) {
     const fact = this.eventAt(message.seq);
     if (fact && (fact.runId !== message.run_id || fact.event.category !== 'message'
-      || !sameFact(fact.event.payload, message.content)
+      || !sameFact(messageFact(fact.event.payload), messageFact(message.content))
       || message.created_at && fact.event.created_at !== message.created_at)) {
       throw new RunProtocolError(`消息 seq=${message.seq} 与已确认事件冲突`, message);
     }
     const previous = this.messages.get(message.seq);
     const conflicts = previous && (previous.run_id !== message.run_id || previous.content.message_id !== message.content.message_id
       || !previous.preview && Object.entries(message).some(([key, value]) => key !== 'run_status' && key !== 'preview'
-        && Object.hasOwn(previous, key) && !sameFact((previous as Record<string, unknown>)[key], value)));
+        && Object.hasOwn(previous, key) && !sameFact(key === 'content' ? messageFact(previous.content)
+          : (previous as Record<string, unknown>)[key], key === 'content' ? messageFact(message.content) : value)));
     if (conflicts) {
       throw new RunProtocolError(`消息 seq=${message.seq} 与已确认事实冲突`, message);
     }
@@ -134,7 +137,8 @@ export class RunProjection {
   event(runId: string, event: RunEvent) {
     // seq 是会话级顺序，不能被另一 Run 或类别重新占用。
     const previous = this.eventAt(event.seq);
-    if (previous && (previous.runId !== runId || !sameFact(previous.event, event))) throw new RunProtocolError(`事件 seq=${event.seq} 与已确认事实冲突`, event);
+    const canonicalEvent = (item:RunEvent) => item.category === 'message' ? {...item, payload:messageFact(item.payload)} : item;
+    if (previous && (previous.runId !== runId || !sameFact(canonicalEvent(previous.event), canonicalEvent(event)))) throw new RunProtocolError(`事件 seq=${event.seq} 与已确认事实冲突`, event);
     const message = this.messages.get(event.seq);
     if (message && (message.run_id !== runId || event.category !== 'message')) throw new RunProtocolError(`事件 seq=${event.seq} 与消息身份冲突`, event);
     if (message?.created_at && message.created_at !== event.created_at) throw new RunProtocolError(`事件 seq=${event.seq} 与已确认时间冲突`, event);

@@ -198,6 +198,9 @@ class ChatStore:
       run_id,
     )
 
+  async def get_message(self, thread_id: str, event_key: str) -> CommittedEvent | None:
+    return await self._events.get_message(thread_id, event_key)
+
   async def list_thread_messages(self, thread_id: str) -> list[CommittedEvent]:
     return await self._events.list_thread_messages(
       thread_id,

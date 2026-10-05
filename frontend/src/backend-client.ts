@@ -33,12 +33,13 @@ export interface MessageContent {
   name?: string | null;
   status?: "success" | "error";
   artifact?: unknown;
+  generation_status?: 'complete' | 'cancelled' | 'error';
 }
-export interface StoredMessage {
+export interface StoredRunMessage {
   id: number;
   thread_id: string;
   run_id: string;
-  run_status: RunStatus;
+  run_status?: RunStatus;
   seq: number;
   event_type: string;
   category: "message";
@@ -46,6 +47,22 @@ export interface StoredMessage {
   content: MessageContent;
   metadata: Record<string, unknown>;
   created_at: string;
+}
+export interface StoredMessage extends StoredRunMessage { run_status: RunStatus }
+
+function validateStoredMessage(message:StoredRunMessage, threadId:string, sequences:Set<number>) {
+  if (!message || message.thread_id !== threadId || typeof message.run_id !== 'string' || !message.run_id.trim()
+    || !Number.isSafeInteger(message.id) || message.id < 1 || !Number.isSafeInteger(message.seq)
+    || message.seq < 1 || sequences.has(message.seq) || message.category !== 'message'
+    || typeof message.event_type !== 'string' || !message.event_type.trim()
+    || !(message.event_key === null || typeof message.event_key === 'string')
+    || !message.metadata || typeof message.metadata !== 'object' || Array.isArray(message.metadata)
+    || typeof message.created_at !== 'string' || !Number.isFinite(Date.parse(message.created_at))
+    || Object.hasOwn(message, 'run_status') && !validStatus(message.run_status)) {
+    throw new RunProtocolError('消息身份、顺序或公开字段无效', message);
+  }
+  validateMessage(message.content);
+  sequences.add(message.seq);
 }
 
 export const runStatusLabels: Record<RunStatus, string> = {
@@ -162,30 +179,41 @@ export class BackendSession {
     const statuses = new Map<string, RunStatus>();
     const sequences = new Set<number>();
     for (const message of data) {
-      if (!message || message.thread_id !== threadId || typeof message.run_id !== "string" || !message.run_id.trim()) {
-        throw new RunProtocolError("消息身份与会话不一致", message);
-      }
+      validateStoredMessage(message, threadId, sequences);
       if (!validStatus(message.run_status) || (statuses.has(message.run_id) && statuses.get(message.run_id) !== message.run_status)) {
         throw new RunProtocolError("消息所属运行状态无效或不一致", message);
       }
-      if (!Number.isSafeInteger(message.seq) || message.seq < 1 || sequences.has(message.seq)) throw new RunProtocolError("消息顺序无效", message);
-      if (!Number.isSafeInteger(message.id) || message.id < 1 || message.category !== 'message'
-        || typeof message.event_type !== 'string' || !message.event_type.trim()
-        || !(message.event_key === null || typeof message.event_key === 'string')
-        || !message.metadata || typeof message.metadata !== 'object' || Array.isArray(message.metadata)
-        || typeof message.created_at !== 'string' || !Number.isFinite(Date.parse(message.created_at))) {
-        throw new RunProtocolError('历史消息公开字段无效', message);
-      }
-      validateMessage(message.content);
       statuses.set(message.run_id, message.run_status);
-      sequences.add(message.seq);
     }
     return data.sort((a, b) => a.seq - b.seq);
+  }
+
+  async runMessages(threadId: string, runId: string, signal?: AbortSignal): Promise<StoredRunMessage[]> {
+    const {data} = await this.json<{data:StoredRunMessage[]}>(
+      `/api/threads/${encodeURIComponent(threadId)}/runs/${encodeURIComponent(runId)}/messages`, {cache:'no-store'}, signal);
+    if (!Array.isArray(data)) throw new RunProtocolError('运行消息格式无效', data);
+    const sequences = new Set<number>();
+    for (const message of data) {
+      validateStoredMessage(message, threadId, sequences);
+      if (message.run_id !== runId) throw new RunProtocolError('消息不属于当前运行', message);
+    }
+    return data.sort((a,b) => a.seq-b.seq);
+  }
+
+  async cancel(threadId:string, runId:string, signal?:AbortSignal):Promise<Run> {
+    const {data} = await this.json<{data:Omit<Run,'run_id'> & {id:string}}>(
+      `/api/threads/${encodeURIComponent(threadId)}/runs/${encodeURIComponent(runId)}/cancel`, {method:'POST'}, signal);
+    if (!data || typeof data !== 'object') throw new RunProtocolError('取消快照无效', data);
+    const {id, ...fields} = data;
+    const run = verifiedRun({...fields, run_id:id}, threadId, runId);
+    if (!['completed','cancelled','error'].includes(run.status)) throw new RunProtocolError('取消响应不是终态，结果待核实', data);
+    return run;
   }
 
   async runSnapshot(threadId: string, runId: string, signal?: AbortSignal): Promise<Run> {
     const { data } = await this.json<{ data: Omit<Run, "run_id"> & { id: string } }>(
       `/api/threads/${encodeURIComponent(threadId)}/runs/${encodeURIComponent(runId)}`, { cache: "no-store" }, signal);
+    if (!data || typeof data !== 'object') throw new RunProtocolError('运行快照无效', data);
     const { id, ...fields } = data;
     return verifiedRun({ ...fields, run_id: id }, threadId, runId);
   }

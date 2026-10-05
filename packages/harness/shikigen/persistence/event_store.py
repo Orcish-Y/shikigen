@@ -89,7 +89,14 @@ class EventStore:
     content: Any,
   ) -> None:
     """仅在持有写锁和事务时调用；不自行提交。"""
-    seq = await self.allocate_sequence(thread_id)
+    seq = None
+    if category == "message":
+      content = normalize_message(content)
+      if (event_type, event_key) != message_identity(content):
+        raise ValueError("Message type and identity must agree")
+      seq = await self.reserved_sequence(thread_id, run_id, event_key)
+    if seq is None:
+      seq = await self.allocate_sequence(thread_id)
     await self._db.connection.execute(
       """
       INSERT INTO run_events(
@@ -193,7 +200,12 @@ class EventStore:
           if (
             existing["event_type"] != event_type
             or existing["category"] != category
-            or self._json(existing["content"]) != content_json
+            or self._json(
+              normalize_message(existing["content"])
+              if category == "message"
+              else existing["content"]
+            )
+            != content_json
             or self._json(existing["metadata"]) != metadata_json
           ):
             raise MessageConflict("Event identity already has different content")
@@ -250,6 +262,10 @@ class EventStore:
     )
     row = await cursor.fetchone()
     return self._decode_event(row) if row is not None else None
+
+  async def get_message(self, thread_id: str, event_key: str) -> CommittedEvent | None:
+    async with self._db.lock:
+      return await self.message_by_key(thread_id, event_key)
 
   async def event_by_key(
     self,

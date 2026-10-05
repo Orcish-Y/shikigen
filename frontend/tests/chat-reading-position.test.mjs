@@ -105,3 +105,12 @@ test('有输入意图时先采集迟到滚动，浏览器布局夹紧仍保留�
   assert.equal(movedBeyondLayoutClamp(frame(900), {...frame(700), height:400}), false);
   assert.equal(movedBeyondLayoutClamp(frame(0), {...frame(450), total:1101}), true);
 });
+
+test('亚像素测量抖动不算布局变化，也不掩盖真实锚点移动', () => {
+  const previous = frame(450);
+  const jitter = {...frame(449), anchors:previous.anchors.map(anchor => ({...anchor, top:anchor.top + 1 / 64}))};
+  assert.equal(sameTimelineLayout(previous, jitter), true);
+  assert.equal(movedBeyondLayoutClamp(previous, jitter), true);
+  assert.equal(sameTimelineLayout(previous, {...jitter,
+    anchors:jitter.anchors.map(anchor => ({...anchor, top:anchor.top + 1}))}), false);
+});

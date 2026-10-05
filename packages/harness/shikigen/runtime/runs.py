@@ -285,6 +285,7 @@ class RunTransitions:
     *,
     thread_id: str,
     run_id: str,
+    partial_messages: tuple[dict[str, Any], ...] = (),
   ) -> RunWriteResult:
     """原子取消运行或暂停；终态幂等返回，不覆盖第一次有效提交。"""
     async with self._store.transaction() as tx:
@@ -295,6 +296,14 @@ class RunTransitions:
         return RunWriteResult(run, ())
       history = await tx.events.read_events(thread_id, run_id)
       keys = []
+      for message in partial_messages:
+        event_type, key = message_identity(message)
+        if await tx.events.message_by_key(thread_id, key) is not None:
+          continue  # 正常完整消息先提交时，保留其原事实。
+        await RunEventIngestor.write_in_transaction(
+          tx, thread_id, run_id, event_type, "message", key, message
+        )
+        keys.append(key)
       if run["status"] == "interrupted":
         pending = next(
           (e for e in reversed(history) if e["category"] == "approval"), None

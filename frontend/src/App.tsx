@@ -19,6 +19,7 @@ import type { ContentView } from './components/MessageBody';
 import { SendRecovery, DraftCopy } from './components/SendRecovery';
 import { ObservationStatus } from './components/ObservationStatus';
 import type { BackendSession } from "./backend-client";
+import type { CancelTarget } from './conversation-state';
 import { useConversations } from "./useConversations";
 import { useWorkspaceVisibility } from './useWorkspaceVisibility';
 
@@ -87,6 +88,15 @@ function Workspace({ session, conversations }: {
     "navigation" | "history" | null
   >(null);
   const [overlay, setOverlay] = useState<"commands" | "details" | ContentView | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<CancelTarget | null>(null);
+  useEffect(() => {
+    if (cancelTarget && (!conversations.visible || !conversations.validCancelTarget(cancelTarget))) setCancelTarget(null);
+  }, [cancelTarget, conversations]);
+  function requestCancel() {
+    const target = conversations.cancelTarget();
+    if (!target) return;
+    setOverlay(null); setMobilePanel(null); setCancelTarget(target);
+  }
   const previousConversation = useRef(activeId);
   const timeline = useRef<ConversationHandle>(null);
   useEffect(() => {
@@ -113,7 +123,7 @@ function Workspace({ session, conversations }: {
   function exportSession() {
     const content =
       `# ${active.title}\n\n${session ? "" : "> 页面框架预览：示例消息。\n\n"}` +
-      active.messages
+      active.messages.filter(message => !message.preview)
         .map(
           (message) =>
             `## ${message.role === "user" ? "用户" : "shikigen Agent"}\n\n${message.text}${message.code ? `\n\n\`\`\`${message.code.language}\n${message.code.content}\n\`\`\`` : ""}${message.tool ? `\n\n工具：${message.tool.name}\n\n${message.tool.command}\n\n${message.tool.output}` : ""}`,
@@ -243,7 +253,7 @@ function Workspace({ session, conversations }: {
                 <button
                   className="text-button"
                   onClick={exportSession}
-                  disabled={!active.messages.length}
+                  disabled={!active.messages.some(message => !message.preview)}
                   aria-label="导出当前对话"
                 >
                   <DownloadSimple />
@@ -262,6 +272,22 @@ function Workspace({ session, conversations }: {
             {conversations.error && <p className="business-notice" role="alert">{conversations.error}</p>}
             {session && <ObservationStatus view={conversations.observationView} onReconnect={conversations.reconnect} onQuery={conversations.queryStatus} />}
             {conversations.notice && <p className="business-notice" role="status">{conversations.notice}</p>}
+            {conversations.write && <section className="business-notice" aria-label="取消结果核实">
+              <p role="status">{conversations.write.phase === 'pending' ? '正在确认取消结果…'
+                : conversations.write.verifying ? '取消结果待确认，正在查询真实状态…'
+                : conversations.write.verified ? '已核实运行仍未结束。可以再次手动确认取消；先前请求仍可能迟到生效。'
+                : '取消结果待确认，请查询真实状态；不会自动再次取消。'}</p>
+              {conversations.write.phase === 'unknown' && <button className="secondary-button"
+                disabled={conversations.write.verifying} onClick={() => void conversations.queryStatus()}>核实取消结果</button>}
+              {conversations.write.failure && <details><summary>取消／核实错误详情</summary>
+                <pre className="request-error">{JSON.stringify(conversations.write.failure, null, 2)}</pre></details>}
+            </section>}
+            {conversations.savedContent === 'reading' && <p className="business-notice" role="status">正在读取已保存内容</p>}
+            {conversations.savedContent === 'error' && <section className="business-notice" aria-label="保存内容读取">
+              <p role="alert">已保存内容读取失败，已有记录和预览已保留，运行结果不变。</p>
+              <button className="secondary-button" onClick={() => void conversations.retrySavedContent()}>读取已保存内容</button>
+              <details><summary>读取错误详情</summary><pre className="request-error">{JSON.stringify(conversations.savedContentFailure, null, 2)}</pre></details>
+            </section>}
             {conversations.sendFailure && conversations.submission?.status !== 'unknown' && <details className="business-notice">
               <summary>发送请求错误详情</summary>
               <pre style={{maxHeight:240, overflow:'auto', whiteSpace:'pre-wrap'}}>{JSON.stringify(conversations.sendFailure, null, 2)}</pre>
@@ -293,6 +319,8 @@ function Workspace({ session, conversations }: {
               acceptedSendId={conversations.acceptedSendId}
               approvalStatus={conversations.approvalStatus}
               approvalIdentity={conversations.run?.run_id}
+              canCancel={conversations.canCancel}
+              onCancel={requestCancel}
               toolPreferences={conversations.toolPreferences}
               preview={!session}
               session={active}
@@ -321,9 +349,24 @@ function Workspace({ session, conversations }: {
               onApproval={() => {
                 timeline.current?.locateApproval();
               }}
+              onCancel={requestCancel}
+              canCancel={conversations.canCancel}
+              writePending={conversations.write?.phase === 'pending' || conversations.write?.verifying}
             />
           </main>
         </div>
+        {cancelTarget && <Overlay title="取消本次运行？" initialFocus="#continue-running" onClose={() => setCancelTarget(null)}>
+          <div className="cancel-confirmation">
+            <p className="cancel-conversation">所属会话：{sessions.find(item => item.id === cancelTarget.threadId)?.title ?? '新会话'}</p>
+            <p>取消不会撤销已经发生的工具操作，已开始的操作也不保证立即停止。</p>
+            <div className="confirmation-actions">
+              <button id="continue-running" className="secondary-button" onClick={() => setCancelTarget(null)}>继续运行</button>
+              <button className="primary-button danger-button" onClick={() => {
+                const target = cancelTarget; setCancelTarget(null); void conversations.cancel(target);
+              }}>确认取消</button>
+            </div>
+          </div>
+        </Overlay>}
         {overlay === "commands" && (
           <Overlay title="命令面板" onClose={() => setOverlay(null)}>
             <div className="commands">
@@ -383,7 +426,8 @@ function Workspace({ session, conversations }: {
           </Overlay>
         )}
         {overlay && typeof overlay === 'object' && <Overlay title={overlay.title} drawer onClose={() => setOverlay(null)}>
-          <ContentViewer view={overlay} />
+          <ContentViewer view={overlay.preview && conversations.run && ['completed','cancelled','error'].includes(conversations.run.status)
+            ? {...overlay, generating:false} : overlay} />
         </Overlay>}
       </div>
     </IconContext.Provider>

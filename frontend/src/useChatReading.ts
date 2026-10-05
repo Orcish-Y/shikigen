@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react';
-import { ChatReadingPositions, sameTimelineLayout, movedBeyondLayoutClamp, type ReadingView, type TimelineGeometry } from './chat-reading-position';
+import { ChatReadingPositions, READING_POSITION_EPSILON, sameTimelineLayout, movedBeyondLayoutClamp, type ReadingView, type TimelineGeometry } from './chat-reading-position';
 import type { Session } from './data/demo';
 
 function measure(timeline:HTMLElement):TimelineGeometry {
@@ -40,7 +40,8 @@ export function useChatReading(session:Session, positions:ChatReadingPositions, 
     function apply(next:ReadingView) {
       // 主动最新/本次接受结束之前的上翻手势，不能把其迟到 scroll 算成新的意图。
       if (next.following) intentUntil = 0;
-      if (next.scrollTop !== null && next.scrollTop !== element!.scrollTop) element!.scrollTop = next.scrollTop;
+      // 近似相等时不写 scrollTop，避免打断浏览器尚在递送的键盘滚动。
+      if (next.scrollTop !== null && Math.abs(next.scrollTop - element!.scrollTop) > READING_POSITION_EPSILON) element!.scrollTop = next.scrollTop;
       lastTop = element!.scrollTop;
       layout = measure(element!);
       publish(next);

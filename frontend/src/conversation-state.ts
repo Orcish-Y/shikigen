@@ -6,6 +6,11 @@ import { ObservationRecovery, StreamObservationError, UnexpectedObservationEnd, 
 export type { ConversationMessage } from './run-projection.ts';
 
 const THREAD_PAGE_SIZE = 20;
+export interface CancelTarget {threadId:string; runId:string; startupId:string; baseUrl:string}
+export interface RunWriteState {
+  runId:string; kind:'cancel' | 'approval'; phase:'pending' | 'unknown';
+  verified:boolean; verifying:boolean; retryAt:number; failure:ObservationFailure | null;
+}
 
 export interface ListFailure { message: string; retryAt: number; invalidCursor: boolean }
 function listFailure(error: unknown): ListFailure {
@@ -36,6 +41,9 @@ export interface ConversationView {
   sendFailure: ObservationFailure | null;
   protocolIssue: {message:string; raw:unknown} | null;
   missing: boolean;
+  write:RunWriteState | null;
+  savedContent:'idle' | 'reading' | 'ready' | 'error';
+  savedContentFailure:ObservationFailure | null;
 }
 export interface ConversationState {
   threads: Thread[];
@@ -54,7 +62,7 @@ export interface ConversationState {
   submissions: Record<string, MessageSubmission>;
 }
 export const emptyConversation: ConversationView = {
-  messages: [], run: null, runStatuses:{}, history: "idle", verified: false, error: null, sending: false, acceptedSendId:null, events:{}, approval:null, observation:'idle', retry:null, observationFailure:null, querying:false, queryFailure:null, sendFailure:null, protocolIssue:null, missing:false,
+  messages: [], run: null, runStatuses:{}, history: "idle", verified: false, error: null, sending: false, acceptedSendId:null, events:{}, approval:null, observation:'idle', retry:null, observationFailure:null, querying:false, queryFailure:null, sendFailure:null, protocolIssue:null, missing:false, write:null, savedContent:'idle', savedContentFailure:null,
 };
 
 interface ObservationAttempt {
@@ -89,6 +97,10 @@ export class ConversationStore {
   private intent = 0;
   private projections = new Map<string, RunProjection>();
   private inputs: MessageDrafts;
+  private writeRequest:AbortController | null = null;
+  private savedRequests = new Map<string, AbortController>();
+  private savedReads = new Map<string, 'reading' | 'ready' | 'error'>();
+  private savedDeadlines = new Map<string, number>();
 
   constructor(options: {storage?: DraftStorage | null} = {}) {
     this.inputs = new MessageDrafts(options.storage);
@@ -120,13 +132,29 @@ export class ConversationStore {
   }
 
   private view(threadId: string, change: Partial<ConversationView>) {
+    const previous = this.state.views[threadId];
+    if (change.run && previous?.run?.run_id !== change.run.run_id) {
+      change = {savedContent:'idle', savedContentFailure:null, write:null, ...change};
+    }
     this.publish({ views: { ...this.state.views,
       [threadId]: { ...(this.state.views[threadId] ?? emptyConversation), ...change },
     } });
+    const view = this.state.views[threadId];
+    if (view.verified && view.run && terminalRun(view.run)) {
+      queueMicrotask(() => {void this.readSavedContent(threadId, view.run!.run_id);});
+    }
   }
 
   private stopSelection() {
     const id = this.state.activeId;
+    this.writeRequest?.abort();
+    this.writeRequest = null;
+    const write = this.state.views[id]?.write;
+    if (write) this.view(id, {write:{...write, phase:'unknown', verified:false, verifying:false}});
+    for (const [key, controller] of this.savedRequests) {
+      controller.abort(); this.savedReads.delete(key);
+    }
+    this.savedRequests.clear();
     this.inputs.markSubmissionUnknown(id, '发送连接已停止，接受情况待核实；不会自动重发。');
     this.publishInputs();
     this.selection?.abort();
@@ -370,7 +398,7 @@ export class ConversationStore {
   private canStartRun() {
     const view = this.state.views[this.state.activeId];
     return Boolean(this.visible && this.session && !this.session.signal.aborted && view?.history === "ready"
-      && view.verified && !view.sending && !this.state.creating
+      && view.verified && !view.sending && !view.write && !this.state.creating
       && (!view.run || ["completed", "cancelled", "error"].includes(view.run.status)));
   }
 
@@ -498,6 +526,9 @@ export class ConversationStore {
   };
 
   queryStatus = async () => {
+    if (this.state.views[this.state.activeId]?.write?.phase === 'unknown') {
+      await this.verifyCancellation(); return;
+    }
     const session = this.session;
     const threadId = this.state.activeId;
     const view = this.state.views[threadId];
@@ -518,6 +549,119 @@ export class ConversationStore {
       }
     }
   };
+
+  cancelTarget():CancelTarget | null {
+    if (!this.canCancel()) return null;
+    return {threadId:this.state.activeId, runId:this.state.views[this.state.activeId].run!.run_id,
+      startupId:this.session!.startupId, baseUrl:this.session!.baseUrl};
+  }
+
+  canCancel(target?:CancelTarget):boolean {
+    const id = this.state.activeId, session = this.session, view = this.state.views[id];
+    const write = view?.write;
+    return Boolean(this.visible && session && !session.signal.aborted && view?.run && view.verified
+      && ['running','interrupted'].includes(view.run.status) && !view.sending && !this.state.creating
+      && (!write || write.kind === 'cancel' && write.phase === 'unknown' && write.verified
+        && !write.verifying && Date.now() >= write.retryAt)
+      && (!target || target.threadId === id && target.runId === view.run.run_id
+        && target.startupId === session.startupId && target.baseUrl === session.baseUrl));
+  }
+
+  async cancel(target:CancelTarget):Promise<boolean> {
+    if (!this.canCancel(target)) return false;
+    const session = this.session!, {threadId, runId} = target;
+    const controller = this.writeRequest = new AbortController();
+    this.view(threadId, {write:{runId, kind:'cancel', phase:'pending', verified:false, verifying:false, retryAt:0, failure:null}});
+    try {
+      const snapshot = await session.cancel(threadId, runId, controller.signal);
+      if (!this.live(session, controller) || this.state.activeId !== threadId
+        || this.state.views[threadId].run?.run_id !== runId) return false;
+      this.applyWriteSnapshot(threadId, snapshot);
+      return true;
+    } catch (error) {
+      if (this.live(session, controller) && this.state.views[threadId].run?.run_id === runId) {
+        const failure = observationFailure(error);
+        this.view(threadId, {verified:false, write:{runId, kind:'cancel', phase:'unknown', verified:false, verifying:false,
+          retryAt:retryAfterTime(failure.retryAfter ?? null), failure},
+          ...(error instanceof RunProtocolError ? {protocolIssue:{message:error.message, raw:error.raw}} : {})});
+      }
+    } finally {
+      if (this.writeRequest === controller) this.writeRequest = null;
+    }
+    if (this.live(session, controller)) await this.verifyCancellation();
+    return false;
+  }
+
+  private applyWriteSnapshot(threadId:string, snapshot:Run) {
+    const projection = this.projection(threadId);
+    projection.applySnapshot(snapshot);
+    this.syncRun(threadId, projection.run!);
+    const write = this.state.views[threadId].write;
+    this.view(threadId, {...projection.snapshot(), verified:true,
+      write:terminalRun(projection.run!) ? null : write ? {...write, phase:'unknown', verified:true, verifying:false} : null,
+      approval:terminalRun(projection.run!) ? null : this.state.views[threadId].approval});
+  }
+
+  private async verifyCancellation() {
+    const threadId = this.state.activeId, session = this.session, view = this.state.views[threadId];
+    const write = view?.write;
+    if (!this.visible || !session || session.signal.aborted || !write || write.phase !== 'unknown'
+      || write.verifying || this.writeRequest || view.run?.run_id !== write.runId) return;
+    const controller = this.writeRequest = new AbortController();
+    this.view(threadId, {write:{...write, verifying:true}});
+    const recovery = new ObservationRecovery(AbortSignal.any([controller.signal, session.signal]), write.retryAt, update => {
+      if (this.live(session, controller) && this.state.views[threadId].write) {
+        this.view(threadId, {write:{...this.state.views[threadId].write!, retryAt:Math.max(write.retryAt, recovery.retryAt),
+          ...(update.observationFailure ? {failure:update.observationFailure} : {})}});
+      }
+    });
+    try {
+      await recovery.run(async () => {
+        const snapshot = await session.runSnapshot(threadId, write.runId, controller.signal);
+        if (!this.live(session, controller) || this.state.views[threadId].run?.run_id !== write.runId) return true;
+        this.applyWriteSnapshot(threadId, snapshot); return true;
+      });
+    } finally {
+      if (this.writeRequest === controller) {
+        this.writeRequest = null;
+        const remaining = this.state.views[threadId].write;
+        if (remaining) this.view(threadId, {write:{...remaining, verifying:false}});
+      }
+    }
+  }
+
+  readSavedContent = async (threadId=this.state.activeId, runId=this.state.views[threadId]?.run?.run_id, manual=false) => {
+    const session = this.session;
+    if (!runId || !this.visible || !session || session.signal.aborted || this.state.activeId !== threadId
+      || this.state.views[threadId]?.run?.run_id !== runId || !terminalRun(this.state.views[threadId].run!)) return;
+    const key = `${threadId}:${runId}`;
+    if (this.savedRequests.has(key) || this.savedReads.has(key) && !manual) return;
+    const controller = new AbortController();
+    this.savedRequests.set(key, controller); this.savedReads.set(key, 'reading');
+    this.view(threadId, {savedContent:'reading', savedContentFailure:null});
+    try {
+      await waitUntil(this.savedDeadlines.get(key) ?? 0, AbortSignal.any([controller.signal, session.signal]));
+      const records = await session.runMessages(threadId, runId, controller.signal);
+      if (!this.live(session, controller) || this.state.views[threadId].run?.run_id !== runId) return;
+      const projection = this.projection(threadId);
+      projection.mergeMessages(records);
+      const unconfirmed = projection.snapshot().messages.some(message => message.run_id === runId && message.preview);
+      this.view(threadId, projection.snapshot());
+      if (unconfirmed) throw new RunProtocolError('已保存消息尚未覆盖全部预览，请手动再次读取', records);
+      this.savedReads.set(key, 'ready');
+      this.view(threadId, {...projection.snapshot(), savedContent:'ready'});
+    } catch (error) {
+      if (this.live(session, controller)) {
+        this.savedReads.set(key, 'error');
+        this.savedDeadlines.set(key, retryAfterTime(observationFailure(error).retryAfter ?? null));
+        this.view(threadId, {savedContent:'error', savedContentFailure:observationFailure(error)});
+      }
+    } finally {
+      if (this.savedRequests.get(key) === controller) this.savedRequests.delete(key);
+    }
+  };
+
+  retrySavedContent = () => this.readSavedContent(this.state.activeId, this.state.views[this.state.activeId]?.run?.run_id, true);
 
   private async readCommittedHistory(session:BackendSession, controller:AbortController, threadId:string) {
     try {
@@ -649,9 +793,18 @@ export class ConversationStore {
   private async readSnapshot(session: BackendSession, controller: AbortController, threadId: string, runId: string) {
     const version = this.statusVersions.get(threadId);
     try {
+      const write = this.state.views[threadId].write;
+      if (write?.phase === 'unknown') {
+        if (write.verifying) return;
+        await waitUntil(write.retryAt, AbortSignal.any([controller.signal, session.signal]));
+      }
       const snapshot = await session.runSnapshot(threadId, runId, controller.signal);
       if (!this.live(session, controller) || this.state.views[threadId].run?.run_id !== runId
         || version !== this.statusVersions.get(threadId)) return;
+      if (this.state.views[threadId].write?.phase === 'unknown') {
+        if (this.state.views[threadId].write?.verifying) return;
+        this.applyWriteSnapshot(threadId, snapshot); return;
+      }
       const projection = this.projection(threadId);
       projection.applySnapshot(snapshot);
       const approval = this.state.views[threadId].approval;

@@ -18,6 +18,14 @@ class ClientAcceptance(WindowAcceptance):
     return self.evaluate("document.body.innerText")
 
   def click(self, label):
+    # 运行摘要先呈现，资格核实随后完成；只点击实际可用按钮。
+    wait_until(
+      lambda: self.evaluate(
+        "[...document.querySelectorAll('button')]"
+        f".some(b => b.textContent.trim() === {json.dumps(label)} && !b.disabled)"
+      ),
+      timeout=10,
+    )
     self.assertTrue(
       self.evaluate(
         "(() => { const button = [...document.querySelectorAll('button')]"
