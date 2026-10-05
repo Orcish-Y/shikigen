@@ -1,14 +1,22 @@
 use crate::backend::{BackendManager, BackendSnapshot};
+use serde::Serialize;
 use std::sync::{Arc, Mutex};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager,
+    Emitter, Manager,
 };
 
 pub(crate) struct Desktop {
     pub(crate) tray_error: Option<String>,
     notifications: Mutex<Notifications>,
+    visibility: Mutex<WorkspaceVisibility>,
+}
+
+#[derive(Clone, Serialize)]
+pub(crate) struct WorkspaceVisibility {
+    revision: u64,
+    visible: bool,
 }
 
 #[derive(Default)]
@@ -25,8 +33,27 @@ impl Desktop {
         Self {
             tray_error,
             notifications: Mutex::default(),
+            visibility: Mutex::new(WorkspaceVisibility {
+                revision: 0,
+                visible: true,
+            }),
         }
     }
+}
+
+/// Read actual visibility after successful window operations. Focus and
+/// minimization are independent; a failed read leaves the known value intact.
+pub(crate) fn workspace_visibility(app: &tauri::AppHandle) -> Result<WorkspaceVisibility, String> {
+    let window = app.get_webview_window("main").ok_or("主窗口不可用")?;
+    let visible = window.is_visible().map_err(|error| error.to_string())?;
+    let desktop = app.state::<Desktop>();
+    let mut snapshot = desktop.visibility.lock().unwrap();
+    if snapshot.visible != visible {
+        snapshot.revision += 1;
+        snapshot.visible = visible;
+        let _ = app.emit("workspace-visibility-changed", snapshot.clone());
+    }
+    Ok(snapshot.clone())
 }
 
 pub(crate) fn backend_changed(app: &tauri::AppHandle, snapshot: BackendSnapshot) {
@@ -114,7 +141,9 @@ pub(crate) fn close_requested(window: &tauri::Window, api: &tauri::CloseRequestA
     }
     api.prevent_close();
     if window.state::<Desktop>().tray_error.is_none() && !manager.is_shutting_down() {
-        let _ = window.hide();
+        if window.hide().is_ok() {
+            let _ = workspace_visibility(window.app_handle());
+        }
     } else {
         request_exit(window.app_handle());
     }
@@ -130,7 +159,9 @@ pub(crate) fn request_exit(app: &tauri::AppHandle) {
 
 fn show_main(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
+        if window.show().is_ok() {
+            let _ = workspace_visibility(app);
+        }
         let _ = window.unminimize();
         let _ = window.set_focus();
     }

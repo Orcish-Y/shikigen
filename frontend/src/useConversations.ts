@@ -28,12 +28,13 @@ function displayMessage(message: ConversationMessage): Message {
 }
 
 /** 在 App 中挂载，工作台卸载或 BackendSession 换代不会重建会话所有者。 */
-export function useConversations(session: BackendSession | null, previewMode = false) {
+export function useConversations(session: BackendSession | null, previewMode = false, visible = true) {
   const [store] = useState(() => new ConversationStore());
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const [preview, setPreview] = useState(demoSessions);
   const [previewId, setPreviewId] = useState(demoSessions[0].id);
   const [previewDrafts, setPreviewDrafts] = useState<Record<string, string>>({});
+  useEffect(() => {store.setVisible(visible);}, [store, visible]);
   useEffect(() => {
     store.setSession(session);
     return () => store.setSession(null);

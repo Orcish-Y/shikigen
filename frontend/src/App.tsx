@@ -18,6 +18,7 @@ import { SendRecovery, DraftCopy } from './components/SendRecovery';
 import { ObservationStatus } from './components/ObservationStatus';
 import type { BackendSession } from "./backend-client";
 import { useConversations } from "./useConversations";
+import { useWorkspaceVisibility } from './useWorkspaceVisibility';
 
 function initialCollapsed() {
   try {
@@ -31,7 +32,8 @@ function initialCollapsed() {
 
 export default function App() {
   const backend = useBackendState();
-  const conversations = useConversations(backend.session, !backend.desktop);
+  const visible = useWorkspaceVisibility();
+  const conversations = useConversations(backend.session, !backend.desktop, visible);
   if (backend.desktop && (backend.error || backend.snapshot?.state !== "ready" || !backend.session)) {
     const state = backend.snapshot;
     const labels = {

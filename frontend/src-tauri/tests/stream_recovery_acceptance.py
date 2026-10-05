@@ -127,10 +127,21 @@ class StreamRecoveryAcceptance(ReconstructionAcceptance):
     wait_until(lambda: "观察已建立" in self.body())
     self.assertEqual(len(self.run_requests()), 5)
     (self.root / "continue-task").touch()
-    wait_until(lambda: "已完成" in self.body(), timeout=20)
+    # Agent 正文可以先于运行结算出现“已完成”；等待真实终态及正常 EOF，
+    # 不把正文文案当成已经结束的 Run。保留全部正式断言及原 20 秒等待时限。
+    wait_until(
+      lambda: (
+        self.evaluate("document.querySelector('.toolbar-badge').textContent.trim()")
+        == "已完成"
+        and "观察正常结束" in self.body()
+      ),
+      timeout=20,
+    )
     wait_until(lambda: "后台任务已完成" in self.body())
     self.assertIn("观察正常结束", self.body())
     final = self.client.get(history_url).json()["data"]
+    self.assertTrue(final)
+    self.assertTrue(all(message["run_status"] == "completed" for message in final))
     self.assertEqual(len([m for m in final if m["content"]["type"] == "human"]), 1)
     self.assertEqual(
       self.evaluate("document.getElementById('message-draft').value"), "保留下一条草稿"

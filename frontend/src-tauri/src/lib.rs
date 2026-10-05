@@ -31,6 +31,21 @@ fn get_tray_error(desktop: tauri::State<'_, desktop::Desktop>) -> Option<String>
     desktop.tray_error.clone()
 }
 
+#[tauri::command]
+async fn get_workspace_visibility(
+    app: tauri::AppHandle,
+) -> Result<desktop::WorkspaceVisibility, String> {
+    // Read and publish on the same native event loop as hide/show. An older
+    // cross-thread visibility read must not acquire a newer revision.
+    let (send, mut receive) = tauri::async_runtime::channel(1);
+    let handle = app.clone();
+    app.run_on_main_thread(move || {
+        let _ = send.try_send(desktop::workspace_visibility(&handle));
+    })
+    .map_err(|error| error.to_string())?;
+    receive.recv().await.ok_or("主窗口状态查询已结束")?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     run_with_backend(
@@ -62,7 +77,8 @@ pub fn run_with_backend(
             get_backend_state,
             get_backend_logs,
             retry_backend,
-            get_tray_error
+            get_tray_error,
+            get_workspace_visibility
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {

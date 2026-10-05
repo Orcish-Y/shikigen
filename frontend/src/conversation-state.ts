@@ -69,6 +69,10 @@ export class ConversationStore {
   };
   private listeners = new Set<() => void>();
   private session: BackendSession | null = null;
+  private visible = true;
+  private pollTimer: ReturnType<typeof setTimeout> | null = null;
+  private entryQueued = false;
+  private entryList = false;
   private selection: AbortController | null = null;
   private listRequest: AbortController | null = null;
   private moreRequest: AbortController | null = null;
@@ -76,6 +80,8 @@ export class ConversationStore {
   private recovery: ObservationRecovery | null = null;
   private retryDeadlines = new Map<string, number>();
   private queryRequest: AbortController | null = null;
+  private summaryRequest: AbortController | null = null;
+  private summaryTarget: {threadId:string; runId:string | null} | null = null;
   private statusVersions = new Map<string, number>();
   private creation: object | null = null;
   private intent = 0;
@@ -127,11 +133,16 @@ export class ConversationStore {
     this.recovery = null;
     this.queryRequest?.abort();
     this.queryRequest = null;
-    if (id && this.state.views[id]) this.view(id, { sending: false, observation:'paused', retry:null, querying:false,
+    this.summaryRequest?.abort();
+    this.summaryRequest = null;
+    this.summaryTarget = null;
+    if (id && this.state.views[id]) this.view(id, { verified:false, sending: false, observation:'paused', retry:null, querying:false,
+      history:this.state.views[id].history === 'loading' ? 'idle' : this.state.views[id].history,
       approval:this.state.views[id].approval ? {...this.state.views[id].approval!, verified:false} : null });
   }
 
   private revoke = () => {
+    this.stopPolling();
     this.stopSelection();
     this.listRequest?.abort();
     this.listRequest = null;
@@ -155,12 +166,51 @@ export class ConversationStore {
     this.session = session;
     if (!session || session.signal.aborted) return;
     session.signal.addEventListener("abort", this.revoke, { once: true });
-    void this.loadThreads(true, true);
-    if (this.state.activeId) void this.openSelected();
+    if (!this.visible) return;
+    this.enter(true);
+  }
+
+  setVisible(visible: boolean) {
+    if (this.visible === visible) return;
+    this.visible = visible;
+    if (!visible) this.revoke();
+    else this.enter(true);
+  }
+
+  /** 同一轮显示、选择和租约就绪只定位一次，微任务读取最新目标。 */
+  private enter(refreshList = false) {
+    // 排队不等于已经核实：调用者立即看到读取中，不能沿用上次的发送资格。
+    if (this.visible && this.session && !this.session.signal.aborted && this.state.activeId) {
+      this.view(this.state.activeId, {history:'loading', verified:false});
+    }
+    this.entryList ||= refreshList;
+    if (this.entryQueued) return;
+    this.entryQueued = true;
+    queueMicrotask(() => {
+      this.entryQueued = false;
+      const list = this.entryList;
+      this.entryList = false;
+      if (!this.visible || !this.session || this.session.signal.aborted) return;
+      if (list) void this.loadThreads(true);
+      if (this.state.activeId) void this.openSelected();
+    });
   }
 
   private live(session: BackendSession, controller: AbortController) {
-    return this.session === session && !session.signal.aborted && !controller.signal.aborted;
+    return this.visible && this.session === session && !session.signal.aborted && !controller.signal.aborted;
+  }
+
+  private stopPolling() {
+    if (this.pollTimer !== null) clearTimeout(this.pollTimer);
+    this.pollTimer = null;
+  }
+
+  private schedulePoll() {
+    this.stopPolling();
+    if (!this.visible || !this.session || this.session.signal.aborted || this.listRequest) return;
+    const delay = Math.max(5000, (this.state.listError?.retryAt ?? 0) - Date.now(),
+      (this.state.pageError?.retryAt ?? 0) - Date.now());
+    this.pollTimer = setTimeout(() => {this.pollTimer = null; void this.loadThreads(false);}, Math.min(delay, 2_147_483_647));
   }
 
   private mergeThreads(items: Thread[], versions: Map<string, number>) {
@@ -188,11 +238,12 @@ export class ConversationStore {
 
   private async loadThreads(chooseInitial = true, reset = false) {
     const session = this.session;
-    if (!session || session.signal.aborted) return;
+    if (!this.visible || !session || session.signal.aborted) return;
     if (Date.now() < (this.state.listError?.retryAt ?? 0)
-      || Date.now() < (this.state.pageError?.retryAt ?? 0)) return;
+      || Date.now() < (this.state.pageError?.retryAt ?? 0)) {this.schedulePoll(); return;}
     if (this.listRequest && !reset) return;
     this.listRequest?.abort();
+    this.stopPolling();
     if (reset) {
       this.moreRequest?.abort();
       this.moreRequest = null;
@@ -205,6 +256,12 @@ export class ConversationStore {
     try {
       const page = await session.threads(THREAD_PAGE_SIZE, controller.signal);
       if (!this.live(session, controller)) return;
+      const selected = page.data.find(item => item.id === this.state.activeId);
+      const previous = this.state.threads.find(item => item.id === selected?.id);
+      if (selected && (!previous?.updated_at || selected.updated_at >= previous.updated_at)
+        && versions.get(selected.id) === this.statusVersions.get(selected.id)) {
+        void this.reconcileSummary(session, selected);
+      }
       this.mergeThreads(page.data, versions);
       if (reset || !this.state.listLoaded) this.publish({
         nextCursor: page.data.length < THREAD_PAGE_SIZE ? null : page.next_cursor, pageError: null,
@@ -217,6 +274,7 @@ export class ConversationStore {
       if (this.live(session, controller)) {
         this.listRequest = null;
         this.publish({ listing: false });
+        this.schedulePoll();
       }
     }
   }
@@ -227,7 +285,7 @@ export class ConversationStore {
   loadMore = async (retry = false) => {
     const session = this.session;
     const cursor = this.state.nextCursor;
-    if (!session || session.signal.aborted || !cursor || this.moreRequest || this.listRequest
+    if (!this.visible || !session || session.signal.aborted || !cursor || this.moreRequest || this.listRequest
         || this.state.listError || this.state.pageError?.invalidCursor
         || (this.state.pageError && (!retry || Date.now() < this.state.pageError.retryAt))) return;
     const controller = this.moreRequest = new AbortController();
@@ -256,7 +314,7 @@ export class ConversationStore {
     this.publish({ activeId: threadId });
     this.inputs.select(threadId);
     this.publishInputs();
-    void this.openSelected();
+    this.enter();
   }
 
   updateDraft(value: string) {
@@ -268,7 +326,7 @@ export class ConversationStore {
 
   async create() {
     const session = this.session;
-    if (!session || session.signal.aborted || this.creation || this.state.listing) return;
+    if (!this.visible || !session || session.signal.aborted || this.creation || this.state.listing) return;
     const intent = ++this.intent;
     const creation = this.creation = {};
     this.publish({ creating: true, notice: null });
@@ -309,7 +367,7 @@ export class ConversationStore {
 
   private canStartRun() {
     const view = this.state.views[this.state.activeId];
-    return Boolean(this.session && !this.session.signal.aborted && view?.history === "ready"
+    return Boolean(this.visible && this.session && !this.session.signal.aborted && view?.history === "ready"
       && view.verified && !view.sending && !this.state.creating
       && (!view.run || ["completed", "cancelled", "error"].includes(view.run.status)));
   }
@@ -414,15 +472,15 @@ export class ConversationStore {
   }
 
   reload = () => {
-    void this.loadThreads();
-    void this.openSelected();
+    this.stopSelection();
+    this.enter(true);
   };
 
   reconnect = () => {
     const session = this.session;
     const threadId = this.state.activeId;
     const view = this.state.views[threadId];
-    if (!session || session.signal.aborted || !view?.run || view.history !== 'ready'
+    if (!this.visible || !session || session.signal.aborted || !view?.run || view.history !== 'ready'
       || view.sending || this.recovery || this.observing || this.queryRequest) return;
     const runId = view.run.run_id;
     this.stopSelection();
@@ -440,7 +498,7 @@ export class ConversationStore {
     const session = this.session;
     const threadId = this.state.activeId;
     const view = this.state.views[threadId];
-    if (!session || session.signal.aborted || !view?.run || this.queryRequest
+    if (!this.visible || !session || session.signal.aborted || !view?.run || this.queryRequest
       || view.sending || view.history !== 'ready' || this.recovery || this.observing) return;
     const controller = this.queryRequest = new AbortController();
     const runId = view.run.run_id;
@@ -474,7 +532,7 @@ export class ConversationStore {
   private async openSelected() {
     const session = this.session;
     const threadId = this.state.activeId;
-    if (!session || session.signal.aborted || !threadId) return;
+    if (!this.visible || !session || session.signal.aborted || !threadId) return;
     this.stopSelection();
     const controller = this.selection = new AbortController();
     this.view(threadId, { history: "loading", verified: false, error: null, missing:false });
@@ -494,15 +552,7 @@ export class ConversationStore {
         if (!this.live(session, controller)) return;
         projection.metadata(snapshot);
       }
-      const run = projection.run;
-      this.view(threadId, { ...projection.snapshot(), history: "ready", verified: !run });
-      if (!run) {this.view(threadId, {observation:'idle', retry:null, observationFailure:null}); return;}
-      if (run.status === "running" || run.status === "interrupted") {
-        const completed = await this.observeRun(session, controller, threadId, run.run_id);
-        if (completed) await this.readSnapshot(session, controller, threadId, run.run_id);
-      } else {
-        await this.readSnapshot(session, controller, threadId, run.run_id);
-      }
+      await this.restoreSelectedRun(session, controller, threadId);
     } catch (error) {
       if (this.live(session, controller)) this.view(threadId, {
         history: this.state.views[threadId].history === "loading" ? "error" : "ready",
@@ -511,6 +561,59 @@ export class ConversationStore {
         missing:!historyRead && error instanceof BackendRequestError && error.status === 404,
         ...(error instanceof RunProtocolError ? {protocolIssue:{message:error.message, raw:error.raw}} : {}),
       });
+    }
+  }
+
+  private async restoreSelectedRun(session:BackendSession, controller:AbortController, threadId:string) {
+    const projection = this.projection(threadId);
+    const run = projection.run;
+    this.view(threadId, {...projection.snapshot(), history:'ready', verified:!run});
+    if (!run) {this.view(threadId, {observation:'idle', retry:null, observationFailure:null}); return;}
+    if (run.status === 'running' || run.status === 'interrupted') {
+      const completed = await this.observeRun(session, controller, threadId, run.run_id);
+      if (completed) await this.readSnapshot(session, controller, threadId, run.run_id);
+    } else {
+      // 终态无需 SSE；完成本轮读取后不能沿用隐藏时的主动暂停状态。
+      this.view(threadId, {observation:'idle', retry:null, observationFailure:null});
+      await this.readSnapshot(session, controller, threadId, run.run_id);
+      if (this.live(session, controller) && this.state.views[threadId].verified) {
+        this.view(threadId, {observation:'closed'});
+      }
+    }
+  }
+
+  /** 摘要只提示可能出现新 Run；历史确认身份后才撤销旧观察。 */
+  private async reconcileSummary(session:BackendSession, summary:Thread) {
+    if (this.summaryTarget?.threadId !== summary.id || this.summaryTarget.runId !== summary.run_id) {
+      this.summaryRequest?.abort();
+      this.summaryRequest = null;
+      this.summaryTarget = {threadId:summary.id, runId:summary.run_id};
+    }
+    const target = this.summaryTarget;
+    const view = this.state.views[summary.id];
+    if (!summary.run_id || summary.run_id === view?.run?.run_id || view?.history !== 'ready'
+      || view.sending || this.queryRequest || this.summaryRequest || this.entryQueued) return;
+    const previousRun = view.run?.run_id;
+    const controller = this.summaryRequest = new AbortController();
+    try {
+      await waitUntil(this.inputs.submissions[summary.id]?.retryAt ?? 0, AbortSignal.any([controller.signal, session.signal]));
+      const messages = await session.messages(summary.id, controller.signal);
+      if (!this.live(session, controller) || this.state.activeId !== summary.id
+        || this.summaryTarget !== target
+        || this.state.views[summary.id].run?.run_id !== previousRun) return;
+      const projection = this.projection(summary.id);
+      projection.mergeMessages(messages);
+      // 同 Run 的摘要不触发新恢复轮次，也不回退当前 metadata 状态。
+      if (messages.at(-1)?.run_id !== previousRun) projection.mergeHistory(messages);
+      this.view(summary.id, projection.snapshot());
+      if (projection.run?.run_id === previousRun) return;
+      this.stopSelection();
+      const selection = this.selection = new AbortController();
+      await this.restoreSelectedRun(session, selection, summary.id);
+    } catch (error) {
+      if (this.live(session, controller)) this.view(summary.id, {error:`核实会话新运行失败：${String(error)}`});
+    } finally {
+      if (this.summaryRequest === controller) this.summaryRequest = null;
     }
   }
 
