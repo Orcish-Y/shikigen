@@ -8,11 +8,13 @@ import { ContentViewer, CopyContent } from './ContentViewer';
 import { ObservationStatus } from './ObservationStatus';
 import type { ConversationView } from '../conversation-state';
 import { RunEvents } from './RunEvents';
+import { emptyUsageVerification, type UsageVerification } from '../usage-verification';
 
 export function formatRunNumber(value:number | undefined) {
   return value === undefined ? '未提供' : value.toLocaleString();
 }
-export function usageSettlementLabel(run:Run | null) {
+export function usageSettlementLabel(run:Run | null,verification:UsageVerification=emptyUsageVerification) {
+  if(run?.usage_pending===true && verification.pauseReason==='limit') return '仍在结算，自动核实已暂停';
   return run?.usage_pending === true ? '仍在结算'
     : run?.usage_pending === false ? '当前用量已保存' : '结算状态待确认';
 }
@@ -22,9 +24,10 @@ function usageEmptyLabel(run:Run | null, snapshotRead:SnapshotRead, availability
   return '暂无用量数据';
 }
 
-export function RunUsage({run,snapshotRead,availability,isCompact=false,onDetails,onView,disabled=false}: {
+export function RunUsage({run,snapshotRead,availability,verification=emptyUsageVerification,isCompact=false,onDetails,onView,onContinue,onReload,disabled=false}: {
   run:Run | null; snapshotRead:SnapshotRead; availability:string; isCompact?:boolean;
   onDetails?:()=>void; onView?:(view:ContentView)=>void; disabled?:boolean;
+  verification?:UsageVerification; onContinue?:()=>Promise<void>; onReload?:()=>void;
 }) {
   const usage = run?.usage;
   return <section className={isCompact ? 'usage' : 'run-usage'} aria-label="本次运行用量">
@@ -34,9 +37,15 @@ export function RunUsage({run,snapshotRead,availability,isCompact=false,onDetail
         <dt>{label}</dt><dd>{formatRunNumber([usage.total_input,usage.total_output,usage.total_tokens,usage.calls][index])}</dd>
       </div>)}
     </dl> : <p role="status">{usageEmptyLabel(run,snapshotRead,availability)}</p>}
-    {run && <p className="settlement-status" role="status">{usageSettlementLabel(run)}</p>}
+    {run && <p className="settlement-status" role="status">{usageSettlementLabel(run,verification)}</p>}
     {snapshotRead.phase === 'reading' && usage && <small role="status">正在刷新用量…</small>}
     {snapshotRead.phase === 'error' && <p className="read-failure" role="alert">用量读取失败，已有值保留。</p>}
+    {snapshotRead.retry && <p className="settlement-status" role="status">等待后核实用量：{new Date(snapshotRead.retry.at).toLocaleTimeString()}</p>}
+    {run?.usage_pending===true && (verification.pauseReason || snapshotRead.phase==='error') && <button
+      className="text-button usage-continue" disabled={snapshotRead.phase==='reading' || disabled}
+      onClick={snapshotRead.failure?.status===404?onReload:()=>void onContinue?.()}>
+      {snapshotRead.failure?.status===404?'重新读取会话':verification.pauseReason==='limit'?'继续核实':'重试核实用量'}
+    </button>}
     {!isCompact && <>
       <p>本次运行已记录的累计用量，包含审批继续前的部分。调用次数指模型完成回调，不代表工具次数或账单。</p>
       {usage && <details className="model-usage"><summary>模型分项</summary>
@@ -72,10 +81,11 @@ function RunTime({label,timestamp,fallback,onView}: {label:string; timestamp?:st
   </> : fallback}</dd></div>;
 }
 
-export function RunDetails({threadId,title,view,availability,onRefresh,onRefreshEvents=async()=>{},onReload,onReconnect,onQuery,onApproval,onClose}: {
+export function RunDetails({threadId,title,view,availability,onRefresh,onRefreshEvents=async()=>{},onContinueUsage,onReload,onReconnect,onQuery,onApproval,onClose}: {
   threadId:string; title:string; view:ConversationView; availability:string;
   onRefresh:()=>Promise<void>; onReload:()=>void; onReconnect:()=>void; onQuery:()=>Promise<void>;
   onRefreshEvents?:()=>Promise<void>;
+  onContinueUsage?:()=>Promise<void>;
   onApproval:()=>void; onClose:()=>void;
 }) {
   const [contentView,setContentView]=useState<ContentView | null>(null);
@@ -133,7 +143,8 @@ export function RunDetails({threadId,title,view,availability,onRefresh,onRefresh
             : <p>后端错误详情尚未取得</p>}
         </section>}
       </section>
-      <RunUsage run={run} snapshotRead={snapshotRead} availability={availability} onView={openContent}/>
+      <RunUsage run={run} snapshotRead={snapshotRead} verification={view.usageVerification} availability={availability}
+        onView={openContent} onContinue={onContinueUsage} onReload={onReload}/>
       <RunEvents events={run ? view.events[run.run_id] ?? [] : []} eventRead={view.eventRead} status={run?.status} onRefresh={onRefreshEvents} onReload={onReload} onView={openContent}/>
       <section aria-label="观察连接"><h3>观察连接</h3><p>{observationLabels[view.observation]}</p><ObservationStatus view={view} onReconnect={onReconnect} onQuery={onQuery}/></section>
       <div className="details-actions">

@@ -87,6 +87,7 @@ export function useConversations(session: BackendSession | null, previewMode = f
       : view.history === 'ready' && view.verified ? '尚未开始运行'
       : view.history === 'error' ? '运行身份读取失败' : activeId ? '运行身份正在读取' : '请先选择会话',
     refreshRunDetails:store.refreshRunDetails,
+    continueUsageVerification:store.continueUsageVerification,
     setDetailsOpen:store.setDetailsOpen,
     refreshDetails:store.refreshDetails,
     refreshRunEvents:store.refreshRunEvents,

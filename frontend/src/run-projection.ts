@@ -3,7 +3,7 @@ import { RunProtocolError } from './run-protocol.ts';
 
 export type ConversationMessage = Pick<StoredMessage, 'run_id' | 'seq' | 'content'> & Partial<StoredMessage> & { preview?: boolean };
 export interface ApprovalProjection { request: RunEvent & { payload: ApprovalRequired }; verified: boolean }
-export interface RunFieldVersion {stage:number; usage:number; outcome:number; status:number}
+export interface RunFieldVersion {stage:number; executionStage:number; usage:number; outcome:number; status:number}
 export interface SnapshotAuthority {shouldPreserveStatus?:boolean; isWrite?:boolean}
 
 // 对象键的次序不属于事实内容；数组次序及省略/null 的区别属于事实。
@@ -65,7 +65,7 @@ export class RunProjection {
     const updatedRun = { ...existingRun, ...incomingRun };
     const version = this.snapshotVersion(incomingRun.run_id);
     if (existingRun?.status === 'interrupted' && incomingRun.status === 'running') {
-      version.stage++;
+      version.stage++; version.executionStage++;
       if (!Object.hasOwn(incomingRun, 'usage_pending')) updatedRun.usage_pending = null;
       version.usage++;
     }
@@ -78,7 +78,7 @@ export class RunProjection {
   }
 
   snapshotVersion(runId:string):RunFieldVersion {
-    return {...(this.versions.get(runId) ?? {stage:0,usage:0,outcome:0,status:0})};
+    return {...(this.versions.get(runId) ?? {stage:0,executionStage:0,usage:0,outcome:0,status:0})};
   }
 
   /** A new GET observation cannot prove it is still the same execution stage. */

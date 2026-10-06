@@ -880,6 +880,7 @@ textarea::placeholder {
 .usage-values dd { margin: 4px 0 0; overflow-wrap: anywhere; }
 .run-usage, .model-usage-row { border-top: 1px solid var(--border); margin-top: 20px; }
 .run-details h3 { font-size: 14px; }
+.usage .settlement-status, .run-usage .settlement-status, .usage .read-failure { font-size: 14px; overflow-wrap: anywhere; }
 .model-usage summary { cursor: pointer; font-size: 12px; color: var(--secondary); }
 .model-usage-row h4 { font-size: 12px; font-weight: 500; margin: 12px 0; }
 .details-execution-error pre { max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
@@ -905,6 +906,7 @@ textarea::placeholder {
 .event-json pre { max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 12px; background: var(--sidebar); border: 1px solid var(--border); border-radius: var(--radius); font: 12px/20px "JetBrains Mono", monospace; }
 @media (max-width: 767px) {
   .run-events button, .event-json summary, .event-toolbar label, .run-details-subview button { min-height: 44px; min-width: 44px; }
+  .usage-continue { min-height: 44px; min-width: 44px; }
   .event-json summary { align-content: center; }
 }
 .mobile-navigation,

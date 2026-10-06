@@ -274,6 +274,7 @@ function Workspace({ session, conversations }: {
             creating={conversations.creating || conversations.loading}
             pagination={conversations.pagination}
             usageSummary={<RunUsage isCompact run={conversations.run} snapshotRead={conversations.observationView.snapshotRead}
+              verification={conversations.observationView.usageVerification} onContinue={conversations.continueUsageVerification} onReload={conversations.reload}
               availability={conversations.detailsAvailability} onDetails={openRunDetails} disabled={!conversations.detailsAvailable}/>}
           />
           <main className="chat-workspace" tabIndex={-1}>
@@ -480,6 +481,7 @@ function Workspace({ session, conversations }: {
         {fileOpening.view.phase === 'idle' && overlay === "details" && (
           <Overlay title="运行详情" drawer onClose={() => setOverlay(null)}>
             <RunDetails key={`${activeId}:${conversations.run?.run_id}`} threadId={activeId} title={active.title}
+              onContinueUsage={conversations.continueUsageVerification}
               view={conversations.observationView} availability={conversations.detailsAvailability}
               onRefresh={conversations.refreshDetails} onRefreshEvents={conversations.refreshRunEvents} onReload={conversations.reload}
               onReconnect={conversations.reconnect} onQuery={conversations.queryStatus}

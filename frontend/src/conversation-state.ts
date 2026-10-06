@@ -6,6 +6,7 @@ import { ObservationRecovery, StreamObservationError, UnexpectedObservationEnd, 
 import { collectApprovalRecords, createApprovalIdentity, buildApprovalResponses, parseApproval, updateApprovalChoice, type ApprovalChoice, type ApprovalDraft } from './approval-decisions.ts';
 import { ApprovalDrafts, type ApprovalBackup } from './approval-drafts.ts';
 import { RunEventHistoryReader, emptyEventRead, type EventRead } from './run-event-history.ts';
+import { UsageVerificationCoordinator, emptyUsageVerification, createUsageTargetKey, type UsageVerification } from './usage-verification.ts';
 export type { ConversationMessage } from './run-projection.ts';
 
 const THREAD_PAGE_SIZE = 20;
@@ -58,6 +59,7 @@ export interface ConversationView {
   savedContentFailure:ObservationFailure | null;
   snapshotRead:SnapshotRead;
   eventRead:EventRead;
+  usageVerification:UsageVerification;
 }
 export interface ConversationState {
   threads: Thread[];
@@ -77,12 +79,13 @@ export interface ConversationState {
   approvalBackups:ApprovalBackup[];
 }
 export const emptyConversation: ConversationView = {
-  messages: [], run: null, runStatuses:{}, history: "idle", verified: false, error: null, sending: false, acceptedSendId:null, events:{}, approval:null, approvalDraft:null, acceptedApproval:null, observation:'idle', retry:null, observationFailure:null, querying:false, queryFailure:null, sendFailure:null, protocolIssue:null, missing:false, write:null, savedContent:'idle', savedContentFailure:null, snapshotRead:emptySnapshotRead, eventRead:emptyEventRead,
+  messages: [], run: null, runStatuses:{}, history: "idle", verified: false, error: null, sending: false, acceptedSendId:null, events:{}, approval:null, approvalDraft:null, acceptedApproval:null, observation:'idle', retry:null, observationFailure:null, querying:false, queryFailure:null, sendFailure:null, protocolIssue:null, missing:false, write:null, savedContent:'idle', savedContentFailure:null, snapshotRead:emptySnapshotRead, eventRead:emptyEventRead, usageVerification:emptyUsageVerification,
 };
 
 interface ObservationAttempt {
   controller: AbortController; threadId: string; runId: string | null;
   replay: Map<number, RunEvent>; metadata: boolean; failed: boolean; isGet: boolean;
+  hasFinished:boolean;
 }
 
 /** 应用级会话所有者。Workspace 仅订阅；地址租约撤销只结束读取，不删除事实和输入。 */
@@ -104,6 +107,7 @@ export class ConversationStore {
   private observing: ObservationAttempt | null = null;
   private recovery: ObservationRecovery | null = null;
   private retryDeadlines = new Map<string, number>();
+  private snapshotDeadlines = new Map<string, number>();
   private queryRequest: AbortController | null = null;
   private summaryRequest: AbortController | null = null;
   private summaryTarget: {threadId:string; runId:string | null} | null = null;
@@ -118,9 +122,14 @@ export class ConversationStore {
   private savedReads = new Map<string, 'reading' | 'ready' | 'error'>();
   private savedDeadlines = new Map<string, number>();
   private snapshotRequest: {session:BackendSession; threadId:string; runId:string; controller:AbortController;
-    task:Promise<void>; hasStarted:boolean; shouldReadAgain:boolean} | null = null;
+    task:Promise<void>; hasStarted:boolean; shouldReadAgain:boolean; isAutomatic:boolean; executionStage:number} | null = null;
   private isDetailsOpen=false;
   private isEventReadPaused=true;
+  private usageVerification=new UsageVerificationCoordinator(
+    ()=>this.refreshUsageSnapshot(),verification=>{
+      const threadId=this.state.activeId;
+      if(threadId && this.state.views[threadId]) this.updateView(threadId,{usageVerification:verification});
+    });
   private eventHistory=new RunEventHistoryReader((target,events)=>{
     const projection=this.projection(target.threadId);
     projection.mergeEvents(target.runId,events);
@@ -208,6 +217,7 @@ export class ConversationStore {
       [threadId]: { ...(this.state.views[threadId] ?? emptyConversation), ...viewUpdate },
     } });
     this.syncEventTarget();
+    this.syncUsageTarget();
     const view = this.state.views[threadId];
     if (view.verified && view.run && terminalRun(view.run)) {
       queueMicrotask(() => {void this.readSavedContent(threadId, view.run!.run_id);});
@@ -217,6 +227,7 @@ export class ConversationStore {
   private stopSelection() {
     this.isEventReadPaused=true;
     this.eventHistory.setTarget(null);
+    this.usageVerification.setTarget(null);
     const id = this.state.activeId;
     this.writeRequest?.abort();
     this.writeRequest = null;
@@ -573,7 +584,6 @@ export class ConversationStore {
           }
           if (normal && this.live(session, controller)) {
             await this.readCommittedHistory(session, controller, threadId);
-            await this.readSnapshot(session, controller, threadId, submissionRecord.runId,true);
             void this.loadThreads(false);
           }
         } else {
@@ -607,7 +617,6 @@ export class ConversationStore {
     void this.observeRun(session!, controller, threadId, runId).then(async normal => {
       if (normal && this.live(session!, controller)) {
         await this.readCommittedHistory(session!, controller, threadId);
-        await this.readSnapshot(session!, controller, threadId, runId,true);
       }
     });
   };
@@ -740,7 +749,6 @@ export class ConversationStore {
       }
       if (endedNormally && this.live(session, controller)) {
         await this.readCommittedHistory(session, controller, threadId);
-        await this.readSnapshot(session, controller, threadId, runId,true);
       }
       const writeState = this.state.views[threadId].write;
       if (this.live(session, controller) && writeState?.kind === 'approval' && writeState.verifying) {
@@ -762,7 +770,7 @@ export class ConversationStore {
         || this.state.views[threadId].run?.run_id !== runId) return false;
       const hasStaleUsage = this.applyWriteSnapshot(threadId, snapshot,version);
       this.notifyEventBoundary(threadId,runId);
-      if (hasStaleUsage || snapshot.usage_pending === true) void this.refreshRunDetails(true);
+      if (hasStaleUsage || this.snapshotRequest?.hasStarted) void this.refreshRunDetails(true);
       return true;
     } catch (error) {
       if (this.live(session, controller) && this.state.views[threadId].run?.run_id === runId) {
@@ -905,8 +913,7 @@ export class ConversationStore {
       .map(record=>record.submission?.retryAt??0));
     this.retryDeadlines.set(`${threadId}:${run.run_id}`,Math.max(this.retryDeadlines.get(`${threadId}:${run.run_id}`)??0,retryAt));
     if (run.status === 'running' || run.status === 'interrupted') {
-      const completed = await this.observeRun(session, controller, threadId, run.run_id);
-      if (completed) await this.readSnapshot(session, controller, threadId, run.run_id,true);
+      await this.observeRun(session, controller, threadId, run.run_id);
     } else {
       // 终态无需 SSE；完成本轮读取后不能沿用隐藏时的主动暂停状态。
       this.updateView(threadId, {observation:'idle', retry:null, observationFailure:null});
@@ -991,6 +998,40 @@ export class ConversationStore {
     return this.readSnapshot(session, new AbortController(), threadId, runId,shouldReadAfterBoundary);
   };
 
+  private syncUsageTarget() {
+    const threadId=this.state.activeId, view=this.state.views[threadId], session=this.session;
+    const run=view?.run;
+    const executionStage=run?this.projection(threadId).snapshotVersion(run.run_id).executionStage:0;
+    const request=this.snapshotRequest;
+    const hasSettledUsage=run?.usage_pending===false;
+    if(request?.isAutomatic && (request.executionStage!==executionStage || hasSettledUsage)) {
+      // Stage changes and confirmed settlement stop the automatic GET and its retry task.
+      const shouldReadBoundary=hasSettledUsage && request.executionStage===executionStage && request.shouldReadAgain;
+      request.controller.abort();this.snapshotRequest=null;
+      this.updateView(threadId,{snapshotRead:{...emptySnapshotRead,phase:hasSettledUsage?'ready':'idle'},queryFailure:null});
+      if(shouldReadBoundary) queueMicrotask(()=>{
+        // A coalesced EOF/cancel supplement remains a normal read after automatic work stops.
+        if(this.session===request.session && !request.session.signal.aborted && this.visible && !this.isEventReadPaused
+          && this.state.activeId===request.threadId && this.state.views[request.threadId]?.run?.run_id===request.runId
+          && this.projection(request.threadId).snapshotVersion(request.runId).executionStage===request.executionStage)
+          void this.refreshRunDetails();
+      });
+    }
+    this.usageVerification.setTarget(!this.isEventReadPaused && this.visible && session && !session.signal.aborted && run
+      ? {session,threadId,runId:run.run_id,executionStage,
+        isEligible:view.verified && (run.status==='interrupted' || terminalRun(run)) && run.usage_pending===true,
+        isReading:Boolean(this.snapshotRequest)} : null);
+  }
+  private refreshUsageSnapshot=():Promise<void>=>{
+    const session=this.session,threadId=this.state.activeId,run=this.state.views[threadId]?.run;
+    if(!session || !this.visible || session.signal.aborted || !run) return Promise.resolve();
+    return this.readSnapshot(session,new AbortController(),threadId,run.run_id,false,true);
+  };
+  continueUsageVerification=():Promise<void>=>{
+    if(!this.usageVerification.continueVerification()) return Promise.resolve();
+    return this.refreshRunDetails();
+  };
+
   setDetailsOpen=(isOpen:boolean)=>{
     this.isDetailsOpen=isOpen;
     if(isOpen && this.visible && this.state.views[this.state.activeId]?.history==='ready') this.isEventReadPaused=false;
@@ -1009,7 +1050,7 @@ export class ConversationStore {
   refreshDetails=async()=>{await Promise.all([this.refreshRunDetails(),this.eventHistory.refreshHistory()]);};
   refreshRunEvents=()=>this.eventHistory.refreshHistory();
 
-  private readSnapshot(session:BackendSession, caller:AbortController, threadId:string, runId:string,shouldReadAfterBoundary=false):Promise<void> {
+  private readSnapshot(session:BackendSession, caller:AbortController, threadId:string, runId:string,shouldReadAfterBoundary=false,isAutomatic=false):Promise<void> {
     if (!this.live(session,caller) || this.state.activeId !== threadId
       || this.state.views[threadId]?.run?.run_id !== runId) return Promise.resolve();
     const existing = this.snapshotRequest;
@@ -1019,56 +1060,96 @@ export class ConversationStore {
     }
     existing?.controller.abort();
     const controller = new AbortController();
-    const request = {session, threadId, runId, controller, task:Promise.resolve(),hasStarted:false,shouldReadAgain:false};
+    const request = {session, threadId, runId, controller, task:Promise.resolve(),hasStarted:false,shouldReadAgain:false,
+      isAutomatic,executionStage:this.projection(threadId).snapshotVersion(runId).executionStage};
     this.snapshotRequest = request;
+    this.syncUsageTarget();
     // Defer until ownership is recorded; every trigger joins this same task.
     request.task = Promise.resolve().then(async () => {
       const isCurrent = () => this.snapshotRequest === request && this.live(session,controller)
         && this.state.activeId === threadId && this.state.views[threadId]?.run?.run_id === runId;
-      const key = `${threadId}:${runId}`;
-      const recovery = new ObservationRecovery(AbortSignal.any([controller.signal,session.signal]),
-        this.retryDeadlines.get(key) ?? 0, update => {
-          if (!isCurrent()) return;
-          this.retryDeadlines.set(key, Math.max(this.retryDeadlines.get(key) ?? 0,recovery.retryAt));
-          this.updateView(threadId,{snapshotRead:{phase:update.observation === 'failed' ? 'error' : 'reading',
-            failure:update.observationFailure,retry:update.retry},
-            ...(update.observationFailure ? {queryFailure:update.observationFailure} : {}),
-            ...(update.observationFailure?.status===404 ? {verified:false,
-              approval:this.state.views[threadId].approval ? {...this.state.views[threadId].approval!,verified:false} : null} : {})});
-        });
+      const observationKey = `${threadId}:${runId}`;
+      const deadlineKey=createUsageTargetKey({session,threadId,runId,executionStage:0});
+      const signal=AbortSignal.any([controller.signal,session.signal]);
+      let finalFailure:ObservationFailure | null=null;
+      const publishRead=(phase:SnapshotRead['phase'],failure:ObservationFailure | null,retry:SnapshotRead['retry']=null)=>{
+        if(!isCurrent())return;
+        this.updateView(threadId,{snapshotRead:{phase,failure,retry},
+          ...(failure?{queryFailure:failure}:{}),
+          ...(failure?.status===404?{verified:false,
+            approval:this.state.views[threadId].approval?{...this.state.views[threadId].approval!,verified:false}:null}:{})});
+      };
       try {
         let needsFreshSnapshot = false;
-        const readOnce = async () => recovery.run(async () => {
-          const write = this.state.views[threadId].write;
-          if (write?.phase === 'unknown') await waitUntil(write.retryAt,AbortSignal.any([controller.signal,session.signal]));
-          const projection = this.projection(threadId);
-          const version = projection.snapshotVersion(runId);
-          request.hasStarted = true;
-          const snapshot = await session.runSnapshot(threadId,runId,controller.signal);
-          if (!isCurrent()) return true;
-          const currentWrite = this.state.views[threadId].write;
-          const canVerifyWrite = currentWrite?.phase === 'unknown' && write?.phase === 'unknown' && currentWrite === write;
-          if (canVerifyWrite) {
-            needsFreshSnapshot = this.applyWriteSnapshot(threadId,snapshot,version);
-          } else {
-            needsFreshSnapshot = projection.applySnapshot(snapshot,version,{shouldPreserveStatus:Boolean(this.observing && this.observing.threadId === threadId)})
-              || currentWrite?.phase === 'unknown';
-            const approval = this.state.views[threadId].approval;
-            this.updateView(threadId,{...projection.snapshot(),verified:true,queryFailure:null,
-              approval:approval ? {...approval,verified:approval.verified && projection.run?.status === 'interrupted'} : null});
-            this.syncRun(threadId,projection.run!);
+        const readSnapshotOnce = async (shouldChargeInitial=isAutomatic) => {
+          let failure:ObservationFailure | null=null;
+          const isSameExecutionStage=()=>this.projection(threadId).snapshotVersion(runId).executionStage===request.executionStage;
+          for(let retryAttempt=0;retryAttempt<=3 && isCurrent();retryAttempt++) {
+            if((shouldChargeInitial || retryAttempt>0 && isSameExecutionStage()) && !this.usageVerification.hasBudget()) {
+              finalFailure=failure;
+              publishRead(failure?'error':'ready',failure);
+              return false;
+            }
+            const retryAt=Math.max(this.snapshotDeadlines.get(deadlineKey) ?? 0,this.retryDeadlines.get(observationKey) ?? 0,
+              failure?Date.now()+[1000,2000,5000][retryAttempt-1]:0);
+            publishRead('reading',failure,retryAt>Date.now()?{attempt:retryAttempt,at:retryAt}:null);
+            await waitUntil(retryAt,signal);
+            if(!isCurrent())return false;
+            try {
+              const write = this.state.views[threadId].write;
+              if (write?.phase === 'unknown') await waitUntil(write.retryAt,signal);
+              if(!isCurrent())return false;
+              if((shouldChargeInitial || retryAttempt>0 && isSameExecutionStage()) && !this.usageVerification.chargeRequest()) {
+                publishRead(failure?'error':'ready',failure);return false;
+              }
+              const projection = this.projection(threadId);
+              const version = projection.snapshotVersion(runId);
+              request.hasStarted = true;
+              const snapshot = await session.runSnapshot(threadId,runId,controller.signal);
+              if (!isCurrent()) return false;
+              const currentWrite = this.state.views[threadId].write;
+              const canVerifyWrite = currentWrite?.phase === 'unknown' && write?.phase === 'unknown' && currentWrite === write;
+              if (canVerifyWrite) {
+                needsFreshSnapshot = this.applyWriteSnapshot(threadId,snapshot,version);
+              } else {
+                needsFreshSnapshot = projection.applySnapshot(snapshot,version,{shouldPreserveStatus:Boolean(this.observing && this.observing.threadId === threadId)})
+                  || currentWrite?.phase === 'unknown';
+                const approval = this.state.views[threadId].approval;
+                this.updateView(threadId,{...projection.snapshot(),verified:true,queryFailure:null,
+                  approval:approval ? {...approval,verified:approval.verified && projection.run?.status === 'interrupted'} : null});
+                this.syncRun(threadId,projection.run!);
+              }
+              return true;
+            } catch(error) {
+              if(!isCurrent())return false;
+              failure=observationFailure(error);
+              const deadline=Math.max(this.snapshotDeadlines.get(deadlineKey) ?? 0,retryAfterTime(failure.retryAfter ?? null));
+              this.snapshotDeadlines.set(deadlineKey,deadline);
+              this.retryDeadlines.set(observationKey,Math.max(this.retryDeadlines.get(observationKey) ?? 0,deadline));
+              if(!failure.recoverable || retryAttempt===3 || !this.usageVerification.hasBudget()) {
+                finalFailure=failure;publishRead('error',failure);return false;
+              }
+            }
           }
-          return true;
-        });
-        let succeeded = await readOnce();
+          return false;
+        };
+        let succeeded = await readSnapshotOnce();
         // At most one fresh read for this invalidated group; never chase an active stream indefinitely.
         if (succeeded && (needsFreshSnapshot || request.shouldReadAgain) && isCurrent()) {
+          const shouldChargeSupplement=isAutomatic && !request.shouldReadAgain;
           request.shouldReadAgain = false;
-          succeeded = await readOnce();
+          if(!shouldChargeSupplement || this.projection(threadId).run?.usage_pending!==false)
+            succeeded = await readSnapshotOnce(shouldChargeSupplement);
         }
         if (isCurrent() && succeeded) this.updateView(threadId,{snapshotRead:{phase:'ready',failure:null,retry:null}});
+      } catch(error) {
+        if(isCurrent()) {finalFailure=observationFailure(error);publishRead('error',finalFailure);}
       } finally {
-        if (this.snapshotRequest === request) this.snapshotRequest = null;
+        if (this.snapshotRequest === request) {
+          this.snapshotRequest = null;
+          this.usageVerification.completeRead(request.executionStage,finalFailure);
+          this.syncUsageTarget();
+        }
       }
     });
     return request.task;
@@ -1081,6 +1162,8 @@ export class ConversationStore {
     const projection = this.projection(attempt.threadId);
     const normal = !attempt.failed && attempt.metadata && projection.run
       && (projection.run.status === 'interrupted' || terminalRun(projection.run));
+    if(attempt.hasFinished)return Boolean(normal);
+    attempt.hasFinished=true;
     const writeState = this.state.views[attempt.threadId].write;
     this.updateView(attempt.threadId, {observation:normal ? 'closed' : 'failed',
       approval:projection.approval(attempt.replay.values(), Boolean(normal && attempt.isGet)),
@@ -1088,7 +1171,10 @@ export class ConversationStore {
         && writeState.runId === projection.run?.run_id
         ? {write:{...writeState, verified:true, verifying:false}} : {}),
       ...(!normal ? {verified:false, error:this.state.views[attempt.threadId].error ?? '观察连接结束，运行结果尚未核实。请刷新数据。'} : {})});
-    if(normal && projection.run) this.notifyEventBoundary(attempt.threadId,projection.run.run_id);
+    if(normal && projection.run) {
+      this.notifyEventBoundary(attempt.threadId,projection.run.run_id);
+      void this.readSnapshot(this.session!,controller,attempt.threadId,projection.run.run_id,true);
+    }
     return Boolean(normal);
   }
 
@@ -1097,7 +1183,7 @@ export class ConversationStore {
     const projection = this.projection(threadId);
     if (isGet && targetRun) projection.beginObservation(targetRun);
     const attempt: ObservationAttempt = {controller, threadId, runId:targetRun ?? null,
-      replay:new Map(), metadata:false, failed:false, isGet};
+      replay:new Map(), metadata:false, failed:false, isGet,hasFinished:false};
     this.observing = attempt;
     this.updateView(threadId, {...projection.snapshot(),observation:'connecting'});
     return (frame: RunFrame) => {
