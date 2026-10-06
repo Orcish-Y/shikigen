@@ -20,6 +20,7 @@ from shikigen.runtime.run_events import RunEventIngestor
 from shikigen.runtime.run_execution import RunExecutionCoordinator
 from shikigen.runtime.runs import RunService, RunTransitions
 from shikigen.runtime.threads import ThreadService
+from shikigen.runtime.workspace_resources import WorkspaceResources
 from shikigen.tools import create_builtin_registry
 from shikigen.tools.mcp_loader import load_mcp_tools
 
@@ -36,6 +37,7 @@ class Runtime:
   lifecycle: ApplicationLifecycle
   threads: ThreadService
   runs: RunService
+  resources: WorkspaceResources
 
 
 def assemble_runtime(
@@ -46,6 +48,7 @@ def assemble_runtime(
   checkpointer: BaseCheckpointSaver | None = None,
   executions: ExecutionRegistry | None = None,
   ingestor: RunEventIngestor | None = None,
+  resources: WorkspaceResources | None = None,
 ) -> Runtime:
   """将调用者提供的依赖组装为 Runtime；调用者负责关闭生命周期与存储。"""
   executions = executions if executions is not None else ExecutionRegistry()
@@ -62,6 +65,9 @@ def assemble_runtime(
     chat_store=chat_store,
     executions=executions,
     lifecycle=lifecycle,
+    resources=resources
+    if resources is not None
+    else WorkspaceResources(config.workspace_root),
     threads=ThreadService(store=chat_store, lifecycle=lifecycle),
     runs=RunService(
       agent=agent,
@@ -82,6 +88,8 @@ async def open_runtime(
   app_config = config if config is not None else load_app_config()
   async with AsyncExitStack() as stack:
     app_config = stack.enter_context(own_runtime_data(app_config))
+    resources = WorkspaceResources(app_config.workspace_root)
+    app_config = app_config.model_copy(update={"workspace_root": str(resources.root)})
     store = await stack.enter_async_context(
       open_chat_store(Path(app_config.database.path).expanduser())
     )
@@ -103,6 +111,7 @@ async def open_runtime(
       checkpointer=checkpointer,
       executions=executions,
       ingestor=ingestor,
+      resources=resources,
     )
     try:
       await runtime.runs.recovery.reconcile_all()

@@ -1093,3 +1093,10 @@ textarea::placeholder {
 .approval-footer p { margin-bottom: 8px; font-size: 14px; color: var(--secondary); }
 .approval-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .approval-actions button { min-height: 44px; font-size: 14px; }
+.workspace-image { display: block; margin: 12px 0; padding: 12px 16px; border: 1px solid var(--border); border-radius: 6px; background: var(--sidebar); }
+.workspace-image > img { display: block; max-width: 100%; max-height: 320px; width: auto; height: auto; margin: 0 0 10px; object-fit: contain; }
+.workspace-image-heading { display: block; font-weight: 500; }
+.workspace-image .content-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.resource-coordinates { display: block; margin-top: 8px; font-size: 12px; }
+.resource-coordinate-body { display: block; color: var(--muted); }
+.image-viewer > img { display: block; max-width: 100%; height: auto; margin: 12px 0; }

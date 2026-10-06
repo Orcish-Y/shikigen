@@ -24,6 +24,7 @@ import type { CancelTarget } from './conversation-state';
 import { useConversations } from "./useConversations";
 import { ApprovalRecovery } from './components/ApprovalRecovery';
 import { useWorkspaceVisibility } from './useWorkspaceVisibility';
+import { WorkspaceImageProvider } from './components/WorkspaceImage';
 
 function initialCollapsed() {
   try {
@@ -91,6 +92,9 @@ function Workspace({ session, conversations }: {
   >(null);
   const [overlay, setOverlay] = useState<"commands" | "details" | ContentView | null>(null);
   const [cancelTarget, setCancelTarget] = useState<CancelTarget | null>(null);
+  useEffect(() => {
+    setOverlay(currentOverlay => currentOverlay && typeof currentOverlay === 'object' && currentOverlay.image ? null : currentOverlay);
+  }, [session, conversations.visible]);
   useEffect(() => {
     if (cancelTarget && (!conversations.visible || !conversations.validCancelTarget(cancelTarget))) setCancelTarget(null);
   }, [cancelTarget, conversations]);
@@ -179,6 +183,7 @@ function Workspace({ session, conversations }: {
 
 
   return (
+    <WorkspaceImageProvider session={session} threadId={activeId} isVisible={conversations.visible}>
     <IconContext.Provider value={{ weight: "regular", size: 18 }}>
       <div
         className={`app ${collapsed ? "is-collapsed" : ""} ${mobilePanel ? `show-${mobilePanel}` : ""}`}
@@ -457,5 +462,6 @@ function Workspace({ session, conversations }: {
         </Overlay>}
       </div>
     </IconContext.Provider>
+    </WorkspaceImageProvider>
   );
 }

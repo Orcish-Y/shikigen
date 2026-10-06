@@ -5,8 +5,11 @@ import rehypeSanitize from 'rehype-sanitize';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { codeTitle, messagePrefix, messageSchema, referenceKind, rehypeFootnoteScope, remarkMessageContent } from '../markdown-policy';
 import { ContentBlock, CopyContent } from './ContentViewer';
+import { WorkspaceImage } from './WorkspaceImage';
+import type { WorkspaceResource } from '../backend-client';
 
 export type ContentView = { title: string; text: string; preview?: boolean; generating?:boolean;
+  image?:{url:string; reference:string; resource:WorkspaceResource};
   approval?:{runId:string; identity:string; namespace?:string; description?:string | null} };
 export type MessageRole = 'assistant' | 'user' | 'tool';
 
@@ -35,6 +38,9 @@ function Reference({reference, children, image = false}: {reference:string; chil
 class RenderBoundary extends Component<{text:string; children:ReactNode}, {failed:boolean}> {
   state = {failed:false};
   static getDerivedStateFromError() { return {failed:true}; }
+  componentDidUpdate(previous:{text:string}) {
+    if (this.state.failed && previous.text !== this.props.text) this.setState({failed:false});
+  }
   render() {
     return this.state.failed ? <><p className="content-error" role="alert">正文呈现失败，原文已保留。</p>
       <div className="plain-content">{this.props.text}</div></> : this.props.children;
@@ -48,6 +54,10 @@ const MarkdownContext = createContext<{
 // Keep renderer identities stable as the conversation and overlay state update.
 // Context supplies fresh actions without replacing focused buttons or selections.
 const markdownComponents: Components = {
+  p:function MarkdownParagraph({node, children}) {
+    const {identity} = useContext(MarkdownContext)!;
+    return <p data-reading-anchor={`${identity}:paragraph:${node?.position?.start.offset ?? 0}`}>{children}</p>;
+  },
   table:({children}) => <div className="markdown-table" tabIndex={0}><table>{children}</table></div>,
   li:({node, children, className}) => <li id={typeof node?.properties.id === 'string' ? node.properties.id : undefined}
     tabIndex={node?.properties.id ? -1 : undefined} className={className}>{children}</li>,
@@ -71,11 +81,17 @@ const markdownComponents: Components = {
       }
     }}>{children}</button>;
   },
-  img:({node, alt}) => <Reference image reference={String(node?.properties.dataReference ?? '')}>{alt || '图片'}</Reference>,
+  img:function MarkdownImage({node, alt}) {
+    const {onView} = useContext(MarkdownContext)!;
+    const reference = String(node?.properties.dataReference ?? '');
+    return referenceKind(reference) === 'local'
+      ? <WorkspaceImage reference={reference} alt={alt || '图片'} onView={onView}/>
+      : <Reference image reference={reference}>{alt || '图片'}</Reference>;
+  },
 };
 
 function AgentText({text, identity, preview, generating, onView}: ContentView & {identity:string; onView:(view:ContentView) => void}) {
-  return <RenderBoundary key={text} text={text}>
+  return <RenderBoundary key={identity} text={text}>
     <MarkdownContext.Provider value={{identity, preview, generating, onView}}>
     <Markdown remarkPlugins={[remarkGfm, remarkMessageContent]}
       rehypePlugins={[[rehypeFootnoteScope, messagePrefix(identity)], [rehypeSanitize, messageSchema]]}

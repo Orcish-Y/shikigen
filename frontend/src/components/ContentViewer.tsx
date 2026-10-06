@@ -27,6 +27,15 @@ export function ContentBlock({title, text, preview, generating, onView}: Content
 }
 
 export function ContentViewer({view}: {view:ContentView}) {
+  if (view.image) return <div className="content-viewer image-viewer">
+    <p>当前磁盘内容 · 非生成时快照</p>
+    <img src={view.image.url} alt={view.title} />
+    <p>原始引用</p><pre tabIndex={0}>{view.image.reference}</pre>
+    <CopyContent text={view.image.reference} label="复制引用" />
+    <p>实际文件</p><pre tabIndex={0}>{view.image.resource.absolute_path}</pre>
+    <CopyContent text={view.image.resource.absolute_path} label="复制实际路径" />
+    <details><summary>完整文件元数据</summary><pre tabIndex={0}>{JSON.stringify(view.image.resource, null, 2)}</pre></details>
+  </div>;
   return <div className="content-viewer">
     {view.approval?.namespace !== undefined && <div className="approval-description">
       <p>来源：{view.approval.namespace || '主流程'}（namespace：{JSON.stringify(view.approval.namespace)}）</p>

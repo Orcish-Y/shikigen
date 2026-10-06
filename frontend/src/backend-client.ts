@@ -12,6 +12,13 @@ export interface Thread {
   run_status: RunStatus | null;
 }
 export interface ThreadPage { data: Thread[]; next_cursor: string | null }
+export interface WorkspaceIdentity {workspace_id:string; root:string}
+export interface WorkspaceResource {
+  workspace_id:string; resource_id:string; absolute_path:string; relative_path:string;
+  name:string; kind:'file'; mime_type:string | null; size:number; modified_at:string;
+  version:string; can_preview:boolean;
+}
+export const imageMimeTypes = new Set(['image/png','image/jpeg','image/gif','image/webp','image/bmp','image/svg+xml']);
 export type RunStatus = "running" | "completed" | "cancelled" | "interrupted" | "error";
 export interface Run {
   thread_id: string;
@@ -140,6 +147,39 @@ export class BackendSession {
     const data = await request.response.json();
     request.signal.throwIfAborted();
     return data as T;
+  }
+
+  async getWorkspace(signal?:AbortSignal):Promise<WorkspaceIdentity> {
+    const {data:workspace} = await this.json<{data:WorkspaceIdentity}>('/api/workspace', {cache:'no-store'}, signal);
+    if (!workspace || typeof workspace.workspace_id !== 'string' || !workspace.workspace_id
+      || typeof workspace.root !== 'string' || !workspace.root) throw new Error('工作目录身份无效');
+    return workspace;
+  }
+
+  async resolveResource(reference:string, signal?:AbortSignal):Promise<WorkspaceResource> {
+    const query = new URLSearchParams({path:reference});
+    const {data:resource} = await this.json<{data:WorkspaceResource}>(`/api/workspace/resources/resolve?${query}`, {cache:'no-store'}, signal);
+    if (!resource || ['workspace_id','resource_id','absolute_path','relative_path','name','version'].some(field =>
+      typeof resource[field as keyof WorkspaceResource] !== 'string' || !resource[field as keyof WorkspaceResource])
+      || resource.kind !== 'file' || !Number.isSafeInteger(resource.size) || resource.size < 0
+      || typeof resource.modified_at !== 'string' || !Number.isFinite(Date.parse(resource.modified_at))
+      || typeof resource.can_preview !== 'boolean' || !(resource.mime_type === null || typeof resource.mime_type === 'string')) {
+      throw new Error('资源身份或文件元数据无效');
+    }
+    return resource;
+  }
+
+  async readResourceImage(resourceId:string, signal?:AbortSignal):Promise<Blob> {
+    const request = await this.request(`/api/workspace/resources/${encodeURIComponent(resourceId)}/image`, {cache:'no-store'}, signal);
+    const mime = request.response.headers.get('content-type')?.split(';')[0].trim().toLowerCase();
+    if (!mime || !imageMimeTypes.has(mime)) {
+      await request.response.body?.cancel().catch(() => {});
+      throw new Error('图片响应格式不支持');
+    }
+    const blob = await request.response.blob();
+    request.signal.throwIfAborted();
+    if (blob.size > 20 * 1024 * 1024) throw new Error('图片超过 20MiB，无法自动预览');
+    return blob;
   }
 
   async threads(limit: number, signal?: AbortSignal, cursor?: string | null): Promise<ThreadPage> {
