@@ -3,20 +3,22 @@ import { X } from "@phosphor-icons/react";
 
 export function Overlay({
   title,
-  drawer = false,
+  variant = 'dialog',
+  fallbackFocus = '.mobile-navigation, .history-toggle, .navigation-heading button',
   onClose,
   children,
   initialFocus,
 }: {
   title: string;
-  drawer?: boolean;
+  variant?: 'dialog' | 'drawer' | 'sidebar';
+  fallbackFocus?: string;
   onClose: () => void;
   children: ReactNode;
   initialFocus?:string;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useLayoutEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
+    const previousFocus = document.activeElement as HTMLElement | null;
     const dialog = ref.current!;
     dialog.showModal();
     if (initialFocus) dialog.querySelector<HTMLElement>(initialFocus)?.focus();
@@ -26,19 +28,22 @@ export function Overlay({
       // React commit. Restore after DOM mutations and do not steal a new modal's focus.
       queueMicrotask(() => {
         if (document.querySelector('dialog[open]')) return;
-        const isPreviousValid = previous?.isConnected && previous !== document.body
-          && previous !== document.documentElement && !previous.closest('[inert]')
-          && previous.getClientRects().length > 0;
-        if (isPreviousValid) previous.focus();
-        if (!isPreviousValid || document.activeElement !== previous)
-          document.querySelector<HTMLElement>('.chat-workspace, .backend-screen')?.focus();
+        const isPreviousValid = previousFocus?.isConnected && previousFocus !== document.body
+          && previousFocus !== document.documentElement && !previousFocus.closest('[inert]')
+          && previousFocus.getClientRects().length > 0;
+        if (isPreviousValid) previousFocus.focus();
+        if (!isPreviousValid || document.activeElement !== previousFocus) {
+          const fallback = fallbackFocus && [...document.querySelectorAll<HTMLElement>(fallbackFocus)]
+            .find(element => element.getClientRects().length > 0 && !element.matches(':disabled'));
+          (fallback || document.querySelector<HTMLElement>('.chat-workspace, .backend-screen'))?.focus();
+        }
       });
     };
   }, []);
   return (
     <dialog
       ref={ref}
-      className={drawer ? "overlay drawer" : "overlay command-dialog"}
+      className={`overlay ${variant === 'sidebar' ? 'sidebar-dialog' : variant === 'drawer' ? 'drawer' : 'command-dialog'}`}
       aria-labelledby="overlay-title"
       onCancel={event => { event.preventDefault(); onClose(); }}
       onKeyDown={event => {

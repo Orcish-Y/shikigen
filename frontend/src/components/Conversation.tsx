@@ -1,4 +1,4 @@
-import { useImperativeHandle, useRef, useState, type Ref } from "react";
+import { useImperativeHandle, useLayoutEffect, useRef, useState, type Ref } from "react";
 import { composerEnter } from '../composer-keyboard';
 import type { RunStatus } from '../backend-client';
 import {
@@ -215,15 +215,37 @@ export function Composer({
   writePending?:boolean;
 }) {
   const composition = useRef({active:false, endedAt:-Infinity});
+  const textarea = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const input = textarea.current;
+    if (!input) return;
+    function resizeDraft() {
+      input!.style.height = '48px';
+      const height = Math.min(180, Math.max(48, input!.scrollHeight));
+      input!.style.height = `${height}px`;
+      input!.style.overflowY = input!.scrollHeight > height ? 'auto' : 'hidden';
+    }
+    resizeDraft();
+    // Width changes can change wrapping without changing the draft itself.
+    let previousWidth = input.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (input.clientWidth === previousWidth) return;
+      previousWidth = input.clientWidth;
+      resizeDraft();
+    });
+    observer.observe(input);
+    return () => observer.disconnect();
+  }, [draft]);
   return (
     <div className="composer-area">
       <div className="composer">
         <textarea
           id="message-draft"
+          ref={textarea}
           aria-label="消息草稿"
           placeholder={hasConversation ? "向 shikigen 发送指令或提问…" : "请先新建或选择会话"}
           disabled={!hasConversation}
-          rows={3}
+          rows={2}
           value={draft}
           onChange={(event) => onChange(event.target.value)}
           onCompositionStart={() => { composition.current.active = true; }}

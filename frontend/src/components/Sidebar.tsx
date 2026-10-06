@@ -13,7 +13,7 @@ import {
   DotsThree,
 } from "@phosphor-icons/react";
 import type { Session } from "../data/demo";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { ListFailure } from "../conversation-state";
 
 interface HistoryPagination {
@@ -58,17 +58,17 @@ function ListError({ failure, onRetry, onReload }: {
 export function Navigation({
   backendReady,
   observationLabel,
-  collapsed,
   onToggle,
   onCommands,
+  isCollapsed,
 }: {
   backendReady: boolean;
   observationLabel: string;
-  collapsed: boolean;
+  isCollapsed: boolean;
   onToggle: () => void;
   onCommands: () => void;
 }) {
-  const items = [
+  const destinations = [
     { icon: ChatCircle, label: "会话与对话" },
     { icon: Wrench, label: "工具与技能编排" },
     { icon: Database, label: "知识库与向量空间" },
@@ -78,24 +78,25 @@ export function Navigation({
   return (
     <aside className="navigation" aria-label="主导航">
       <div className="navigation-heading">
-        <span className="nav-label">工作空间</span>
+        <span className="nav-label navigation-brand"><img src="/logo.svg" alt="" />shikigen</span>
         <button
           className="icon-button"
           onClick={onToggle}
-          aria-label={collapsed ? "展开主导航" : "收起主导航"}
-          aria-expanded={!collapsed}
+          aria-label={isCollapsed ? "展开主导航" : "收起主导航"}
+          aria-expanded={!isCollapsed}
         >
           <SidebarSimple size={19} />
         </button>
       </div>
-      <nav>
-        {items.map(({ icon: Icon, label }, index) => (
+      <nav aria-label="核心工作台">
+        <p className="nav-label navigation-group">核心工作台</p>
+        {destinations.map(({ icon: Icon, label }, index) => (
           <button
             key={label}
             className={`nav-item ${index === 0 ? "active" : ""}`}
             disabled={index !== 0}
             title={index ? `${label} · 暂未支持` : label}
-            aria-label={label}
+            aria-label={index ? `${label} · 暂未支持` : label}
             aria-current={index === 0 ? "page" : undefined}
           >
             <Icon size={19} />
@@ -109,11 +110,11 @@ export function Navigation({
           <span className="status-dot" />
           <span className="nav-label">{backendReady ? "后端已就绪" : "后端尚未连接"}<br />{observationLabel}</span>
         </div>
-        <button className="nav-item" onClick={onCommands} title="命令面板">
+        <button className="nav-item" onClick={onCommands} title="命令面板" aria-label="快捷命令面板">
           <Terminal size={19} />
           <span className="nav-label">快捷命令面板</span>
         </button>
-        <button className="nav-item" disabled title="系统设置 · 暂未支持">
+        <button className="nav-item" disabled title="系统设置 · 暂未支持" aria-label="系统设置 · 暂未支持">
           <Gear size={19} />
           <span className="nav-label">系统设置</span>
         </button>
@@ -142,6 +143,8 @@ export function History({
   pagination,
   usageSummary,
   onInspect,
+  readingPosition,
+  isVisible = true,
 }: {
   sessions: Session[];
   activeId: string;
@@ -153,12 +156,30 @@ export function History({
   pagination?: HistoryPagination;
   usageSummary?:ReactNode;
   onInspect:(id:string) => void;
+  readingPosition?: RefObject<number>;
+  isVisible?: boolean;
 }) {
   const list = useRef<HTMLElement>(null);
   const wheelGesture = useRef(false);
   const wheelTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchY = useRef<number | null>(null);
   const scrollTop = useRef(0);
+  const isRestoringPosition = useRef(false);
+  useLayoutEffect(() => {
+    if (!isVisible || !list.current || !readingPosition) return;
+    const savedTop = readingPosition.current;
+    isRestoringPosition.current = true;
+    const restorePosition = () => {
+      if (list.current) {
+        list.current.scrollTop = savedTop;
+        scrollTop.current = list.current.scrollTop;
+      }
+      isRestoringPosition.current = false;
+    };
+    // Child layout effects run before the enclosing dialog's showModal().
+    const frame = list.current.clientHeight > 0 ? (restorePosition(), null) : requestAnimationFrame(restorePosition);
+    return () => { if (frame !== null) cancelAnimationFrame(frame); isRestoringPosition.current = false; };
+  }, [isVisible, readingPosition]);
   const hasFilter = query.length > 0;
   const { onMore, loadingMore, refreshing, loaded, hasMore, listError, pageError } = pagination ?? {};
   const retrySeconds = useRetrySeconds(Math.max(listError?.retryAt ?? 0, pageError?.retryAt ?? 0));
@@ -170,7 +191,7 @@ export function History({
   const loadNext = () => { if (canLoad) void onMore?.(); };
   useEffect(() => {
     const element = list.current;
-    if (!element || hasFilter || !canLoad) return;
+    if (!element || !isVisible || hasFilter || !canLoad) return;
     const fill = () => {
       if (element.clientHeight > 0 && element.scrollHeight <= element.clientHeight + 2) void onMore?.();
     };
@@ -178,7 +199,7 @@ export function History({
     const observer = new ResizeObserver(fill);
     observer.observe(element);
     return () => observer.disconnect();
-  }, [hasFilter, canLoad, sessions.length, onMore]);
+  }, [hasFilter, canLoad, sessions.length, onMore, isVisible]);
   useEffect(() => () => { if (wheelTimer.current) clearTimeout(wheelTimer.current); }, []);
   const filtered = sessions.filter((session) =>
     session.title.toLowerCase().includes(query.toLowerCase()),
@@ -213,9 +234,11 @@ export function History({
       <nav className="session-list" aria-label="会话列表内容" tabIndex={0} ref={list}
         aria-busy={Boolean(refreshing || loadingMore)}
         onScroll={() => {
+          if (!isVisible || isRestoringPosition.current || !list.current?.clientHeight) return;
           const next = list.current?.scrollTop ?? 0;
           if (next > scrollTop.current && atBottom()) loadNext();
           scrollTop.current = next;
+          if (readingPosition) readingPosition.current = next;
         }}
         onWheel={event => {
           if (wheelTimer.current) clearTimeout(wheelTimer.current);

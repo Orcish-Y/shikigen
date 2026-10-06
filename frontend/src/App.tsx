@@ -1,7 +1,7 @@
 import { useBackendState } from "./useBackendState";
 import { TrayNotice } from "./TrayNotice";
 import { BackendLogs } from "./BackendLogs";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   IconContext,
   SidebarSimple,
@@ -29,16 +29,9 @@ import { FileOpenConfirmation, WorkspaceFileOpenProvider, useWorkspaceFileOpenin
 import { downloadConversationExport } from './conversation-export';
 import { RunDetails, RunUsage } from './components/RunDetails';
 import { ConversationIdentity } from './components/ConversationIdentity';
-
-function initialCollapsed() {
-  try {
-    const value = localStorage.getItem("shikigen.navigation-collapsed");
-    if (value !== null) return value === "true";
-  } catch {
-    /* Storage may be disabled in the host. */
-  }
-  return window.innerWidth < 1440;
-}
+import { useNavigationLayout } from './useNavigationLayout';
+import type { SidebarView } from './navigation-layout';
+import { SidebarPanel } from './components/SidebarPanel';
 
 export default function App() {
   const backend = useBackendState();
@@ -95,15 +88,24 @@ function Workspace({ session, conversations }: {
 }) {
   const backendReady = Boolean(session);
   const { sessions, active, activeId } = conversations;
-  const [collapsed, setCollapsed] = useState(initialCollapsed);
   const [query, setQuery] = useState("");
-  const [mobilePanel, setMobilePanel] = useState<
-    "navigation" | "history" | null
-  >(null);
+  const [mobilePanel, setMobilePanel] = useState<SidebarView | null>(null);
+  const layout = useNavigationLayout(() => setMobilePanel(null));
+  const historyReadingPosition = useRef(0);
+  const workspace = useRef<HTMLDivElement>(null);
   const [overlay, setOverlay] = useState<"commands" | "details" | {conversationId:string} | ContentView | null>(null);
   const [cancelTarget, setCancelTarget] = useState<CancelTarget | null>(null);
   const [exportNotice, setExportNotice] = useState<{message:string; failed:boolean} | null>(null);
   const fileOpening = useWorkspaceFileOpening(session, activeId, conversations.visible);
+  useLayoutEffect(() => {
+    const workspaceElement = workspace.current;
+    if (!workspaceElement) return;
+    const measureWorkspace = () => workspaceElement.parentElement?.style.setProperty('--workspace-top', `${workspaceElement.getBoundingClientRect().top}px`);
+    measureWorkspace();
+    const observer = new ResizeObserver(measureWorkspace);
+    observer.observe(workspaceElement);
+    return () => observer.disconnect();
+  }, []);
   function closeFileOpen() {fileOpening.controller?.closeFileOpen();}
   function requestFileOpen(reference:string, messageIdentity:string) {
     if (!session || session.signal.aborted || !conversations.visible || !fileOpening.controller) return;
@@ -133,7 +135,7 @@ function Workspace({ session, conversations }: {
   function requestCancel() {
     const target = conversations.cancelTarget();
     if (!target) return;
-    setOverlay(null); setMobilePanel(null); setCancelTarget(target);
+    closeFileOpen(); setOverlay(null); setMobilePanel(null); setCancelTarget(target);
   }
   const previousConversation = useRef(activeId);
   const previousRun = useRef(conversations.run?.run_id);
@@ -152,7 +154,7 @@ function Workspace({ session, conversations }: {
   }, [activeId, conversations.run?.run_id]);
   function openRunDetails() {
     if (!conversations.detailsAvailable) return;
-    setCancelTarget(null); setMobilePanel(null); setOverlay('details');
+    closeFileOpen(); setCancelTarget(null); setMobilePanel(null); setOverlay('details');
     void conversations.refreshRunDetails();
   }
   function inspectConversation(id:string) {
@@ -165,7 +167,23 @@ function Workspace({ session, conversations }: {
   const shortcut = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl";
 
   function toggleNavigation() {
-    setCollapsed((value) => !value);
+    if (layout.isDesktop) layout.toggleDesktopNavigation();
+    else openSidebar('navigation');
+  }
+  function openSidebar(view: SidebarView) {
+    setOverlay(null); setCancelTarget(null); closeFileOpen();
+    if (!layout.isDesktop) setMobilePanel(layout.breakpoint === 'phone' ? 'history' : view);
+  }
+  function openCommands() {
+    setMobilePanel(null); setCancelTarget(null); closeFileOpen(); setOverlay('commands');
+  }
+  function openContent(view: ContentView) {
+    setMobilePanel(null); setCancelTarget(null); closeFileOpen(); setOverlay(view);
+  }
+  function findConversation() {
+    setOverlay(null);
+    if (layout.isDesktop) queueMicrotask(() => document.querySelector<HTMLInputElement>('.search input')?.focus());
+    else openSidebar('history');
   }
   function createSession() {
     timeline.current?.rememberReadingPosition();
@@ -186,13 +204,6 @@ function Workspace({ session, conversations }: {
     }
   }
   useEffect(() => {
-    try {
-      localStorage.setItem("shikigen.navigation-collapsed", String(collapsed));
-    } catch {
-      /* Keep the in-memory preference. */
-    }
-  }, [collapsed]);
-  useEffect(() => {
     function keydown(event: KeyboardEvent) {
       if (
         (event.metaKey || event.ctrlKey) &&
@@ -207,7 +218,7 @@ function Workspace({ session, conversations }: {
         }
         if (event.key.toLowerCase() === "k") {
           event.preventDefault();
-          setOverlay((value) => (value === "commands" ? null : "commands"));
+          openCommands();
         }
         if (event.key.toLowerCase() === "n") {
           event.preventDefault();
@@ -220,13 +231,27 @@ function Workspace({ session, conversations }: {
     return () => window.removeEventListener("keydown", keydown);
   });
 
+  const navigation = <Navigation backendReady={backendReady}
+    observationLabel={conversations.observationLabel}
+    isCollapsed={layout.isCollapsed && mobilePanel !== 'navigation'}
+    onToggle={mobilePanel ? () => setMobilePanel(null) : toggleNavigation} onCommands={openCommands}/>;
+  const history = <History sessions={sessions} activeId={activeId} query={query} onQuery={setQuery}
+    readingPosition={historyReadingPosition} isVisible={layout.isDesktop || mobilePanel === 'history'}
+    onSelect={(id) => {
+      timeline.current?.rememberReadingPosition(); conversations.select(id); setMobilePanel(null);
+    }} onCreate={createSession} creating={conversations.creating || conversations.loading}
+    pagination={conversations.pagination} onInspect={inspectConversation}
+    usageSummary={<RunUsage isCompact run={conversations.run} snapshotRead={conversations.observationView.snapshotRead}
+      verification={conversations.observationView.usageVerification} onContinue={conversations.continueUsageVerification} onReload={conversations.reload}
+      availability={conversations.detailsAvailability} onDetails={openRunDetails} disabled={!conversations.detailsAvailable}/>}/>;
 
   return (
     <WorkspaceFileOpenProvider onRequest={requestFileOpen}>
     <WorkspaceImageProvider session={session} threadId={activeId} isVisible={conversations.visible}>
     <IconContext.Provider value={{ weight: "regular", size: 18 }}>
       <div
-        className={`app ${collapsed ? "is-collapsed" : ""} ${mobilePanel ? `show-${mobilePanel}` : ""}`}
+        className={`app ${layout.isCollapsed ? "is-collapsed" : ""}`}
+        data-navigation-breakpoint={layout.breakpoint}
       >
         <header className="app-bar">
           <div className="brand">
@@ -240,7 +265,7 @@ function Workspace({ session, conversations }: {
           </span>
           <button
             className="text-button"
-            onClick={() => setOverlay("commands")}
+            onClick={openCommands}
             aria-label="打开命令面板"
           >
             <Terminal size={15} />
@@ -249,52 +274,25 @@ function Workspace({ session, conversations }: {
           </button>
         </header>
         <TrayNotice />
-        <div className="workspace">
-          {mobilePanel && (
-            <button
-              className="panel-backdrop"
-              aria-label="关闭侧栏"
-              onClick={() => setMobilePanel(null)}
-            />
-          )}
-          <Navigation
-            backendReady={backendReady}
-            observationLabel={conversations.observationLabel}
-            collapsed={collapsed}
-            onToggle={toggleNavigation}
-            onCommands={() => setOverlay("commands")}
-          />
-          <History
-            sessions={sessions}
-            activeId={activeId}
-            query={query}
-            onQuery={setQuery}
-            onSelect={(id) => {
-              timeline.current?.rememberReadingPosition();
-              conversations.select(id);
-              setMobilePanel(null);
-            }}
-            onCreate={createSession}
-            creating={conversations.creating || conversations.loading}
-            pagination={conversations.pagination}
-            onInspect={inspectConversation}
-            usageSummary={<RunUsage isCompact run={conversations.run} snapshotRead={conversations.observationView.snapshotRead}
-              verification={conversations.observationView.usageVerification} onContinue={conversations.continueUsageVerification} onReload={conversations.reload}
-              availability={conversations.detailsAvailability} onDetails={openRunDetails} disabled={!conversations.detailsAvailable}/>}
-          />
+        <div className="workspace" ref={workspace}>
+          {layout.isDesktop && navigation}
+          {layout.breakpoint === 'tablet' && <Navigation backendReady={backendReady}
+            observationLabel={conversations.observationLabel} isCollapsed
+            onToggle={() => openSidebar('navigation')} onCommands={openCommands}/>}
+          {layout.isDesktop && history}
           <main className="chat-workspace" tabIndex={-1}>
             <div className="chat-toolbar">
               <button
                 className="icon-button mobile-navigation"
-                aria-label="打开主导航"
-                onClick={() => setMobilePanel("navigation")}
+                aria-label="打开菜单"
+                onClick={() => openSidebar("history")}
               >
                 <SidebarSimple />
               </button>
               <button
                 className="icon-button history-toggle"
-                aria-label="打开会话历史"
-                onClick={() => setMobilePanel("history")}
+                aria-label="打开会话列表"
+                onClick={() => openSidebar("history")}
               >
                 <ClockCounterClockwise />
               </button>
@@ -327,9 +325,10 @@ function Workspace({ session, conversations }: {
                 </button>
               </div>
             </div>
+            <div className="workspace-notices" aria-label="会话提示">
             {conversations.error && <p className="business-notice" role="alert">{conversations.error}</p>}
             {exportNotice && <p className="business-notice" aria-label="会话导出" role={exportNotice.failed ? 'alert' : 'status'}>{exportNotice.message}</p>}
-            <RunFailure run={conversations.run} onView={setOverlay} />
+            <RunFailure run={conversations.run} onView={openContent} />
             {session && <ObservationStatus view={conversations.observationView} onReconnect={conversations.reconnect} onQuery={conversations.queryStatus} />}
             {conversations.notice && <p className="business-notice" role="status">{conversations.notice}</p>}
             {conversations.write && <section className="business-notice" aria-label={conversations.write.kind === 'approval' ? '审批结果核实' : '取消结果核实'}>
@@ -363,7 +362,7 @@ function Workspace({ session, conversations }: {
             {conversations.verifying && <p className="business-notice" role="status">正在核实当前运行状态…</p>}
             {conversations.storageIssue && <p className="business-notice" role="alert">{conversations.storageIssue}</p>}
             {conversations.titleStorageIssue && <p className="business-notice" role="alert">{conversations.titleStorageIssue}</p>}
-            <ApprovalRecovery records={conversations.approvalRecoveryRecords} onView={setOverlay}/>
+            <ApprovalRecovery records={conversations.approvalRecoveryRecords} onView={openContent}/>
             {conversations.missing && <section className="business-notice" aria-label="会话文字保留">
               <p>会话不存在；草稿和提交原文仍保留，可以复制到新会话后手动发送。</p>
               <DraftCopy text={conversations.draft || conversations.submission?.text || ''}
@@ -381,6 +380,7 @@ function Workspace({ session, conversations }: {
                 ? conversations.protocolIssue.raw : JSON.stringify(conversations.protocolIssue.raw, null, 2)}</pre>
             </details>}
             {session && <button className="text-button" onClick={conversations.reload} disabled={conversations.sending || conversations.loading}>刷新数据</button>}
+            </div>
             <Conversation
               ref={timeline}
               readingPositions={conversations.readingPositions}
@@ -405,7 +405,7 @@ function Workspace({ session, conversations }: {
               onCreate={createSession}
               readState={activeId ? conversations.historyState : conversations.pagination?.listError ? 'error'
                 : conversations.pagination && (!conversations.pagination.loaded || conversations.pagination.refreshing) ? 'loading' : 'ready'}
-              onView={view => { setCancelTarget(null); setMobilePanel(null); setOverlay(view); }}
+              onView={openContent}
               onSuggestion={(text) => {
                 if (document.querySelector('dialog[open]') || !conversations.appendExample(activeId, text)) return;
                 // Focus only as part of this click; delayed reads never schedule focus.
@@ -422,7 +422,7 @@ function Workspace({ session, conversations }: {
               draft={conversations.draft}
               hasConversation={Boolean(activeId)}
               onChange={updateDraft}
-              onCommands={() => setOverlay("commands")}
+              onCommands={openCommands}
               shortcut={shortcut}
               runStatus={conversations.run?.status}
               storageIssue={conversations.storageIssue}
@@ -436,6 +436,9 @@ function Workspace({ session, conversations }: {
             />
           </main>
         </div>
+        {fileOpening.view.phase === 'idle' && !cancelTarget && !overlay && !layout.isDesktop && mobilePanel &&
+          <SidebarPanel view={mobilePanel} onSwitch={setMobilePanel} onClose={() => setMobilePanel(null)}
+            navigation={navigation} history={history}/>}
         {fileOpening.view.phase !== 'idle' && <Overlay title="打开本地文件？" initialFocus="#cancel-file-open" onClose={closeFileOpen}>
           <FileOpenConfirmation view={fileOpening.view} onClose={closeFileOpen}
             onConfirm={() => {
@@ -470,16 +473,10 @@ function Workspace({ session, conversations }: {
                 }}
               >
                 <SidebarSimple />
-                {collapsed ? "展开" : "收起"}主导航
+                {layout.isCollapsed ? "展开" : "收起"}主导航
               </button>
               <button
-                onClick={() => {
-                  setOverlay(null);
-                  setMobilePanel("history");
-                  document
-                    .querySelector<HTMLInputElement>(".search input")
-                    ?.focus();
-                }}
+                onClick={findConversation}
               >
                 <ClockCounterClockwise />
                 查找会话
@@ -492,7 +489,7 @@ function Workspace({ session, conversations }: {
           </Overlay>
         )}
         {fileOpening.view.phase === 'idle' && overlay === "details" && (
-          <Overlay title="运行详情" drawer onClose={() => setOverlay(null)}>
+          <Overlay title="运行详情" variant="drawer" onClose={() => setOverlay(null)}>
             <RunDetails key={`${activeId}:${conversations.run?.run_id}`} threadId={activeId} title={active.title}
               onContinueUsage={conversations.continueUsageVerification}
               view={conversations.observationView} availability={conversations.detailsAvailability}
@@ -503,10 +500,10 @@ function Workspace({ session, conversations }: {
           </Overlay>
         )}
         {fileOpening.view.phase === 'idle' && overlay && typeof overlay === 'object' && 'conversationId' in overlay && <Overlay
-          title="会话标题与时间" drawer onClose={()=>setOverlay(null)}>
+          title="会话标题与时间" variant="drawer" onClose={()=>setOverlay(null)}>
           <ConversationIdentity session={sessions.find(conversation=>conversation.id===overlay.conversationId) ?? active}/>
         </Overlay>}
-        {fileOpening.view.phase === 'idle' && overlay && typeof overlay === 'object' && 'title' in overlay && <Overlay title={overlay.title} drawer onClose={() => setOverlay(null)}>
+        {fileOpening.view.phase === 'idle' && overlay && typeof overlay === 'object' && 'title' in overlay && <Overlay title={overlay.title} variant="drawer" onClose={() => setOverlay(null)}>
           {overlay.approval && <p className="business-notice">只读参数 · {conversations.approvalCards.some(record=>
             record.identity === overlay.approval!.identity && record.resolution) || ['completed','cancelled','error'].includes(
               conversations.observationView.runStatuses[overlay.approval.runId] ?? '')
