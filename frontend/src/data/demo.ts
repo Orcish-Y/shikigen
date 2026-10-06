@@ -2,6 +2,7 @@ import type { MessageContent } from '../backend-client';
 import type { RunStatus } from '../backend-client';
 import type { ConversationMessage } from '../run-projection';
 import { toolDemoMessages } from './tool-demo';
+import type { ConversationDateGroup, ConversationTime } from '../conversation-time';
 
 export interface Message {
   preview?: boolean;
@@ -20,7 +21,8 @@ export interface Session {
   status?: string;
   id: string;
   title: string;
-  group: "今天" | "昨天" | "历史";
+  group: ConversationDateGroup;
+  time?: ConversationTime;
   summary: string;
   messages: Message[];
 }

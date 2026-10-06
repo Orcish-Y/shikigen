@@ -10,6 +10,7 @@ import {
   User,
   Plus,
   MagnifyingGlass,
+  DotsThree,
 } from "@phosphor-icons/react";
 import type { Session } from "../data/demo";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -140,6 +141,7 @@ export function History({
   creating = false,
   pagination,
   usageSummary,
+  onInspect,
 }: {
   sessions: Session[];
   activeId: string;
@@ -150,6 +152,7 @@ export function History({
   creating?: boolean;
   pagination?: HistoryPagination;
   usageSummary?:ReactNode;
+  onInspect:(id:string) => void;
 }) {
   const list = useRef<HTMLElement>(null);
   const wheelGesture = useRef(false);
@@ -242,7 +245,7 @@ export function History({
           {Array.from({ length: 6 }, (_, index) => <div className="session-skeleton" key={index}><i /><i /></div>)}
         </div>}
         {refreshing && sessions.length > 0 && <p className="list-feedback" role="status">正在刷新会话列表…</p>}
-        {(["今天", "昨天", "历史"] as const).map((group) => {
+        {(["今天", "昨天", "更早", "日期待确认"] as const).map((group) => {
           const entries = filtered.filter((session) => session.group === group);
           return (
             entries.length > 0 && (
@@ -251,9 +254,10 @@ export function History({
                   {group}
                 </p>
                 {entries.map((session) => (
+                  <div className="session-entry" key={session.id}>
                   <button
                     className={`session ${activeId === session.id ? "selected" : ""}`}
-                    key={session.id}
+                    data-conversation-id={session.id}
                     title={`${session.title}\n会话 ID：${session.id}`}
                     onClick={() => onSelect(session.id)}
                     aria-current={activeId === session.id ? "true" : undefined}
@@ -263,12 +267,15 @@ export function History({
                       {session.status && <span className="session-status">{session.status}</span>}
                     </span>
                   </button>
+                  <button className="icon-button session-inspect" aria-label={`查看会话标题与时间：${session.title}`}
+                    title="查看完整标题与时间" onClick={() => onInspect(session.id)}><DotsThree size={17}/></button>
+                  </div>
                 ))}
               </div>
             )
           );
         })}
-        {filtered.length === 0 && !refreshing && !listError && (
+        {filtered.length === 0 && (loaded || !pagination) && !refreshing && !listError && (
           <div className="no-results">
             <p>{hasFilter ? "已加载会话中没有匹配结果" : "还没有会话"}</p>
             {hasFilter && <>
@@ -277,6 +284,7 @@ export function History({
             </button>
             {hasMore && <p>向下滚动或按 End 可继续读取更早会话</p>}
             </>}
+            {!hasFilter && <button className="secondary-button" onClick={onCreate} disabled={creating}><Plus size={14}/>新建会话</button>}
           </div>
         )}
         {loadingMore && <p className="list-feedback" role="status">正在加载更早会话…</p>}

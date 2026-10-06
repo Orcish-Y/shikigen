@@ -7,6 +7,7 @@ import { collectApprovalRecords, createApprovalIdentity, buildApprovalResponses,
 import { ApprovalDrafts, type ApprovalBackup } from './approval-drafts.ts';
 import { RunEventHistoryReader, emptyEventRead, type EventRead } from './run-event-history.ts';
 import { UsageVerificationCoordinator, emptyUsageVerification, createUsageTargetKey, type UsageVerification } from './usage-verification.ts';
+import { ConversationTitles } from './conversation-titles.ts';
 export type { ConversationMessage } from './run-projection.ts';
 
 const THREAD_PAGE_SIZE = 20;
@@ -77,6 +78,8 @@ export interface ConversationState {
   storageIssue: string | null;
   submissions: Record<string, MessageSubmission>;
   approvalBackups:ApprovalBackup[];
+  temporaryTitles:Record<string, string>;
+  titleStorageIssue:string | null;
 }
 export const emptyConversation: ConversationView = {
   messages: [], run: null, runStatuses:{}, history: "idle", verified: false, error: null, sending: false, acceptedSendId:null, events:{}, approval:null, approvalDraft:null, acceptedApproval:null, observation:'idle', retry:null, observationFailure:null, querying:false, queryFailure:null, sendFailure:null, protocolIssue:null, missing:false, write:null, savedContent:'idle', savedContentFailure:null, snapshotRead:emptySnapshotRead, eventRead:emptyEventRead, usageVerification:emptyUsageVerification,
@@ -93,7 +96,7 @@ export class ConversationStore {
   private state: ConversationState = {
     threads: [], activeId: "", views: {}, drafts: {}, listing: false,
     listLoaded: false, loadingMore: false, nextCursor: null, pageError: null,
-    creating: false, listError: null, notice: null, storageIssue:null, submissions:{}, approvalBackups:[],
+    creating: false, listError: null, notice: null, storageIssue:null, submissions:{}, approvalBackups:[], temporaryTitles:{}, titleStorageIssue:null,
   };
   private listeners = new Set<() => void>();
   private session: BackendSession | null = null;
@@ -117,6 +120,7 @@ export class ConversationStore {
   private projections = new Map<string, RunProjection>();
   private inputs: MessageDrafts;
   private approvals:ApprovalDrafts;
+  private titles:ConversationTitles;
   private writeRequest:AbortController | null = null;
   private savedRequests = new Map<string, AbortController>();
   private savedReads = new Map<string, 'reading' | 'ready' | 'error'>();
@@ -133,6 +137,7 @@ export class ConversationStore {
   private eventHistory=new RunEventHistoryReader((target,events)=>{
     const projection=this.projection(target.threadId);
     projection.mergeEvents(target.runId,events);
+    this.titles.observeMessages(target.threadId, projection.snapshot().messages);
     const previousApproval=this.state.views[target.threadId]?.approval;
     const approval=projection.approval(projection.snapshot().events[target.runId] ?? [],false);
     this.updateView(target.threadId,{...projection.snapshot(),approval:approval
@@ -145,13 +150,14 @@ export class ConversationStore {
   constructor(options: {storage?: DraftStorage | null} = {}) {
     this.inputs = new MessageDrafts(options.storage);
     this.approvals = new ApprovalDrafts(options.storage);
+    this.titles = new ConversationTitles(options.storage);
     this.state = {...this.state, activeId:this.inputs.selected, ...this.inputState()};
   }
 
   private inputState() {
     return {drafts:Object.fromEntries(Object.entries(this.inputs.drafts).map(([id, draft]) => [id, draft.text])),
-      storageIssue:this.approvals.storageIssue ?? this.inputs.storageIssue, submissions:this.inputs.submissions,
-      approvalBackups:this.approvals.records};
+      storageIssue:this.approvals.storageIssue ?? this.inputs.storageIssue, titleStorageIssue:this.titles.storageIssue,
+      submissions:this.inputs.submissions, approvalBackups:this.approvals.records, temporaryTitles:this.titles.getSnapshot()};
   }
 
   private publishInputs() { this.publishState(this.inputState()); }
@@ -836,6 +842,7 @@ export class ConversationStore {
       if (!this.live(session, controller) || this.state.views[threadId].run?.run_id !== runId) return;
       const projection = this.projection(threadId);
       projection.mergeMessages(records);
+      this.titles.observeMessages(threadId, projection.snapshot().messages);
       const unconfirmed = projection.snapshot().messages.some(message => message.run_id === runId && message.preview);
       this.updateView(threadId, projection.snapshot());
       if (unconfirmed) throw new RunProtocolError('已保存消息尚未覆盖全部预览，请手动再次读取', records);
@@ -860,6 +867,7 @@ export class ConversationStore {
       if (!this.live(session, controller)) return;
       const projection = this.projection(threadId);
       projection.mergeMessages(messages);
+      this.titles.reconcileHistory(threadId, messages);
       this.updateView(threadId, {...projection.snapshot(), history:'ready'});
     } catch (error) {
       if (this.live(session, controller)) this.updateView(threadId, {error:`读取已保存消息失败：${String(error)}`,
@@ -882,6 +890,7 @@ export class ConversationStore {
       historyRead = true;
       const projection = this.projection(threadId);
       projection.mergeHistory(messages);
+      this.titles.reconcileHistory(threadId, messages);
       const submissionRecord = this.inputs.submissions[threadId];
       // 接受身份是恢复线索；历史可能尚未包含该 Run，必须重新 GET 核实。
       if (submissionRecord?.status === 'accepted' && submissionRecord.runId
@@ -945,6 +954,7 @@ export class ConversationStore {
         || this.state.views[summary.id].run?.run_id !== previousRun) return;
       const projection = this.projection(summary.id);
       projection.mergeMessages(messages);
+      this.titles.reconcileHistory(summary.id, messages);
       // 同 Run 的摘要不触发新恢复轮次，也不回退当前 metadata 状态。
       if (messages.at(-1)?.run_id !== previousRun) projection.mergeHistory(messages);
       this.updateView(summary.id, projection.snapshot());
@@ -1207,6 +1217,7 @@ export class ConversationStore {
       if (!attempt.metadata || !attempt.runId) throw new Error("事件流缺少有效运行身份");
       if (frame.event === 'event') {
         projection.mergeEvent(attempt.runId, frame.data);
+        this.titles.observeMessages(threadId, projection.snapshot().messages);
         attempt.replay.set(frame.data.seq, frame.data);
       } else if (frame.event === 'delta') projection.delta(attempt.runId, frame.data);
       // 历史 lifecycle 不覆盖当前 metadata 中的状态。

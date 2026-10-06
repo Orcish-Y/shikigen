@@ -8,6 +8,9 @@ import { ChatReadingPositions, readingHistoryReady } from './chat-reading-positi
 import { observationLabels } from './observation-recovery';
 import { collectApprovalRecords, type ApprovalChoice } from './approval-decisions';
 import { captureConversationExport, collectExportRunOutcomes } from './conversation-export';
+import { appendTaskExample, displayConversationTitle } from './conversation-titles';
+import { presentConversationTime } from './conversation-time';
+import { useConversationTime } from './useConversationTime';
 
 /** 在 App 中挂载，工作台卸载或 BackendSession 换代不会重建会话所有者。 */
 export function useConversations(session: BackendSession | null, previewMode = false, visible = true) {
@@ -18,6 +21,7 @@ export function useConversations(session: BackendSession | null, previewMode = f
   const [preview, setPreview] = useState(demoSessions);
   const [previewId, setPreviewId] = useState(demoSessions[0].id);
   const [previewDrafts, setPreviewDrafts] = useState<Record<string, string>>({});
+  const displayTime = useConversationTime(visible);
   useEffect(() => {store.setVisible(visible);}, [store, visible]);
   useEffect(() => {
     store.setSession(session);
@@ -26,15 +30,19 @@ export function useConversations(session: BackendSession | null, previewMode = f
 
   const activeId = previewMode ? previewId : state.activeId;
   const view = state.views[activeId] ?? emptyConversation;
-  const sessions: Session[] = previewMode ? preview : state.threads.map(thread => ({
-    id: thread.id, title: thread.title?.trim() ? thread.title : "新会话", group: "历史",
-    summary: thread.updated_at || "更新时间待核实",
-    status: thread.run_status ? runStatusLabels[thread.run_status] : "未开始",
-    messages: (state.views[thread.id]?.messages ?? []).map(presentMessage),
-    runStatuses:state.views[thread.id]?.runStatuses,
-  }));
+  const sessions: Session[] = previewMode ? preview : state.threads.map(thread => {
+    const time = presentConversationTime(thread.updated_at, displayTime);
+    return {
+      id: thread.id, title: displayConversationTitle(thread.title, state.temporaryTitles[thread.id]), group: time.group, time,
+      summary: time.relative,
+      status: thread.run_status ? runStatusLabels[thread.run_status] : "未开始",
+      messages: (state.views[thread.id]?.messages ?? []).map(presentMessage),
+      runStatuses:state.views[thread.id]?.runStatuses,
+    };
+  });
   const active = sessions.find(conversation => conversation.id === activeId) ?? {
-    id: activeId, title: activeId ? '会话待核实' : state.listing ? "正在读取会话" : "新建会话开始对话", group: "历史" as const,
+    id: activeId, title: activeId ? displayConversationTitle(null, state.temporaryTitles[activeId])
+      : state.listing ? "正在读取会话" : "新建会话开始对话", group: "日期待确认" as const,
     summary: "", messages: [],
   };
   let statusLabel = "未选择会话";
@@ -52,7 +60,8 @@ export function useConversations(session: BackendSession | null, previewMode = f
       const currentThreadId = previewMode ? previewId : currentState.activeId;
       const currentView = currentState.views[currentThreadId] ?? emptyConversation;
       return captureConversationExport({threadId:currentThreadId,
-        title:currentState.threads.find(thread=>thread.id===currentThreadId)?.title ?? null,
+        title:displayConversationTitle(currentState.threads.find(thread=>thread.id===currentThreadId)?.title,
+          currentState.temporaryTitles[currentThreadId]),
         messages:previewMode ? [] : currentView.messages,
         runOutcomes:collectExportRunOutcomes(currentView.runStatuses,currentView.events,currentView.run)});
     },
@@ -75,11 +84,24 @@ export function useConversations(session: BackendSession | null, previewMode = f
     missing: view.missing,
     copyDraftToNewConversation: store.copyDraftToNewConversation,
     storageIssue: state.storageIssue,
+    titleStorageIssue:state.titleStorageIssue,
     draft: (previewMode ? previewDrafts[activeId] : state.drafts[activeId]) ?? "",
     updateDraft: (value: string) => {
       if (!activeId) return;
       if (previewMode) setPreviewDrafts(current => ({ ...current, [activeId]: value }));
       else store.updateDraft(value);
+    },
+    appendExample: (threadId: string, example: string) => {
+      // A stale UI action never writes to a newly selected conversation.
+      if (previewMode) {
+        if (threadId !== previewId) return false;
+        setPreviewDrafts(current => ({...current, [threadId]:appendTaskExample(current[threadId] ?? '', example)}));
+      } else {
+        const currentState = store.getSnapshot();
+        if (!threadId || currentState.activeId !== threadId || currentState.views[threadId]?.history !== 'ready') return false;
+        store.updateDraft(appendTaskExample(currentState.drafts[threadId] ?? '', example));
+      }
+      return true;
     },
     run: view.run, statusLabel: previewMode ? "示例会话" : statusLabel,
     detailsAvailable:!previewMode && Boolean(view.run),

@@ -30,6 +30,9 @@ export interface ConversationActions { rememberReadingPosition:() => void; locat
 export function Conversation({
   session,
   onSuggestion,
+  onCreate,
+  hasConversation = true,
+  isCreating = false,
   preview = false,
   readState = "ready",
   onView,
@@ -47,6 +50,9 @@ export function Conversation({
 }: {
   session: Session;
   onSuggestion: (text: string) => void;
+  onCreate?:() => void;
+  hasConversation?:boolean;
+  isCreating?:boolean;
   preview?: boolean;
   readState?: "idle" | "loading" | "ready" | "error";
   onView:(view:ContentView) => void;
@@ -141,9 +147,9 @@ export function Conversation({
         ) : readState === "ready" ? (
           <div className="empty-conversation">
             <img src="/logo.svg" alt="" />
-            <h2>从一个想法开始</h2>
-            <p>向 shikigen 描述你想完成的任务。</p>
-            <div className="suggestions">
+            <h2>{hasConversation ? '从一个想法开始' : '新建会话开始对话'}</h2>
+            <p>{hasConversation ? '向 shikigen 描述你想完成的任务。' : '创建一个会话，保留你的消息和任务记录。'}</p>
+            {hasConversation ? <div className="suggestions">
               {[
                 "解释当前项目的目录结构",
                 "搜索项目中的工具注册逻辑",
@@ -154,7 +160,7 @@ export function Conversation({
                   {text}
                 </button>
               ))}
-            </div>
+            </div> : <button className="primary-button" disabled={isCreating} onClick={onCreate}>新建会话</button>}
           </div>
         ) : null}
         {approvalStatus && !hasCurrentCard && <section id="current-approval-status" data-reading-anchor={`approval:${approvalIdentity}`}

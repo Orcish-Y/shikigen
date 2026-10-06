@@ -28,6 +28,7 @@ import { WorkspaceImageProvider } from './components/WorkspaceImage';
 import { FileOpenConfirmation, WorkspaceFileOpenProvider, useWorkspaceFileOpening } from './components/WorkspaceFileOpen';
 import { downloadConversationExport } from './conversation-export';
 import { RunDetails, RunUsage } from './components/RunDetails';
+import { ConversationIdentity } from './components/ConversationIdentity';
 
 function initialCollapsed() {
   try {
@@ -99,7 +100,7 @@ function Workspace({ session, conversations }: {
   const [mobilePanel, setMobilePanel] = useState<
     "navigation" | "history" | null
   >(null);
-  const [overlay, setOverlay] = useState<"commands" | "details" | ContentView | null>(null);
+  const [overlay, setOverlay] = useState<"commands" | "details" | {conversationId:string} | ContentView | null>(null);
   const [cancelTarget, setCancelTarget] = useState<CancelTarget | null>(null);
   const [exportNotice, setExportNotice] = useState<{message:string; failed:boolean} | null>(null);
   const fileOpening = useWorkspaceFileOpening(session, activeId, conversations.visible);
@@ -124,7 +125,7 @@ function Workspace({ session, conversations }: {
     return () => observer.disconnect();
   }, [fileOpening.controller, fileOpening.view.reference, fileOpening.view.messageIdentity, fileOpening.view.phase]);
   useEffect(() => {
-    setOverlay(currentOverlay => currentOverlay && typeof currentOverlay === 'object' && currentOverlay.image ? null : currentOverlay);
+    setOverlay(currentOverlay => currentOverlay && typeof currentOverlay === 'object' && 'image' in currentOverlay && currentOverlay.image ? null : currentOverlay);
   }, [session, conversations.visible]);
   useEffect(() => {
     if (cancelTarget && (!conversations.visible || !conversations.validCancelTarget(cancelTarget))) setCancelTarget(null);
@@ -153,6 +154,9 @@ function Workspace({ session, conversations }: {
     if (!conversations.detailsAvailable) return;
     setCancelTarget(null); setMobilePanel(null); setOverlay('details');
     void conversations.refreshRunDetails();
+  }
+  function inspectConversation(id:string) {
+    setCancelTarget(null); setMobilePanel(null); closeFileOpen(); setOverlay({conversationId:id});
   }
   useEffect(()=>{
     conversations.setDetailsOpen(overlay==='details' && fileOpening.view.phase==='idle');
@@ -273,6 +277,7 @@ function Workspace({ session, conversations }: {
             onCreate={createSession}
             creating={conversations.creating || conversations.loading}
             pagination={conversations.pagination}
+            onInspect={inspectConversation}
             usageSummary={<RunUsage isCompact run={conversations.run} snapshotRead={conversations.observationView.snapshotRead}
               verification={conversations.observationView.usageVerification} onContinue={conversations.continueUsageVerification} onReload={conversations.reload}
               availability={conversations.detailsAvailability} onDetails={openRunDetails} disabled={!conversations.detailsAvailable}/>}
@@ -294,6 +299,8 @@ function Workspace({ session, conversations }: {
                 <ClockCounterClockwise />
               </button>
               <h1 title={activeId ? `${active.title}\n会话 ID：${activeId}` : undefined}>{active.title}</h1>
+              {activeId && <button className="icon-button" aria-label="查看当前会话标题与时间" title="查看完整标题与时间"
+                onClick={()=>inspectConversation(activeId)}><SlidersHorizontal size={15}/></button>}
               <span className="badge toolbar-badge">
                 {conversations.statusLabel}
               </span>
@@ -355,6 +362,7 @@ function Workspace({ session, conversations }: {
             </details>}
             {conversations.verifying && <p className="business-notice" role="status">正在核实当前运行状态…</p>}
             {conversations.storageIssue && <p className="business-notice" role="alert">{conversations.storageIssue}</p>}
+            {conversations.titleStorageIssue && <p className="business-notice" role="alert">{conversations.titleStorageIssue}</p>}
             <ApprovalRecovery records={conversations.approvalRecoveryRecords} onView={setOverlay}/>
             {conversations.missing && <section className="business-notice" aria-label="会话文字保留">
               <p>会话不存在；草稿和提交原文仍保留，可以复制到新会话后手动发送。</p>
@@ -392,10 +400,15 @@ function Workspace({ session, conversations }: {
               toolPreferences={conversations.toolPreferences}
               preview={!session}
               session={active}
-              readState={activeId ? conversations.historyState : "ready"}
+              hasConversation={Boolean(activeId)}
+              isCreating={conversations.creating || conversations.loading}
+              onCreate={createSession}
+              readState={activeId ? conversations.historyState : conversations.pagination?.listError ? 'error'
+                : conversations.pagination && (!conversations.pagination.loaded || conversations.pagination.refreshing) ? 'loading' : 'ready'}
               onView={view => { setCancelTarget(null); setMobilePanel(null); setOverlay(view); }}
               onSuggestion={(text) => {
-                updateDraft(text);
+                if (document.querySelector('dialog[open]') || !conversations.appendExample(activeId, text)) return;
+                // Focus only as part of this click; delayed reads never schedule focus.
                 document.getElementById("message-draft")?.focus();
               }}
             />
@@ -489,7 +502,11 @@ function Workspace({ session, conversations }: {
               onClose={()=>setOverlay(null)}/>
           </Overlay>
         )}
-        {fileOpening.view.phase === 'idle' && overlay && typeof overlay === 'object' && <Overlay title={overlay.title} drawer onClose={() => setOverlay(null)}>
+        {fileOpening.view.phase === 'idle' && overlay && typeof overlay === 'object' && 'conversationId' in overlay && <Overlay
+          title="会话标题与时间" drawer onClose={()=>setOverlay(null)}>
+          <ConversationIdentity session={sessions.find(conversation=>conversation.id===overlay.conversationId) ?? active}/>
+        </Overlay>}
+        {fileOpening.view.phase === 'idle' && overlay && typeof overlay === 'object' && 'title' in overlay && <Overlay title={overlay.title} drawer onClose={() => setOverlay(null)}>
           {overlay.approval && <p className="business-notice">只读参数 · {conversations.approvalCards.some(record=>
             record.identity === overlay.approval!.identity && record.resolution) || ['completed','cancelled','error'].includes(
               conversations.observationView.runStatuses[overlay.approval.runId] ?? '')
