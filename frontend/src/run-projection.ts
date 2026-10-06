@@ -3,6 +3,8 @@ import { RunProtocolError } from './run-protocol.ts';
 
 export type ConversationMessage = Pick<StoredMessage, 'run_id' | 'seq' | 'content'> & Partial<StoredMessage> & { preview?: boolean };
 export interface ApprovalProjection { request: RunEvent & { payload: ApprovalRequired }; verified: boolean }
+export interface RunFieldVersion {stage:number; usage:number; outcome:number; status:number}
+export interface SnapshotAuthority {shouldPreserveStatus?:boolean; isWrite?:boolean}
 
 // 对象键的次序不属于事实内容；数组次序及省略/null 的区别属于事实。
 export function sameFact(a: unknown, b: unknown): boolean {
@@ -24,6 +26,7 @@ export class RunProjection {
   private messages = new Map<number, ConversationMessage>();
   private events = new Map<string, Map<number, RunEvent>>();
   private runs = new Map<string, Run>();
+  private versions = new Map<string, RunFieldVersion>();
   private runFloor = 0;
   run: Run | null = null;
 
@@ -60,19 +63,59 @@ export class RunProjection {
       for (const seq of this.messages.keys()) this.runFloor = Math.max(this.runFloor, seq);
     }
     const next = { ...previous, ...incoming };
-    if (previous?.status === 'interrupted' && incoming.status === 'running' && !Object.hasOwn(incoming, 'usage_pending')) next.usage_pending = null;
+    const version = this.snapshotVersion(incoming.run_id);
+    if (previous?.status === 'interrupted' && incoming.status === 'running') {
+      version.stage++;
+      if (!Object.hasOwn(incoming, 'usage_pending')) next.usage_pending = null;
+      version.usage++;
+    }
+    if (previous?.status !== incoming.status) version.status++;
+    if (['usage','usage_pending'].some(key => Object.hasOwn(incoming,key))) version.usage++;
+    if (['error','error_code','completed_at'].some(key => Object.hasOwn(incoming,key))) version.outcome++;
+    this.versions.set(incoming.run_id,version);
     this.runs.set(incoming.run_id, next);
     this.run = next;
   }
 
-  applySnapshot(incoming: Run) {
+  snapshotVersion(runId:string):RunFieldVersion {
+    return {...(this.versions.get(runId) ?? {stage:0,usage:0,outcome:0,status:0})};
+  }
+
+  /** A new GET observation cannot prove it is still the same execution stage. */
+  beginObservation(runId:string) {
+    const previous = this.runs.get(runId);
+    if (!previous) return;
+    const version = this.snapshotVersion(runId);
+    version.stage++; version.usage++;
+    this.versions.set(runId,version);
+    const next = Object.hasOwn(previous,'usage_pending') ? {...previous,usage_pending:null} : {...previous};
+    this.runs.set(runId,next);
+    if (this.run?.run_id === runId) this.run = next;
+  }
+
+  applySnapshot(incoming: Run, requestVersion = this.snapshotVersion(incoming.run_id), authority:SnapshotAuthority = {}) {
     const previous = this.runs.get(incoming.run_id);
+    const currentVersion = this.snapshotVersion(incoming.run_id);
     const updates = { ...incoming };
+    const hasStaleUsage = (Object.hasOwn(incoming,'usage') || Object.hasOwn(incoming,'usage_pending'))
+      && (requestVersion.stage !== currentVersion.stage || requestVersion.usage !== currentVersion.usage);
+    if (requestVersion.stage !== currentVersion.stage || requestVersion.usage !== currentVersion.usage) {
+      delete updates.usage; delete updates.usage_pending;
+    }
+    if (requestVersion.outcome !== currentVersion.outcome || requestVersion.status !== currentVersion.status
+      || previous && (authority.shouldPreserveStatus || terminalRun(previous)) && incoming.status !== previous.status) {
+      delete updates.error; delete updates.error_code; delete updates.completed_at;
+    }
     // 查询里的旧空值不能清除流中已确认的失败／完成字段。
     for (const key of ['error','error_code','completed_at'] as const) {
       if (updates[key] === null && previous?.[key] != null) delete updates[key];
     }
+    if (previous && (authority.shouldPreserveStatus || terminalRun(previous)
+      || !authority.isWrite && requestVersion.status !== currentVersion.status)) updates.status = previous.status;
+    // Server timestamps can be filled even when metadata advanced during the request.
+    if (previous?.updated_at && updates.updated_at && Date.parse(updates.updated_at) < Date.parse(previous.updated_at)) delete updates.updated_at;
     this.metadata(updates);
+    return hasStaleUsage;
   }
 
   approval(replay: Iterable<RunEvent>, verified: boolean): ApprovalProjection | null {

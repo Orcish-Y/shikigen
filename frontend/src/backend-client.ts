@@ -20,11 +20,16 @@ export interface WorkspaceResource {
 }
 export const imageMimeTypes = new Set(['image/png','image/jpeg','image/gif','image/webp','image/bmp','image/svg+xml']);
 export type RunStatus = "running" | "completed" | "cancelled" | "interrupted" | "error";
+export interface RunUsage {
+  total_input:number; total_output:number; total_tokens:number;
+  calls?:number;
+  by_model?:Record<string, {input:number; output:number; calls:number}>;
+}
 export interface Run {
   thread_id: string;
   run_id: string;
   status: RunStatus;
-  usage?: { total_input: number; total_output: number; total_tokens: number } | null;
+  usage?: RunUsage | null;
   usage_pending?: boolean | null;
   error?: string | null;
   error_code?: string | null;

@@ -291,7 +291,7 @@ test('delta cannot reuse an already committed lifecycle sequence', async t => {
   assert.equal(view().events.r[0].category, 'lifecycle');
 });
 
-test('normal GET EOF reads one snapshot without replacing the verified replay identity', async t => {
+test('entry and normal GET EOF each read one snapshot without replacing the verified replay identity', async t => {
   const {streams, snapshotReads, view} = fixture(t, undefined, {id:'r', thread_id:'t', status:'interrupted',
     usage:{total_input:5,total_output:2,total_tokens:7},usage_pending:false,updated_at:time});
   await until(() => streams.length === 1);
@@ -300,7 +300,7 @@ test('normal GET EOF reads one snapshot without replacing the verified replay id
   streams[0].close();
   await until(() => view().approval?.verified);
   await tick();
-  assert.deepEqual(snapshotReads, ['/api/threads/t/runs/r']);
+  assert.deepEqual(snapshotReads, ['/api/threads/t/runs/r','/api/threads/t/runs/r']);
   assert.equal(view().run.usage.total_tokens, 7);
   assert.equal(view().run.usage_pending, false);
   assert.equal(view().run.status, 'interrupted');
@@ -338,7 +338,7 @@ test('failed post-replay snapshot does not revoke an identity already checked by
   streams[0].push('metadata', metadata('interrupted'));
   streams[0].push('event', required(5));
   streams[0].close();
-  await until(() => view().error?.includes('运行快照'));
+  await until(() => view().snapshotRead.failure?.status === 503 && view().observation === 'closed');
   assert.equal(view().observation, 'closed');
   assert.equal(view().verified, true);
   assert.equal(view().approval.verified, true);

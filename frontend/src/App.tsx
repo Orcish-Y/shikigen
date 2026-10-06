@@ -27,6 +27,7 @@ import { useWorkspaceVisibility } from './useWorkspaceVisibility';
 import { WorkspaceImageProvider } from './components/WorkspaceImage';
 import { FileOpenConfirmation, WorkspaceFileOpenProvider, useWorkspaceFileOpening } from './components/WorkspaceFileOpen';
 import { downloadConversationExport } from './conversation-export';
+import { RunDetails, RunUsage } from './components/RunDetails';
 
 function initialCollapsed() {
   try {
@@ -140,12 +141,19 @@ function Workspace({ session, conversations }: {
     setExportNotice(null);
   }, [activeId]);
   useEffect(() => {
-    if (previousConversation.current !== activeId || previousRun.current !== conversations.run?.run_id) {
+    if (previousConversation.current !== activeId) {
       setOverlay(null);
-      previousConversation.current = activeId;
-      previousRun.current = conversations.run?.run_id;
+    } else if (previousRun.current !== conversations.run?.run_id) {
+      setOverlay(current => current === 'details' ? current : null);
     }
+    previousConversation.current = activeId;
+    previousRun.current = conversations.run?.run_id;
   }, [activeId, conversations.run?.run_id]);
+  function openRunDetails() {
+    if (!conversations.detailsAvailable) return;
+    setCancelTarget(null); setMobilePanel(null); setOverlay('details');
+    void conversations.refreshRunDetails();
+  }
   const shortcut = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl";
 
   function toggleNavigation() {
@@ -261,6 +269,8 @@ function Workspace({ session, conversations }: {
             onCreate={createSession}
             creating={conversations.creating || conversations.loading}
             pagination={conversations.pagination}
+            usageSummary={<RunUsage isCompact run={conversations.run} snapshotRead={conversations.observationView.snapshotRead}
+              availability={conversations.detailsAvailability} onDetails={openRunDetails} disabled={!conversations.detailsAvailable}/>}
           />
           <main className="chat-workspace" tabIndex={-1}>
             <div className="chat-toolbar">
@@ -295,8 +305,10 @@ function Workspace({ session, conversations }: {
                 </button>
                 <button
                   className="secondary-button"
-                  onClick={() => setOverlay("details")}
+                  onClick={openRunDetails}
                   aria-label="运行详情"
+                  disabled={!conversations.detailsAvailable}
+                  title={conversations.detailsAvailability}
                 >
                   <SlidersHorizontal />
                   <span>运行详情</span>
@@ -454,7 +466,7 @@ function Workspace({ session, conversations }: {
                 <ClockCounterClockwise />
                 查找会话
               </button>
-              <button onClick={() => setOverlay("details")}>
+              <button onClick={openRunDetails} disabled={!conversations.detailsAvailable} title={conversations.detailsAvailability}>
                 <SlidersHorizontal />
                 查看运行详情
               </button>
@@ -463,25 +475,12 @@ function Workspace({ session, conversations }: {
         )}
         {fileOpening.view.phase === 'idle' && overlay === "details" && (
           <Overlay title="运行详情" drawer onClose={() => setOverlay(null)}>
-            <div className="details-content">
-              <span className="badge">{conversations.statusLabel}</span>
-              <h3>{active.title}</h3>
-              <dl>
-                {[
-                  ["会话 ID", activeId || undefined],
-                  ["Run ID", conversations.run?.run_id],
-                  ["状态", conversations.statusLabel],
-                  ["输入 Token", conversations.run?.usage?.total_input],
-                  ["输出 Token", conversations.run?.usage?.total_output],
-                ].map(([label, value]) => (
-                  <div key={label}><dt>{label}</dt><dd>{value ?? "—"}</dd></div>
-                ))}
-              </dl>
-              {conversations.run?.status === "interrupted" && <p>此运行正在等待审批。</p>}
-              <RunFailure run={conversations.run} onView={setOverlay} />
-              {conversations.error && <p role="alert">{conversations.error}</p>}
-
-            </div>
+            <RunDetails key={`${activeId}:${conversations.run?.run_id}`} threadId={activeId} title={active.title}
+              view={conversations.observationView} availability={conversations.detailsAvailability}
+              onRefresh={conversations.refreshRunDetails} onReload={conversations.reload}
+              onReconnect={conversations.reconnect} onQuery={conversations.queryStatus}
+              onApproval={()=>{setOverlay(null);queueMicrotask(()=>timeline.current?.locateApproval());}}
+              onClose={()=>setOverlay(null)}/>
           </Overlay>
         )}
         {fileOpening.view.phase === 'idle' && overlay && typeof overlay === 'object' && <Overlay title={overlay.title} drawer onClose={() => setOverlay(null)}>

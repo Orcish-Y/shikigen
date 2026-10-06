@@ -16,6 +16,12 @@ export interface RunWriteState {
 }
 
 export interface ListFailure { message: string; retryAt: number; invalidCursor: boolean }
+export interface SnapshotRead {
+  phase:'idle' | 'reading' | 'ready' | 'error';
+  failure:ObservationFailure | null;
+  retry:RecoveryUpdate['retry'];
+}
+const emptySnapshotRead:SnapshotRead = {phase:'idle', failure:null, retry:null};
 function listFailure(error: unknown): ListFailure {
   const retry = error instanceof BackendRequestError ? error.retryAfter : null;
   const retryAt = retryAfterTime(retry);
@@ -49,6 +55,7 @@ export interface ConversationView {
   write:RunWriteState | null;
   savedContent:'idle' | 'reading' | 'ready' | 'error';
   savedContentFailure:ObservationFailure | null;
+  snapshotRead:SnapshotRead;
 }
 export interface ConversationState {
   threads: Thread[];
@@ -68,7 +75,7 @@ export interface ConversationState {
   approvalBackups:ApprovalBackup[];
 }
 export const emptyConversation: ConversationView = {
-  messages: [], run: null, runStatuses:{}, history: "idle", verified: false, error: null, sending: false, acceptedSendId:null, events:{}, approval:null, approvalDraft:null, acceptedApproval:null, observation:'idle', retry:null, observationFailure:null, querying:false, queryFailure:null, sendFailure:null, protocolIssue:null, missing:false, write:null, savedContent:'idle', savedContentFailure:null,
+  messages: [], run: null, runStatuses:{}, history: "idle", verified: false, error: null, sending: false, acceptedSendId:null, events:{}, approval:null, approvalDraft:null, acceptedApproval:null, observation:'idle', retry:null, observationFailure:null, querying:false, queryFailure:null, sendFailure:null, protocolIssue:null, missing:false, write:null, savedContent:'idle', savedContentFailure:null, snapshotRead:emptySnapshotRead,
 };
 
 interface ObservationAttempt {
@@ -108,6 +115,8 @@ export class ConversationStore {
   private savedRequests = new Map<string, AbortController>();
   private savedReads = new Map<string, 'reading' | 'ready' | 'error'>();
   private savedDeadlines = new Map<string, number>();
+  private snapshotRequest: {session:BackendSession; threadId:string; runId:string; controller:AbortController;
+    task:Promise<void>; hasStarted:boolean; shouldReadAgain:boolean} | null = null;
 
   constructor(options: {storage?: DraftStorage | null} = {}) {
     this.inputs = new MessageDrafts(options.storage);
@@ -143,7 +152,11 @@ export class ConversationStore {
   private updateView(threadId: string, viewUpdate: Partial<ConversationView>) {
     const previous = this.state.views[threadId];
     if (viewUpdate.run && previous?.run?.run_id !== viewUpdate.run.run_id) {
-      viewUpdate = {savedContent:'idle', savedContentFailure:null, write:null, approvalDraft:null, acceptedApproval:null, ...viewUpdate};
+      this.snapshotRequest?.controller.abort();
+      this.snapshotRequest = null;
+      viewUpdate = {snapshotRead:emptySnapshotRead, savedContent:'idle', savedContentFailure:null, write:null, approvalDraft:null, acceptedApproval:null, ...viewUpdate};
+      const runId = viewUpdate.run!.run_id;
+      queueMicrotask(() => {if(this.state.activeId === threadId && this.state.views[threadId]?.run?.run_id === runId) void this.refreshRunDetails();});
     }
     const run = viewUpdate.run ?? previous?.run;
     if (viewUpdate.approval && run) {
@@ -210,6 +223,9 @@ export class ConversationStore {
     this.summaryRequest?.abort();
     this.summaryRequest = null;
     this.summaryTarget = null;
+    this.snapshotRequest?.controller.abort();
+    this.snapshotRequest = null;
+    if (this.state.views[id]?.snapshotRead.phase === 'reading') this.updateView(id, {snapshotRead:emptySnapshotRead});
     if (id && this.state.views[id]) this.updateView(id, { verified:false, sending: false, observation:'paused', retry:null, querying:false,
       history:this.state.views[id].history === 'loading' ? 'idle' : this.state.views[id].history,
       approval:this.state.views[id].approval ? {...this.state.views[id].approval!, verified:false} : null });
@@ -539,7 +555,7 @@ export class ConversationStore {
           }
           if (normal && this.live(session, controller)) {
             await this.readCommittedHistory(session, controller, threadId);
-            await this.readSnapshot(session, controller, threadId, submissionRecord.runId);
+            await this.readSnapshot(session, controller, threadId, submissionRecord.runId,true);
             void this.loadThreads(false);
           }
         } else {
@@ -573,7 +589,7 @@ export class ConversationStore {
     void this.observeRun(session!, controller, threadId, runId).then(async normal => {
       if (normal && this.live(session!, controller)) {
         await this.readCommittedHistory(session!, controller, threadId);
-        await this.readSnapshot(session!, controller, threadId, runId);
+        await this.readSnapshot(session!, controller, threadId, runId,true);
       }
     });
   };
@@ -706,7 +722,7 @@ export class ConversationStore {
       }
       if (endedNormally && this.live(session, controller)) {
         await this.readCommittedHistory(session, controller, threadId);
-        await this.readSnapshot(session, controller, threadId, runId);
+        await this.readSnapshot(session, controller, threadId, runId,true);
       }
       const writeState = this.state.views[threadId].write;
       if (this.live(session, controller) && writeState?.kind === 'approval' && writeState.verifying) {
@@ -720,12 +736,14 @@ export class ConversationStore {
     if (!this.canCancel(target)) return false;
     const session = this.session!, {threadId, runId} = target;
     const controller = this.writeRequest = new AbortController();
+    const version = this.projection(threadId).snapshotVersion(runId);
     this.updateView(threadId, {write:{runId, kind:'cancel', phase:'pending', verified:false, verifying:false, retryAt:0, failure:null}});
     try {
       const snapshot = await session.cancel(threadId, runId, controller.signal);
       if (!this.live(session, controller) || this.state.activeId !== threadId
         || this.state.views[threadId].run?.run_id !== runId) return false;
-      this.applyWriteSnapshot(threadId, snapshot);
+      const hasStaleUsage = this.applyWriteSnapshot(threadId, snapshot,version);
+      if (hasStaleUsage || snapshot.usage_pending === true) void this.refreshRunDetails(true);
       return true;
     } catch (error) {
       if (this.live(session, controller) && this.state.views[threadId].run?.run_id === runId) {
@@ -741,14 +759,15 @@ export class ConversationStore {
     return false;
   }
 
-  private applyWriteSnapshot(threadId:string, snapshot:Run) {
+  private applyWriteSnapshot(threadId:string, snapshot:Run, version?:ReturnType<RunProjection['snapshotVersion']>) {
     const projection = this.projection(threadId);
-    projection.applySnapshot(snapshot);
+    const hasStaleUsage = projection.applySnapshot(snapshot,version,{isWrite:true});
     this.syncRun(threadId, projection.run!);
     const write = this.state.views[threadId].write;
     this.updateView(threadId, {...projection.snapshot(), verified:true,
       write:terminalRun(projection.run!) ? null : write ? {...write, phase:'unknown', verified:true, verifying:false} : null,
       approval:terminalRun(projection.run!) ? null : this.state.views[threadId].approval});
+    return hasStaleUsage;
   }
 
   private async verifyCancellation() {
@@ -758,18 +777,13 @@ export class ConversationStore {
       || write.verifying || this.writeRequest || view.run?.run_id !== write.runId) return;
     const controller = this.writeRequest = new AbortController();
     this.updateView(threadId, {write:{...write, verifying:true}});
-    const recovery = new ObservationRecovery(AbortSignal.any([controller.signal, session.signal]), write.retryAt, update => {
-      if (this.live(session, controller) && this.state.views[threadId].write) {
-        this.updateView(threadId, {write:{...this.state.views[threadId].write!, retryAt:Math.max(write.retryAt, recovery.retryAt),
-          ...(update.observationFailure ? {failure:update.observationFailure} : {})}});
-      }
-    });
     try {
-      await recovery.run(async () => {
-        const snapshot = await session.runSnapshot(threadId, write.runId, controller.signal);
-        if (!this.live(session, controller) || this.state.views[threadId].run?.run_id !== write.runId) return true;
-        this.applyWriteSnapshot(threadId, snapshot); return true;
-      });
+      await this.readSnapshot(session,controller,threadId,write.runId);
+      const remaining = this.state.views[threadId].write;
+      if (this.live(session,controller) && remaining && this.state.views[threadId].snapshotRead.failure) {
+        this.updateView(threadId,{write:{...remaining,failure:this.state.views[threadId].snapshotRead.failure,
+          retryAt:Math.max(remaining.retryAt,this.retryDeadlines.get(`${threadId}:${write.runId}`) ?? 0)}});
+      }
     } finally {
       if (this.writeRequest === controller) {
         this.writeRequest = null;
@@ -865,12 +879,13 @@ export class ConversationStore {
     const run = projection.run;
     this.updateView(threadId, {...projection.snapshot(), history:'ready', verified:!run});
     if (!run) {this.updateView(threadId, {observation:'idle', retry:null, observationFailure:null}); return;}
+    void this.readSnapshot(session, controller, threadId, run.run_id);
     const retryAt=Math.max(0,...this.approvals.records.filter(record=>record.threadId===threadId&&record.draft.runId===run.run_id)
       .map(record=>record.submission?.retryAt??0));
     this.retryDeadlines.set(`${threadId}:${run.run_id}`,Math.max(this.retryDeadlines.get(`${threadId}:${run.run_id}`)??0,retryAt));
     if (run.status === 'running' || run.status === 'interrupted') {
       const completed = await this.observeRun(session, controller, threadId, run.run_id);
-      if (completed) await this.readSnapshot(session, controller, threadId, run.run_id);
+      if (completed) await this.readSnapshot(session, controller, threadId, run.run_id,true);
     } else {
       // 终态无需 SSE；完成本轮读取后不能沿用隐藏时的主动暂停状态。
       this.updateView(threadId, {observation:'idle', retry:null, observationFailure:null});
@@ -948,39 +963,76 @@ export class ConversationStore {
     }
   }
 
-  private async readSnapshot(session: BackendSession, controller: AbortController, threadId: string, runId: string) {
-    const version = this.statusVersions.get(threadId);
-    try {
-      const write = this.state.views[threadId].write;
-      if (write?.phase === 'unknown') {
-        if (write.kind === 'cancel' && write.verifying) return;
-        await waitUntil(write.retryAt, AbortSignal.any([controller.signal, session.signal]));
-      }
-      const snapshot = await session.runSnapshot(threadId, runId, controller.signal);
-      if (!this.live(session, controller) || this.state.views[threadId].run?.run_id !== runId
-        || version !== this.statusVersions.get(threadId)) return;
-      if (this.state.views[threadId].write?.phase === 'unknown') {
-        if (this.state.views[threadId].write?.kind === 'cancel' && this.state.views[threadId].write?.verifying) return;
-        this.applyWriteSnapshot(threadId, snapshot); return;
-      }
-      const projection = this.projection(threadId);
-      projection.applySnapshot(snapshot);
-      const approval = this.state.views[threadId].approval;
-      this.updateView(threadId, {...projection.snapshot(), verified:true, queryFailure:null,
-        approval:approval ? {...approval, verified:approval.verified && projection.run?.status === 'interrupted'} : null});
-      this.syncRun(threadId, projection.run!);
-    } catch (error) {
-      if (this.live(session, controller)) {
-        const failure = observationFailure(error);
-        const key = `${threadId}:${runId}`;
-        this.retryDeadlines.set(key, Math.max(this.retryDeadlines.get(key) ?? 0, retryAfterTime(failure.retryAfter ?? null)));
-        this.updateView(threadId, {error:`读取运行快照失败：${String(error)}`, queryFailure:failure,
-        ...(failure.status===404?{verified:false,
-          approval:this.state.views[threadId].approval?{...this.state.views[threadId].approval!,verified:false}:null,
-          write:this.state.views[threadId].write?{...this.state.views[threadId].write!,verified:false}:null}:{}),
-        ...(error instanceof RunProtocolError ? {protocolIssue:{message:error.message, raw:error.raw}} : {})});
-      }
+  refreshRunDetails = (shouldReadAfterBoundary = false):Promise<void> => {
+    const session = this.session, threadId = this.state.activeId;
+    const runId = this.state.views[threadId]?.run?.run_id;
+    if (!this.visible || !session || session.signal.aborted || !runId) return Promise.resolve();
+    return this.readSnapshot(session, new AbortController(), threadId, runId,shouldReadAfterBoundary);
+  };
+
+  private readSnapshot(session:BackendSession, caller:AbortController, threadId:string, runId:string,shouldReadAfterBoundary=false):Promise<void> {
+    if (!this.live(session,caller) || this.state.activeId !== threadId
+      || this.state.views[threadId]?.run?.run_id !== runId) return Promise.resolve();
+    const existing = this.snapshotRequest;
+    if (existing?.session === session && existing.threadId === threadId && existing.runId === runId) {
+      if (shouldReadAfterBoundary && existing.hasStarted) existing.shouldReadAgain = true;
+      return existing.task;
     }
+    existing?.controller.abort();
+    const controller = new AbortController();
+    const request = {session, threadId, runId, controller, task:Promise.resolve(),hasStarted:false,shouldReadAgain:false};
+    this.snapshotRequest = request;
+    // Defer until ownership is recorded; every trigger joins this same task.
+    request.task = Promise.resolve().then(async () => {
+      const isCurrent = () => this.snapshotRequest === request && this.live(session,controller)
+        && this.state.activeId === threadId && this.state.views[threadId]?.run?.run_id === runId;
+      const key = `${threadId}:${runId}`;
+      const recovery = new ObservationRecovery(AbortSignal.any([controller.signal,session.signal]),
+        this.retryDeadlines.get(key) ?? 0, update => {
+          if (!isCurrent()) return;
+          this.retryDeadlines.set(key, Math.max(this.retryDeadlines.get(key) ?? 0,recovery.retryAt));
+          this.updateView(threadId,{snapshotRead:{phase:update.observation === 'failed' ? 'error' : 'reading',
+            failure:update.observationFailure,retry:update.retry},
+            ...(update.observationFailure ? {queryFailure:update.observationFailure} : {}),
+            ...(update.observationFailure?.status===404 ? {verified:false,
+              approval:this.state.views[threadId].approval ? {...this.state.views[threadId].approval!,verified:false} : null} : {})});
+        });
+      try {
+        let needsFreshSnapshot = false;
+        const readOnce = async () => recovery.run(async () => {
+          const write = this.state.views[threadId].write;
+          if (write?.phase === 'unknown') await waitUntil(write.retryAt,AbortSignal.any([controller.signal,session.signal]));
+          const projection = this.projection(threadId);
+          const version = projection.snapshotVersion(runId);
+          request.hasStarted = true;
+          const snapshot = await session.runSnapshot(threadId,runId,controller.signal);
+          if (!isCurrent()) return true;
+          const currentWrite = this.state.views[threadId].write;
+          const canVerifyWrite = currentWrite?.phase === 'unknown' && write?.phase === 'unknown' && currentWrite === write;
+          if (canVerifyWrite) {
+            needsFreshSnapshot = this.applyWriteSnapshot(threadId,snapshot,version);
+          } else {
+            needsFreshSnapshot = projection.applySnapshot(snapshot,version,{shouldPreserveStatus:Boolean(this.observing && this.observing.threadId === threadId)})
+              || currentWrite?.phase === 'unknown';
+            const approval = this.state.views[threadId].approval;
+            this.updateView(threadId,{...projection.snapshot(),verified:true,queryFailure:null,
+              approval:approval ? {...approval,verified:approval.verified && projection.run?.status === 'interrupted'} : null});
+            this.syncRun(threadId,projection.run!);
+          }
+          return true;
+        });
+        let succeeded = await readOnce();
+        // At most one fresh read for this invalidated group; never chase an active stream indefinitely.
+        if (succeeded && (needsFreshSnapshot || request.shouldReadAgain) && isCurrent()) {
+          request.shouldReadAgain = false;
+          succeeded = await readOnce();
+        }
+        if (isCurrent() && succeeded) this.updateView(threadId,{snapshotRead:{phase:'ready',failure:null,retry:null}});
+      } finally {
+        if (this.snapshotRequest === request) this.snapshotRequest = null;
+      }
+    });
+    return request.task;
   }
 
   private finishObservation(controller: AbortController) {
@@ -1002,10 +1054,11 @@ export class ConversationStore {
 
   private createFrameReceiver(session: BackendSession, controller: AbortController, threadId: string, targetRun?: string, isGet = targetRun !== undefined) {
     const projection = this.projection(threadId);
+    if (isGet && targetRun) projection.beginObservation(targetRun);
     const attempt: ObservationAttempt = {controller, threadId, runId:targetRun ?? null,
       replay:new Map(), metadata:false, failed:false, isGet};
     this.observing = attempt;
-    this.updateView(threadId, {observation:'connecting'});
+    this.updateView(threadId, {...projection.snapshot(),observation:'connecting'});
     return (frame: RunFrame) => {
       if (!this.live(session, controller) || this.observing !== attempt || this.state.activeId !== threadId) return;
       if (frame.event === "metadata") {

@@ -64,6 +64,48 @@ test('有效取消快照即结束 pending，不等待 SSE；终态一次补读�
   } finally {app.close();}
 });
 
+test('取消 POST 的旧未知用量不清请求期间的新累计，真实终态立即确认并协调一次新快照',async()=> {
+  let confirmCancellation;
+  const newestUsage={total_input:8,total_output:3,total_tokens:11,calls:1,by_model:{'实际模型':{input:8,output:3,calls:1}}};
+  const app=await setup(({setStatus})=>new Promise(resolveCancelResponse=>confirmCancellation=()=>{
+    setStatus('cancelled');resolveCancelResponse(Response.json({data:{id:'r',thread_id:'a',status:'cancelled',usage:null,usage_pending:true,completed_at:date,updated_at:date}}));
+  }),{snapshot:count=>count>1 ? Response.json({data:{id:'r',thread_id:'a',status:'cancelled',usage:newestUsage,usage_pending:false,completed_at:date,updated_at:date}}) : undefined});
+  try {
+    const cancellation=app.store.cancel(app.store.cancelTarget());
+    await until(()=>app.posts()===1);
+    app.stream().enqueue(encode('metadata',{thread_id:'a',run_id:'r',status:'running',usage:newestUsage,usage_pending:true}));
+    await until(()=>app.store.getSnapshot().views.a.run?.usage?.total_tokens===11);
+    confirmCancellation();await cancellation;
+    assert.equal(app.store.getSnapshot().views.a.run.status,'cancelled');
+    assert.deepEqual(app.store.getSnapshot().views.a.run.usage,newestUsage);
+    await until(()=>app.store.getSnapshot().views.a.run.usage_pending===false);
+    assert.equal(app.snapshots(),2,'进入快照及取消后失效组补读各一次');
+    assert.equal(app.posts(),1);
+    assert.equal(app.store.getSnapshot().views.a.run.completed_at,date);
+  } finally {app.close();}
+});
+
+test('取消后的核实不能复用取消前省略用量的迟到 GET，串行补一次请求且不回退终态',async()=> {
+  let respondWithOldSnapshot;
+  const lateUsage={total_input:9,total_output:4,total_tokens:13,calls:1,by_model:{}};
+  const app=await setup(({setStatus})=>{
+    setStatus('cancelled');return Response.json({data:{id:'r',thread_id:'a',status:'cancelled',usage:null,usage_pending:true,completed_at:date}});
+  },{snapshot:count=>count===1 ? new Promise(resolveResponse=>respondWithOldSnapshot=()=>resolveResponse(Response.json({data:{id:'r',thread_id:'a',status:'running'}})))
+    : Response.json({data:{id:'r',thread_id:'a',status:'cancelled',usage:lateUsage,usage_pending:false,completed_at:date}})});
+  try {
+    await until(()=>Boolean(respondWithOldSnapshot));
+    await app.store.cancel(app.store.cancelTarget());
+    assert.equal(app.snapshots(),1,'未结束的旧 GET 与取消后补读互斥');
+    assert.equal(app.store.getSnapshot().views.a.run.status,'cancelled');
+    respondWithOldSnapshot();
+    await until(()=>app.store.getSnapshot().views.a.run.usage_pending===false);
+    assert.equal(app.snapshots(),2);
+    assert.equal(app.store.getSnapshot().views.a.run.status,'cancelled');
+    assert.deepEqual(app.store.getSnapshot().views.a.run.usage,lateUsage);
+    assert.equal(app.posts(),1);
+  } finally {app.close();}
+});
+
 test('取消与完成竞争按有效快照显示 completed 或 error，不伪造 cancelled', async()=> {
   for (const status of ['completed','error']) {
     const app=await setup(({setStatus}) => {setStatus(status);return Response.json({data:{id:'r',thread_id:'a',status}});});
@@ -81,7 +123,7 @@ test('错误身份／非终态／损坏响应只 GET 核实；核实仍活跃恢
     const app=await setup(()=>Response.json({data}));
     try {
       assert.equal(await app.store.cancel(app.store.cancelTarget()),false);
-      assert.equal(app.posts(),1); assert.equal(app.snapshots(),1);
+      assert.equal(app.posts(),1); assert.equal(app.snapshots(),2,'进入快照加取消后核实，各一次');
       const view=app.store.getSnapshot().views.a;
       assert.equal(view.run.status,'running'); assert.equal(view.write.phase,'unknown');
       assert.equal(view.write.verified,true); assert.equal(view.write.verifying,false);
@@ -110,11 +152,11 @@ test('取消失败尊重 Retry-After，GET 核实后才允许再次人工确认'
   try {
     const pending=app.store.cancel(app.store.cancelTarget());
     await until(()=>app.store.getSnapshot().views.a.write?.verifying);
-    assert.equal(app.snapshots(),0); assert.equal(app.store.canCancel(),false);
+    assert.equal(app.snapshots(),1,'进入时已读取一次，取消后尚未核实'); assert.equal(app.store.canCancel(),false);
     t.mock.timers.tick(9999); await new Promise(resolve=>setImmediate(resolve));
-    assert.equal(app.snapshots(),0);
+    assert.equal(app.snapshots(),1,'Retry-After 到期前不新增读取');
     t.mock.timers.tick(1); await pending;
-    assert.equal(app.snapshots(),1); assert.equal(app.posts(),1);
+    assert.equal(app.snapshots(),2); assert.equal(app.posts(),1);
     assert.equal(app.store.canCancel(),true);
   } finally {app.close();}
 });

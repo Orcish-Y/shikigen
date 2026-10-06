@@ -10,10 +10,9 @@ import {
   User,
   Plus,
   MagnifyingGlass,
-  Lightning,
 } from "@phosphor-icons/react";
 import type { Session } from "../data/demo";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { ListFailure } from "../conversation-state";
 
 interface HistoryPagination {
@@ -140,6 +139,7 @@ export function History({
   onCreate,
   creating = false,
   pagination,
+  usageSummary,
 }: {
   sessions: Session[];
   activeId: string;
@@ -149,6 +149,7 @@ export function History({
   onCreate: () => void;
   creating?: boolean;
   pagination?: HistoryPagination;
+  usageSummary?:ReactNode;
 }) {
   const list = useRef<HTMLElement>(null);
   const wheelGesture = useRef(false);
@@ -283,14 +284,7 @@ export function History({
           onRetry={() => void pagination.onMore(true)} onReload={pagination.onReload} />}
         {loaded && !hasMore && !pageError && <p className="list-feedback" role="status">没有更多</p>}
       </nav>
-      <div className="usage">
-        <span>
-          <Lightning size={15} />
-          当前 Run 用量
-        </span>
-        <p>暂无用量数据</p>
-        <small>用量信息见运行详情</small>
-      </div>
+      {usageSummary}
     </aside>
   );
 }

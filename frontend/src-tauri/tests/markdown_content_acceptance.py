@@ -254,13 +254,14 @@ class MarkdownAcceptance(MessageDraftAcceptance):
       self.assertTrue(
         self.evaluate("Boolean(document.activeElement.closest('dialog[open]'))")
       )
-    # WebView can resolve the declared 3px offset to a fractional value. Check
-    # the declaration and exact parity with the existing button in this viewport.
+    # Native DPI can quantize outline widths/offsets to fractional CSS pixels.
+    # Check the declarations and exact parity with the existing button.
     focus_styles = self.evaluate("""(() => {
       const pre = document.querySelector('dialog[open] pre');
       const close = document.querySelector('dialog[open] [aria-label=关闭]');
       const snapshot = element => {
         const offsets = [];
+        const outlines = [];
         const visit = rules => {
           for (const rule of rules) {
             if (rule instanceof CSSMediaRule && !matchMedia(rule.conditionText).matches)
@@ -270,6 +271,9 @@ class MarkdownAcceptance(MessageDraftAcceptance):
             if (rule instanceof CSSStyleRule && element.matches(rule.selectorText)
                 && rule.style.outlineOffset)
               offsets.push(rule.style.outlineOffset);
+            if (rule instanceof CSSStyleRule && element.matches(rule.selectorText)
+                && rule.style.outline)
+              outlines.push(rule.style.outline);
             if (rule.cssRules) visit(rule.cssRules);
           }
         };
@@ -279,6 +283,7 @@ class MarkdownAcceptance(MessageDraftAcceptance):
           active: document.activeElement === element,
           visible: element.matches(':focus-visible'),
           declaredOffsets: offsets,
+          declaredOutlines: outlines,
           resolved: [style.outlineColor, style.outlineWidth, style.outlineOffset],
         };
       };
@@ -288,11 +293,13 @@ class MarkdownAcceptance(MessageDraftAcceptance):
       pre.focus({preventScroll: true});
       return {content, button, restored: snapshot(pre)};
     })()""")
+    self.record(focus_styles=focus_styles)
     for style in focus_styles.values():
       self.assertTrue(style["active"])
       self.assertTrue(style["visible"])
       self.assertEqual(style["declaredOffsets"], ["3px"])
-      self.assertEqual(style["resolved"][:2], ["rgb(79, 70, 229)", "2px"])
+      self.assertEqual(style["declaredOutlines"], ["2px solid var(--accent)"])
+      self.assertEqual(style["resolved"][0], "rgb(79, 70, 229)")
     self.assertEqual(focus_styles["content"], focus_styles["button"])
     self.assertEqual(focus_styles["content"], focus_styles["restored"])
     self.screenshot()

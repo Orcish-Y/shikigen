@@ -82,6 +82,11 @@ export function useConversations(session: BackendSession | null, previewMode = f
       else store.updateDraft(value);
     },
     run: view.run, statusLabel: previewMode ? "示例会话" : statusLabel,
+    detailsAvailable:!previewMode && Boolean(view.run),
+    detailsAvailability:previewMode ? '示例预览暂无真实运行' : view.run ? '查看当前运行'
+      : view.history === 'ready' && view.verified ? '尚未开始运行'
+      : view.history === 'error' ? '运行身份读取失败' : activeId ? '运行身份正在读取' : '请先选择会话',
+    refreshRunDetails:store.refreshRunDetails,
     historyState: previewMode ? "ready" as const : view.history,
     loading: state.listing || view.history === "loading",
     verifying: Boolean(view.run && !view.verified && !view.error),

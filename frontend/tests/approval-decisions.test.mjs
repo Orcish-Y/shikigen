@@ -169,7 +169,7 @@ test('未知提交经正常全量 GET 已核实，后续快照失败不撤销这
   });
   try {
     const identity=chooseAll(app); app.store.submitApproval(identity);
-    await waitForState(()=>app.readView().queryFailure);
+    await waitForState(()=>app.readView().queryFailure && app.readView().approval?.verified && app.readView().write?.verified);
     assert.equal(app.readView().approval.verified,true);
     assert.equal(app.store.canSubmitApproval(identity),true);
     assert.equal(app.store.canCancel(),true);

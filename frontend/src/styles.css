@@ -868,6 +868,26 @@ textarea::placeholder {
 .details-content dd {
   margin: 0;
 }
+.run-details { overflow: auto; min-height: 0; }
+.run-details[hidden] { display: none; }
+.run-details .run-information > div { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 12px; }
+.run-information dd, .model-usage-row h4, .usage dd { overflow-wrap: anywhere; min-width: 0; }
+.run-identity, .run-utc, .usage-values dd { font-family: "JetBrains Mono", monospace; }
+.run-utc { display: block; margin-top: 6px; color: var(--muted); font-size: 11px; }
+.usage-values { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 12px 0; }
+.details-content .usage-values > div { display: block; padding: 0; border: 0; }
+.usage-values dt { color: var(--muted); font-size: 11px; }
+.usage-values dd { margin: 4px 0 0; overflow-wrap: anywhere; }
+.run-usage, .model-usage-row { border-top: 1px solid var(--border); margin-top: 20px; }
+.run-details h3 { font-size: 14px; }
+.model-usage summary { cursor: pointer; font-size: 12px; color: var(--secondary); }
+.model-usage-row h4 { font-size: 12px; font-weight: 500; margin: 12px 0; }
+.details-execution-error pre { max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+.details-execution-error p { overflow-wrap: anywhere; }
+.details-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+.read-failure { color: var(--danger, #be123c); }
+.run-details-subview { display: flex; flex-direction: column; min-height: 0; overflow: auto; }
+.run-details-subview > button { align-self: flex-start; margin: 16px 20px 0; }
 .mobile-navigation,
 .history-toggle,
 .panel-backdrop {
