@@ -45,8 +45,13 @@ export function Overlay({
       ref={ref}
       className={`overlay ${variant === 'sidebar' ? 'sidebar-dialog' : variant === 'drawer' ? 'drawer' : 'command-dialog'}`}
       aria-labelledby="overlay-title"
-      onCancel={event => { event.preventDefault(); onClose(); }}
+      onCancel={event => { event.preventDefault(); event.stopPropagation(); onClose(); }}
       onKeyDown={event => {
+        if (event.key === 'Escape' && !event.nativeEvent.isComposing && event.nativeEvent.keyCode !== 229) {
+          event.preventDefault(); event.stopPropagation();
+          if (!event.repeat) onClose();
+          return;
+        }
         if (event.key !== 'Tab' || event.altKey || event.ctrlKey || event.metaKey) return;
         const controls = [...event.currentTarget.querySelectorAll<HTMLElement>(
           'button, a[href], input, select, textarea, summary, [tabindex]',

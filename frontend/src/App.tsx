@@ -9,7 +9,6 @@ import {
   DownloadSimple,
   SlidersHorizontal,
   Terminal,
-  Plus,
 } from "@phosphor-icons/react";
 import { Navigation, History } from "./components/Sidebar";
 import { Conversation, Composer, type ConversationActions } from "./components/Conversation";
@@ -32,6 +31,10 @@ import { ConversationIdentity } from './components/ConversationIdentity';
 import { useNavigationLayout } from './useNavigationLayout';
 import type { SidebarView } from './navigation-layout';
 import { SidebarPanel } from './components/SidebarPanel';
+import { CommandPanel } from './components/CommandPanel';
+import type { CommandAction } from './command-panel';
+import { useWorkspaceShortcuts } from './useWorkspaceShortcuts';
+import { detectShortcutPlatform } from './workspace-shortcuts';
 
 export default function App() {
   const backend = useBackendState();
@@ -164,11 +167,12 @@ function Workspace({ session, conversations }: {
     conversations.setDetailsOpen(overlay==='details' && fileOpening.view.phase==='idle');
     return ()=>conversations.setDetailsOpen(false);
   },[overlay,fileOpening.view.phase,conversations.setDetailsOpen]);
-  const shortcut = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl";
+  const shortcut = detectShortcutPlatform(navigator.platform) === 'mac' ? "⌘" : "Ctrl";
 
   function toggleNavigation() {
+    setOverlay(null); setCancelTarget(null); closeFileOpen();
     if (layout.isDesktop) layout.toggleDesktopNavigation();
-    else openSidebar('navigation');
+    else setMobilePanel('navigation');
   }
   function openSidebar(view: SidebarView) {
     setOverlay(null); setCancelTarget(null); closeFileOpen();
@@ -181,16 +185,32 @@ function Workspace({ session, conversations }: {
     setMobilePanel(null); setCancelTarget(null); closeFileOpen(); setOverlay(view);
   }
   function findConversation() {
-    setOverlay(null);
-    if (layout.isDesktop) queueMicrotask(() => document.querySelector<HTMLInputElement>('.search input')?.focus());
+    setOverlay(null); setCancelTarget(null); closeFileOpen();
+    if (layout.isDesktop) requestAnimationFrame(() => document.querySelector<HTMLInputElement>('.search input')?.focus());
     else openSidebar('history');
   }
   function createSession() {
+    if (!conversations.canCreate) return;
     timeline.current?.rememberReadingPosition();
     void conversations.create();
-    setQuery("");
+    closeFileOpen(); setCancelTarget(null);
     setMobilePanel(null);
     setOverlay(null);
+  }
+  function selectConversation(conversationId: string) {
+    if (!sessions.some(conversation => conversation.id === conversationId)) return;
+    timeline.current?.rememberReadingPosition();
+    if (conversationId !== activeId) conversations.select(conversationId);
+    closeFileOpen(); setCancelTarget(null); setMobilePanel(null); setOverlay(null);
+  }
+  function executeCommand(action: CommandAction) {
+    switch (action.kind) {
+      case 'create-conversation': createSession(); break;
+      case 'toggle-navigation': toggleNavigation(); break;
+      case 'find-conversation': findConversation(); break;
+      case 'run-details': openRunDetails(); break;
+      case 'select-conversation': selectConversation(action.conversationId); break;
+    }
   }
   function updateDraft(value: string) {
     conversations.updateDraft(value);
@@ -203,32 +223,16 @@ function Workspace({ session, conversations }: {
       setExportNotice({message:`导出失败：${failure instanceof Error ? failure.message : String(failure)}`,failed:true});
     }
   }
-  useEffect(() => {
-    function keydown(event: KeyboardEvent) {
-      if (
-        (event.metaKey || event.ctrlKey) &&
-        !event.altKey &&
-        !event.isComposing
-      ) {
-        if (document.querySelector('dialog[open]')) {
-          if (event.key.toLowerCase() === 'k' && overlay === 'commands') {
-            event.preventDefault(); setOverlay(null);
-          }
-          return;
-        }
-        if (event.key.toLowerCase() === "k") {
-          event.preventDefault();
-          openCommands();
-        }
-        if (event.key.toLowerCase() === "n") {
-          event.preventDefault();
-          createSession();
-        }
-      }
-      if (event.key === "Escape") setMobilePanel(null);
+  useWorkspaceShortcuts(fileOpening.view.phase !== 'idle' || cancelTarget ? 'other'
+    : overlay === 'commands' ? 'commands' : overlay ? 'other'
+    : !layout.isDesktop && mobilePanel ? mobilePanel === 'navigation' ? 'navigation' : 'other' : 'none', action => {
+    switch (action) {
+      case 'open-commands': openCommands(); break;
+      case 'create-conversation': createSession(); break;
+      case 'toggle-navigation': toggleNavigation(); break;
+      case 'close-commands': setOverlay(null); break;
+      case 'close-navigation': setMobilePanel(null); break;
     }
-    window.addEventListener("keydown", keydown);
-    return () => window.removeEventListener("keydown", keydown);
   });
 
   const navigation = <Navigation backendReady={backendReady}
@@ -237,9 +241,7 @@ function Workspace({ session, conversations }: {
     onToggle={mobilePanel ? () => setMobilePanel(null) : toggleNavigation} onCommands={openCommands}/>;
   const history = <History sessions={sessions} activeId={activeId} query={query} onQuery={setQuery}
     readingPosition={historyReadingPosition} isVisible={layout.isDesktop || mobilePanel === 'history'}
-    onSelect={(id) => {
-      timeline.current?.rememberReadingPosition(); conversations.select(id); setMobilePanel(null);
-    }} onCreate={createSession} creating={conversations.creating || conversations.loading}
+    onSelect={selectConversation} onCreate={createSession} creating={!conversations.canCreate}
     pagination={conversations.pagination} onInspect={inspectConversation}
     usageSummary={<RunUsage isCompact run={conversations.run} snapshotRead={conversations.observationView.snapshotRead}
       verification={conversations.observationView.usageVerification} onContinue={conversations.continueUsageVerification} onReload={conversations.reload}
@@ -401,7 +403,7 @@ function Workspace({ session, conversations }: {
               preview={!session}
               session={active}
               hasConversation={Boolean(activeId)}
-              isCreating={conversations.creating || conversations.loading}
+              isCreating={!conversations.canCreate}
               onCreate={createSession}
               readState={activeId ? conversations.historyState : conversations.pagination?.listError ? 'error'
                 : conversations.pagination && (!conversations.pagination.loaded || conversations.pagination.refreshing) ? 'loading' : 'ready'}
@@ -449,7 +451,7 @@ function Workspace({ session, conversations }: {
         </Overlay>}
         {fileOpening.view.phase === 'idle' && cancelTarget && <Overlay title="取消本次运行？" initialFocus="#continue-running" onClose={() => setCancelTarget(null)}>
           <div className="cancel-confirmation">
-            <p className="cancel-conversation">所属会话：{sessions.find(item => item.id === cancelTarget.threadId)?.title ?? '新会话'}</p>
+            <p className="cancel-conversation">所属会话：{sessions.find(conversation => conversation.id === cancelTarget.threadId)?.title ?? '新会话'}</p>
             <p>取消不会撤销已经发生的工具操作，已开始的操作也不保证立即停止。</p>
             <div className="confirmation-actions">
               <button id="continue-running" className="secondary-button" onClick={() => setCancelTarget(null)}>继续运行</button>
@@ -460,33 +462,10 @@ function Workspace({ session, conversations }: {
           </div>
         </Overlay>}
         {fileOpening.view.phase === 'idle' && overlay === "commands" && (
-          <Overlay title="命令面板" onClose={() => setOverlay(null)}>
-            <div className="commands">
-              <button onClick={createSession}>
-                <Plus />
-                新建会话<kbd>{shortcut} N</kbd>
-              </button>
-              <button
-                onClick={() => {
-                  toggleNavigation();
-                  setOverlay(null);
-                }}
-              >
-                <SidebarSimple />
-                {layout.isCollapsed ? "展开" : "收起"}主导航
-              </button>
-              <button
-                onClick={findConversation}
-              >
-                <ClockCounterClockwise />
-                查找会话
-              </button>
-              <button onClick={openRunDetails} disabled={!conversations.detailsAvailable} title={conversations.detailsAvailability}>
-                <SlidersHorizontal />
-                查看运行详情
-              </button>
-            </div>
-          </Overlay>
+          <CommandPanel shortcut={shortcut} onExecute={executeCommand} onClose={() => setOverlay(null)}
+            context={{conversations:sessions, isDesktop:layout.isDesktop, isNavigationCollapsed:layout.isCollapsed,
+              createUnavailableReason:conversations.canCreate ? null : conversations.createAvailability,
+              detailsUnavailableReason:conversations.detailsAvailable ? null : conversations.detailsAvailability}}/>
         )}
         {fileOpening.view.phase === 'idle' && overlay === "details" && (
           <Overlay title="运行详情" variant="drawer" onClose={() => setOverlay(null)}>

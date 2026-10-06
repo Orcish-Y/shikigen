@@ -68,6 +68,10 @@ export function useConversations(session: BackendSession | null, previewMode = f
     readingFactsReady:previewMode || readingHistoryReady(view),
     acceptedSendId:view.acceptedSendId,
     select: (id: string) => previewMode ? setPreviewId(id) : store.select(id),
+    canCreate:!previewMode && store.canCreate(),
+    createAvailability:previewMode ? '界面预览未连接真实后端' : !session || session.signal.aborted ? '后端未连接'
+      : !visible ? '工作台暂不可见' : state.creating ? '正在创建会话，请稍候'
+      : state.listing ? '正在读取会话列表，请稍候' : '新建会话',
     create: async () => {
       if (!previewMode) return store.create();
       const conversation: Session = { id: crypto.randomUUID(), title: "新会话", group: "今天", summary: "尚未开始对话", messages: [] };

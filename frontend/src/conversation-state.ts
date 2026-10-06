@@ -449,9 +449,13 @@ export class ConversationStore {
     this.publishInputs();
   }
 
+  canCreate() {
+    return Boolean(this.visible && this.session && !this.session.signal.aborted && !this.creation && !this.state.listing);
+  }
+
   async create() {
     const session = this.session;
-    if (!this.visible || !session || session.signal.aborted || this.creation || this.state.listing) return;
+    if (!this.canCreate() || !session) return;
     const intent = ++this.intent;
     const creation = this.creation = {};
     this.publishState({ creating: true, notice: null });

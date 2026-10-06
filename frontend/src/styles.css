@@ -844,24 +844,81 @@ textarea::placeholder {
 }
 .command-dialog {
   width: min(480px, calc(100vw - 32px));
+  max-width: none;
   border-radius: 10px;
   margin: 15vh auto auto;
 }
-.commands {
-  display: grid;
-  padding: 8px;
+.command-panel {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(85dvh - 80px);
+  min-height: 0;
 }
-.commands button {
+.command-search {
   display: flex;
   align-items: center;
   gap: 10px;
+  margin: 12px 16px 0;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.command-search:focus-within { border-color: #a5b4fc; }
+.command-search input {
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  border: 0;
+  background: transparent;
+  color: #0f172a;
+  font-size: 14px;
+}
+.command-scope, .command-help {
+  padding: 8px 20px;
+  color: var(--muted);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.command-help { border-top: 1px solid var(--border); }
+.command-results {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 8px 8px;
+}
+.command-group {
+  padding: 8px 12px 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.command-choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
   text-align: left;
   padding: 12px;
   border: 0;
   background: transparent;
 }
-.commands kbd {
+.command-copy { display: grid; gap: 3px; min-width: 0; }
+.command-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.command-description { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.command-choice:disabled { opacity: 1; color: var(--muted); }
+.command-choice[aria-selected=true] { background: var(--accent-soft); color: var(--accent); }
+.command-choice[aria-selected=true]:hover { background: #e0e7ff; }
+.command-choice kbd {
   margin-left: auto;
+  white-space: nowrap;
+}
+.command-empty {
+  padding: 24px 12px;
+  color: var(--muted);
+  font-size: 14px;
 }
 .drawer {
   position: fixed;
