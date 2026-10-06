@@ -9,7 +9,7 @@ export interface ApprovalAction {
 }
 export interface ApprovalChoice {type:'approve' | 'reject' | null; reason:string}
 export interface ApprovalDraft {
-  identity:string; runId:string; request:ApprovalRequired;
+  identity:string; runId:string; request:ApprovalRequired; version:number;
   choices:Record<string, ApprovalChoice[]>;
 }
 export interface ApprovalRecord {
@@ -60,7 +60,7 @@ export function parseApproval(request:ApprovalRequired) {
 }
 
 export function createApprovalDraft(runId:string, request:ApprovalRequired):ApprovalDraft {
-  return {identity:createApprovalIdentity(runId, request), runId, request,
+  return {identity:createApprovalIdentity(runId, request), runId, request, version:0,
     choices:Object.fromEntries(parseApproval(request).interrupts.map(interrupt=>[interrupt.id,
       interrupt.actions.map(()=>({type:null, reason:''}))]))};
 }
@@ -69,7 +69,7 @@ export function updateApprovalChoice(draft:ApprovalDraft, interruptId:string, in
   const choices = draft.choices[interruptId];
   const action = parseApproval(draft.request).interrupts.find(interrupt=>interrupt.id === interruptId)?.actions[index];
   if (!choices?.[index] || !action || choiceUpdate.type && !action.allowedChoices.includes(choiceUpdate.type)) return draft;
-  return {...draft, choices:{...draft.choices, [interruptId]:choices.map((choice, position)=>position === index ? {...choice, ...choiceUpdate} : choice)}};
+  return {...draft, version:draft.version+1, choices:{...draft.choices, [interruptId]:choices.map((choice, position)=>position === index ? {...choice, ...choiceUpdate} : choice)}};
 }
 
 export function buildApprovalResponses(draft:ApprovalDraft):ApprovalResponses | null {

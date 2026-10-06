@@ -22,6 +22,7 @@ import { RunFailure } from './components/RunFailure';
 import type { BackendSession } from "./backend-client";
 import type { CancelTarget } from './conversation-state';
 import { useConversations } from "./useConversations";
+import { ApprovalRecovery } from './components/ApprovalRecovery';
 import { useWorkspaceVisibility } from './useWorkspaceVisibility';
 
 function initialCollapsed() {
@@ -281,8 +282,11 @@ function Workspace({ session, conversations }: {
             {conversations.write && <section className="business-notice" aria-label={conversations.write.kind === 'approval' ? '审批结果核实' : '取消结果核实'}>
               <p role="status">{conversations.write.kind === 'approval'
                 ? conversations.write.phase === 'pending' ? '正在确认审批提交…'
-                  : conversations.write.verifying ? '审批提交结果待确认，正在核实当前请求…'
+                  : conversations.write.verifying ? '正在核实审批请求及提交结果…'
                   : conversations.write.verified ? '已核实当前请求。可核对后手动重新提交；先前请求仍可能迟到生效。'
+                  : conversations.write.failure?.status === 409 ? '审批已变化，请核实同一运行；以当前请求和实际处理记录为准。'
+                  : conversations.write.failure?.status === 422 ? '审批校验未通过，选择和服务端校验详情已保留；核实后可修改并手动提交。'
+                  : conversations.write.failure?.status === 503 ? '审批暂不可提交，已保留输入；核实与重新提交需等待服务端指定时间。'
                   : '审批提交结果待确认，请核实当前请求；不会自动再次提交。'
                 : conversations.write.phase === 'pending' ? '正在确认取消结果…'
                   : conversations.write.verifying ? '取消结果待确认，正在查询真实状态…'
@@ -305,6 +309,7 @@ function Workspace({ session, conversations }: {
             </details>}
             {conversations.verifying && <p className="business-notice" role="status">正在核实当前运行状态…</p>}
             {conversations.storageIssue && <p className="business-notice" role="alert">{conversations.storageIssue}</p>}
+            <ApprovalRecovery records={conversations.approvalRecoveryRecords} onView={setOverlay}/>
             {conversations.missing && <section className="business-notice" aria-label="会话文字保留">
               <p>会话不存在；草稿和提交原文仍保留，可以复制到新会话后手动发送。</p>
               <DraftCopy text={conversations.draft || conversations.submission?.text || ''}

@@ -3,7 +3,8 @@ import { RunProjection, sameFact, terminalRun, type ApprovalProjection, type Con
 import { RunProtocolError } from './run-protocol.ts';
 import { MessageDrafts, type DraftStorage, type MessageSubmission } from './message-drafts.ts';
 import { ObservationRecovery, StreamObservationError, UnexpectedObservationEnd, observationFailure, retryAfterTime, waitUntil, type ObservationState, type ObservationFailure, type RecoveryUpdate } from './observation-recovery.ts';
-import { createApprovalIdentity, buildApprovalResponses, createApprovalDraft, parseApproval, updateApprovalChoice, type ApprovalChoice, type ApprovalDraft } from './approval-decisions.ts';
+import { collectApprovalRecords, createApprovalIdentity, buildApprovalResponses, parseApproval, updateApprovalChoice, type ApprovalChoice, type ApprovalDraft } from './approval-decisions.ts';
+import { ApprovalDrafts, type ApprovalBackup } from './approval-drafts.ts';
 export type { ConversationMessage } from './run-projection.ts';
 
 const THREAD_PAGE_SIZE = 20;
@@ -11,6 +12,7 @@ export interface CancelTarget {threadId:string; runId:string; startupId:string; 
 export interface RunWriteState {
   runId:string; kind:'cancel' | 'approval'; phase:'pending' | 'unknown';
   verified:boolean; verifying:boolean; retryAt:number; failure:ObservationFailure | null;
+  identity?:string; submissionId?:string;
 }
 
 export interface ListFailure { message: string; retryAt: number; invalidCursor: boolean }
@@ -63,6 +65,7 @@ export interface ConversationState {
   notice: string | null;
   storageIssue: string | null;
   submissions: Record<string, MessageSubmission>;
+  approvalBackups:ApprovalBackup[];
 }
 export const emptyConversation: ConversationView = {
   messages: [], run: null, runStatuses:{}, history: "idle", verified: false, error: null, sending: false, acceptedSendId:null, events:{}, approval:null, approvalDraft:null, acceptedApproval:null, observation:'idle', retry:null, observationFailure:null, querying:false, queryFailure:null, sendFailure:null, protocolIssue:null, missing:false, write:null, savedContent:'idle', savedContentFailure:null,
@@ -78,7 +81,7 @@ export class ConversationStore {
   private state: ConversationState = {
     threads: [], activeId: "", views: {}, drafts: {}, listing: false,
     listLoaded: false, loadingMore: false, nextCursor: null, pageError: null,
-    creating: false, listError: null, notice: null, storageIssue:null, submissions:{},
+    creating: false, listError: null, notice: null, storageIssue:null, submissions:{}, approvalBackups:[],
   };
   private listeners = new Set<() => void>();
   private session: BackendSession | null = null;
@@ -100,6 +103,7 @@ export class ConversationStore {
   private intent = 0;
   private projections = new Map<string, RunProjection>();
   private inputs: MessageDrafts;
+  private approvals:ApprovalDrafts;
   private writeRequest:AbortController | null = null;
   private savedRequests = new Map<string, AbortController>();
   private savedReads = new Map<string, 'reading' | 'ready' | 'error'>();
@@ -107,12 +111,14 @@ export class ConversationStore {
 
   constructor(options: {storage?: DraftStorage | null} = {}) {
     this.inputs = new MessageDrafts(options.storage);
+    this.approvals = new ApprovalDrafts(options.storage);
     this.state = {...this.state, activeId:this.inputs.selected, ...this.inputState()};
   }
 
   private inputState() {
     return {drafts:Object.fromEntries(Object.entries(this.inputs.drafts).map(([id, draft]) => [id, draft.text])),
-      storageIssue:this.inputs.storageIssue, submissions:this.inputs.submissions};
+      storageIssue:this.approvals.storageIssue ?? this.inputs.storageIssue, submissions:this.inputs.submissions,
+      approvalBackups:this.approvals.records};
   }
 
   private publishInputs() { this.publishState(this.inputState()); }
@@ -143,16 +149,34 @@ export class ConversationStore {
     if (viewUpdate.approval && run) {
       const identity = createApprovalIdentity(run.run_id, viewUpdate.approval.request.payload);
       if (identity !== previous?.approvalDraft?.identity) {
-        viewUpdate = {...viewUpdate, approvalDraft:createApprovalDraft(run.run_id, viewUpdate.approval.request.payload)};
+        viewUpdate = {...viewUpdate, approvalDraft:this.approvals.restoreDraft(threadId,run.run_id,viewUpdate.approval.request.payload)};
       }
     }
+    const currentDraft=Object.hasOwn(viewUpdate,'approvalDraft')?viewUpdate.approvalDraft:previous?.approvalDraft;
+    const backup=currentDraft?this.approvals.findRecord(threadId,currentDraft.identity):null;
+    if(backup?.submission&&run?.run_id===backup.draft.runId){
+      if(backup.submission.status==='accepted')viewUpdate={...viewUpdate,acceptedApproval:backup.draft.identity};
+      else if(!Object.hasOwn(viewUpdate,'write')&&(!previous?.write||previous.write.kind==='approval'&&previous.write.identity!==backup.draft.identity)){
+        viewUpdate={...viewUpdate,write:{runId:run.run_id,kind:'approval',phase:'unknown',verified:false,verifying:false,
+          identity:backup.draft.identity,submissionId:backup.submission.id,retryAt:backup.submission.retryAt,failure:backup.submission.failure}};
+      }
+    }else if(currentDraft&&previous?.write?.kind==='approval'&&previous.write.identity!==currentDraft.identity&&!Object.hasOwn(viewUpdate,'write')){
+      viewUpdate={...viewUpdate,write:null};
+    }
     const draft = Object.hasOwn(viewUpdate, 'approvalDraft') ? viewUpdate.approvalDraft : previous?.approvalDraft;
-    const hasResolution = draft && (viewUpdate.events ?? previous?.events)?.[draft.runId]?.some(event=>event.category === 'approval'
-      && event.payload.status !== 'required' && sameFact(event.payload.checkpoint, draft.request.checkpoint));
+    const events=viewUpdate.events??previous?.events??{};
+    const processedIdentities=new Set(collectApprovalRecords(events).filter(record=>record.resolution).map(record=>record.identity));
+    const hasResolution=Boolean(draft&&processedIdentities.has(draft.identity));
+    const statuses={...(viewUpdate.runStatuses??previous?.runStatuses),...(run?{[run.run_id]:run.status}:{})};
+    for(const record of this.approvals.records.filter(record=>record.threadId===threadId)){
+      if(['completed','cancelled','error'].includes(statuses[record.draft.runId])
+        ||processedIdentities.has(record.draft.identity))this.approvals.removeDraft(record.draft.identity);
+    }
     if (run && terminalRun(run) || hasResolution) {
       viewUpdate = {...viewUpdate, approvalDraft:null, ...(run && terminalRun(run) || previous?.write?.kind === 'approval' ? {write:null} : {})};
     }
-    this.publishState({ views: { ...this.state.views,
+    if(viewUpdate.approvalDraft)this.approvals.saveDraft(threadId,viewUpdate.approvalDraft);
+    this.publishState({ ...this.inputState(), views: { ...this.state.views,
       [threadId]: { ...(this.state.views[threadId] ?? emptyConversation), ...viewUpdate },
     } });
     const view = this.state.views[threadId];
@@ -166,6 +190,10 @@ export class ConversationStore {
     this.writeRequest?.abort();
     this.writeRequest = null;
     const write = this.state.views[id]?.write;
+    if(write?.kind==='approval'&&write.phase==='pending'&&write.identity&&write.submissionId){
+      this.approvals.markSubmissionUnknown(id,write.identity,write.submissionId,
+        {kind:'unknown',message:'审批连接已停止，接受情况待核实；不会撤回服务端决策或自动再次提交。',recoverable:false},write.retryAt);
+    }
     if (write) this.updateView(id, {write:{...write, phase:'unknown', verified:false, verifying:false}});
     for (const [key, controller] of this.savedRequests) {
       controller.abort(); this.savedReads.delete(key);
@@ -626,8 +654,10 @@ export class ConversationStore {
     const draft = this.state.views[threadId].approvalDraft!, runId = draft.runId;
     const responses = buildApprovalResponses(draft)!;
     this.stopSelection();
+    const submission=this.approvals.beginSubmission(threadId,draft,responses);
     const controller = this.selection = this.writeRequest = new AbortController();
-    this.updateView(threadId, {write:{runId, kind:'approval', phase:'pending', verified:false, verifying:false, retryAt:0, failure:null}});
+    this.updateView(threadId, {write:{runId, kind:'approval', phase:'pending', verified:false, verifying:false, retryAt:0, failure:null,
+      identity,submissionId:submission.id}});
     const receiveFrame = this.createFrameReceiver(session, controller, threadId, runId, false);
     let isAccepted = false, endedNormally = false, streamFailure:unknown;
     void session.submitApproval(threadId, runId, responses, frame=> {
@@ -636,6 +666,7 @@ export class ConversationStore {
       if (!this.live(session, controller) || this.state.views[threadId].run?.run_id !== runId) return;
       if (frame.event === 'metadata' && !isAccepted) {
         isAccepted = true;
+        this.approvals.acceptSubmission(threadId,identity,submission.id);
         if (this.writeRequest === controller) this.writeRequest = null;
         // 仅本次 POST 的有效 metadata 确认接收；历史决策仍等待 resolved 事实。
         this.updateView(threadId, {write:null, acceptedApproval:identity});
@@ -649,9 +680,10 @@ export class ConversationStore {
       if (!isAccepted) {
         const retryAt = retryAfterTime(failure.retryAfter ?? null);
         const key = `${threadId}:${runId}`;
+        this.approvals.markSubmissionUnknown(threadId,identity,submission.id,failure,retryAt);
         this.retryDeadlines.set(key, Math.max(this.retryDeadlines.get(key) ?? 0, retryAt));
         this.updateView(threadId, {verified:false, write:{runId, kind:'approval', phase:'unknown', verified:false,
-          verifying:false, retryAt, failure}});
+          verifying:false, retryAt, failure,identity,submissionId:submission.id}});
       }
       this.updateView(threadId, {observation:'failed', ...(error instanceof RunProtocolError
         ? {protocolIssue:{message:error.message, raw:error.raw}} : {})});
@@ -660,8 +692,10 @@ export class ConversationStore {
       if (!this.live(session, controller)) return;
       if (this.observing?.controller === controller) this.observing = null;
       if (!isAccepted && this.state.views[threadId].write?.phase === 'pending') {
+        const failure=observationFailure(new UnexpectedObservationEnd('审批接收确认前连接结束'));
+        this.approvals.markSubmissionUnknown(threadId,identity,submission.id,failure);
         this.updateView(threadId, {verified:false, write:{runId, kind:'approval', phase:'unknown', verified:false,
-          verifying:false, retryAt:0, failure:observationFailure(new UnexpectedObservationEnd('审批接收确认前连接结束'))}});
+          verifying:false, retryAt:0, failure,identity,submissionId:submission.id}});
       }
       // 未确认的 POST 先 GET 核实；已接收的断流只恢复观察，绝不再 POST。
       if (!endedNormally || this.projection(threadId).run?.status === 'interrupted') {
@@ -831,6 +865,9 @@ export class ConversationStore {
     const run = projection.run;
     this.updateView(threadId, {...projection.snapshot(), history:'ready', verified:!run});
     if (!run) {this.updateView(threadId, {observation:'idle', retry:null, observationFailure:null}); return;}
+    const retryAt=Math.max(0,...this.approvals.records.filter(record=>record.threadId===threadId&&record.draft.runId===run.run_id)
+      .map(record=>record.submission?.retryAt??0));
+    this.retryDeadlines.set(`${threadId}:${run.run_id}`,Math.max(this.retryDeadlines.get(`${threadId}:${run.run_id}`)??0,retryAt));
     if (run.status === 'running' || run.status === 'interrupted') {
       const completed = await this.observeRun(session, controller, threadId, run.run_id);
       if (completed) await this.readSnapshot(session, controller, threadId, run.run_id);
@@ -884,6 +921,12 @@ export class ConversationStore {
     const recovery = new ObservationRecovery(AbortSignal.any([controller.signal, session.signal]), this.retryDeadlines.get(key) ?? 0, update => {
       if (!this.live(session, controller) || this.recovery !== recovery) return;
       this.retryDeadlines.set(key, recovery.retryAt);
+      const write=this.state.views[threadId].write;
+      if(write?.kind==='approval'&&write.identity&&write.submissionId&&recovery.retryAt>write.retryAt){
+        this.approvals.markSubmissionUnknown(threadId,write.identity,write.submissionId,
+          update.observationFailure??write.failure??{kind:'unknown',message:'审批结果仍待核实',recoverable:false},recovery.retryAt);
+        this.updateView(threadId,{write:{...write,retryAt:recovery.retryAt}});
+      }
       this.updateView(threadId, {...update,
         ...(update.observation === 'retry_wait' || update.observation === 'failed' ? {verified:false,
           error:update.observationFailure?.status === 404 ? `运行不可读取：${update.observationFailure.message}` : update.observationFailure?.message ?? null,
@@ -932,6 +975,9 @@ export class ConversationStore {
         const key = `${threadId}:${runId}`;
         this.retryDeadlines.set(key, Math.max(this.retryDeadlines.get(key) ?? 0, retryAfterTime(failure.retryAfter ?? null)));
         this.updateView(threadId, {error:`读取运行快照失败：${String(error)}`, queryFailure:failure,
+        ...(failure.status===404?{verified:false,
+          approval:this.state.views[threadId].approval?{...this.state.views[threadId].approval!,verified:false}:null,
+          write:this.state.views[threadId].write?{...this.state.views[threadId].write!,verified:false}:null}:{}),
         ...(error instanceof RunProtocolError ? {protocolIssue:{message:error.message, raw:error.raw}} : {})});
       }
     }

@@ -89,6 +89,8 @@ export function useConversations(session: BackendSession | null, previewMode = f
     validCancelTarget:(target:Parameters<ConversationStore['canCancel']>[0]) => store.canCancel(target),
     write:view.write,
     approvalCards:previewMode ? [] : collectApprovalRecords(view.events),
+    approvalRecoveryRecords:previewMode ? [] : state.approvalBackups.filter(record=>record.threadId===activeId
+      &&(record.submission?.status==='unknown'||!collectApprovalRecords(view.events).some(approval=>approval.identity===record.draft.identity))),
     approvalDraft:view.approvalDraft,
     currentApproval:view.approval,
     acceptedApproval:view.acceptedApproval,
