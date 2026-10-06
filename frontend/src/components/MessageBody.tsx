@@ -7,16 +7,23 @@ import { codeTitle, messagePrefix, messageSchema, referenceKind, rehypeFootnoteS
 import { ContentBlock, CopyContent } from './ContentViewer';
 import { WorkspaceImage } from './WorkspaceImage';
 import type { WorkspaceResource } from '../backend-client';
+import { WorkspaceFileButton } from './WorkspaceFileOpen';
 
 export type ContentView = { title: string; text: string; preview?: boolean; generating?:boolean;
-  image?:{url:string; reference:string; resource:WorkspaceResource};
+  image?:{url:string; reference:string; messageIdentity:string; resource:WorkspaceResource};
   approval?:{runId:string; identity:string; namespace?:string; description?:string | null} };
 export type MessageRole = 'assistant' | 'user' | 'tool';
 
-function Reference({reference, children, image = false}: {reference:string; children:ReactNode; image?:boolean}) {
+function Reference({reference, messageIdentity, children, isImage = false}: {reference:string; messageIdentity:string; children:ReactNode; isImage?:boolean}) {
   const [error, setError] = useState('');
   const kind = referenceKind(reference);
-  if (kind === 'web' && !image) return <span className="markdown-reference">
+  if (kind === 'local' && !isImage && !/[\\/]$/.test(reference)) return <span className="markdown-reference">
+    <WorkspaceFileButton reference={reference} messageIdentity={messageIdentity}>{children}</WorkspaceFileButton>
+    <span className="reference-path">{reference}</span>
+    <span className="reference-note">当前工作目录内的文件 · 每次打开都需确认，目录打开不支持</span>
+    <CopyContent text={reference} label="复制引用" />
+  </span>;
+  if (kind === 'web' && !isImage) return <span className="markdown-reference">
     <button className="markdown-link" title={reference} onClick={() => {
       setError('');
       if (!isTauri()) { setError('网页打开仅在桌面应用中可用'); return; }
@@ -29,7 +36,8 @@ function Reference({reference, children, image = false}: {reference:string; chil
   return <span className="markdown-reference readonly-reference">
     <span>{children}</span>
     <span className="reference-path">{reference}</span>
-    <span className="reference-note">{image && kind === 'web' ? '网页图片未自动加载'
+    <span className="reference-note">{isImage && kind === 'web' ? '网页图片未自动加载'
+      : kind === 'local' && !isImage ? '目录引用暂不支持打开（只读）'
       : kind === 'local' ? '本地资源（只读引用）' : '未支持的链接（只读）'}</span>
     <CopyContent text={reference} label="复制引用" />
   </span>;
@@ -72,7 +80,7 @@ const markdownComponents: Components = {
   a:function MarkdownLink({node, children, href}) {
     const {identity} = useContext(MarkdownContext)!;
     const reference = node?.properties.dataReference;
-    if (typeof reference === 'string') return <Reference reference={reference}>{children}</Reference>;
+    if (typeof reference === 'string') return <Reference reference={reference} messageIdentity={identity}>{children}</Reference>;
     // Only generated message-scoped footnotes keep an anchor target.
     return <button className="markdown-link" id={typeof node?.properties.id === 'string' ? node.properties.id : undefined} onClick={() => {
       if (href?.startsWith(`#${messagePrefix(identity)}`)) {
@@ -82,11 +90,11 @@ const markdownComponents: Components = {
     }}>{children}</button>;
   },
   img:function MarkdownImage({node, alt}) {
-    const {onView} = useContext(MarkdownContext)!;
+    const {identity, onView} = useContext(MarkdownContext)!;
     const reference = String(node?.properties.dataReference ?? '');
     return referenceKind(reference) === 'local'
-      ? <WorkspaceImage reference={reference} alt={alt || '图片'} onView={onView}/>
-      : <Reference image reference={reference}>{alt || '图片'}</Reference>;
+      ? <WorkspaceImage reference={reference} messageIdentity={identity} alt={alt || '图片'} onView={onView}/>
+      : <Reference isImage reference={reference} messageIdentity={identity}>{alt || '图片'}</Reference>;
   },
 };
 

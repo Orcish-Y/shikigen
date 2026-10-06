@@ -3,10 +3,70 @@ mod desktop;
 pub mod process;
 mod single_instance;
 pub mod web_open;
+pub mod workspace_file_open;
 use backend::{BackendManager, BackendSnapshot, LaunchPlan};
 use std::sync::Arc;
 use tauri::{Emitter, Manager};
 use tauri_plugin_opener::OpenerExt;
+use workspace_file_open::{PreparedFileOpen, WorkspaceFileError, WorkspaceFileOpens};
+
+#[tauri::command]
+async fn prepare_workspace_file_open(
+    window: tauri::WebviewWindow,
+    intents: tauri::State<'_, Arc<WorkspaceFileOpens>>,
+    startup_id: String,
+    path: String,
+) -> Result<PreparedFileOpen, WorkspaceFileError> {
+    let intents = intents.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        if !window.is_visible().unwrap_or(false) {
+            return Err(WorkspaceFileError {
+                code: "hidden_window",
+                message: "窗口已隐藏，请重新点击文件链接".into(),
+            });
+        }
+        intents.prepare_file_open(window.label(), &startup_id, &path)
+    })
+    .await
+    .map_err(|error| WorkspaceFileError {
+        code: "file_prepare_failed",
+        message: error.to_string(),
+    })?
+}
+
+#[tauri::command]
+async fn open_prepared_workspace_file(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    intents: tauri::State<'_, Arc<WorkspaceFileOpens>>,
+    request_id: String,
+) -> Result<bool, WorkspaceFileError> {
+    let intents = intents.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        intents.open_prepared_file(window.label(), &request_id, |target| {
+            if !window.is_visible().unwrap_or(false) {
+                return Err("窗口已隐藏，本次文件打开已失效".into());
+            }
+            app.opener()
+                .open_path(target.to_string_lossy(), None::<&str>)
+                .map_err(|error| error.to_string())
+        })
+    })
+    .await
+    .map_err(|error| WorkspaceFileError {
+        code: "file_open_failed",
+        message: error.to_string(),
+    })?
+}
+
+#[tauri::command]
+fn discard_prepared_workspace_file(
+    window: tauri::WebviewWindow,
+    intents: tauri::State<'_, Arc<WorkspaceFileOpens>>,
+    request_id: String,
+) -> Result<bool, WorkspaceFileError> {
+    intents.discard_file_intent(window.label(), &request_id)
+}
 
 #[tauri::command]
 async fn open_web_url(
@@ -112,7 +172,10 @@ pub fn run_with_backend(
             retry_backend,
             get_tray_error,
             get_workspace_visibility,
-            open_web_url
+            open_web_url,
+            prepare_workspace_file_open,
+            open_prepared_workspace_file,
+            discard_prepared_workspace_file
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -121,11 +184,27 @@ pub fn run_with_backend(
         })
         .setup(move |app| {
             let handle = app.handle().clone();
+            let backend_app = handle.clone();
+            let file_intents = Arc::new(WorkspaceFileOpens::new(Arc::new(move || {
+                backend_app
+                    .try_state::<Arc<BackendManager>>()
+                    .map(|manager| manager.snapshot())
+                    .unwrap_or(BackendSnapshot {
+                        state: "stopped".into(),
+                        revision: 0,
+                        startup_id: None,
+                        base_url: None,
+                        can_retry: false,
+                        error: None,
+                    })
+            }))?);
+            app.manage(file_intents.clone());
             app.manage(desktop::Desktop::install(&handle));
             let manager = BackendManager::start(
                 load_plan,
                 launcher,
                 Arc::new(move |snapshot| {
+                    file_intents.invalidate_file_intents();
                     let _ = handle.emit("backend-state-changed", &snapshot);
                     desktop::backend_changed(&handle, snapshot);
                 }),

@@ -25,6 +25,7 @@ import { useConversations } from "./useConversations";
 import { ApprovalRecovery } from './components/ApprovalRecovery';
 import { useWorkspaceVisibility } from './useWorkspaceVisibility';
 import { WorkspaceImageProvider } from './components/WorkspaceImage';
+import { FileOpenConfirmation, WorkspaceFileOpenProvider, useWorkspaceFileOpening } from './components/WorkspaceFileOpen';
 
 function initialCollapsed() {
   try {
@@ -51,7 +52,7 @@ export default function App() {
       stopped: "后端已停止",
     };
     return (
-      <main className="backend-screen" aria-live="polite">
+      <main className="backend-screen" tabIndex={-1} aria-live="polite">
         <TrayNotice />
         <img src="/logo.svg" alt="" width="40" height="40" />
         <h1>{backend.error ? "无法读取后端状态" : labels[state?.state ?? "starting"]}</h1>
@@ -79,6 +80,12 @@ export default function App() {
   return <Workspace session={backend.session} conversations={conversations} />;
 }
 
+function isFileSourcePresent(reference:string, messageIdentity:string) {
+  return [...document.querySelectorAll<HTMLElement>('.timeline [data-file-reference]')]
+    .some(element => element.dataset.fileReference === reference
+      && element.dataset.fileMessageIdentity === messageIdentity);
+}
+
 function Workspace({ session, conversations }: {
   session: BackendSession | null;
   conversations: ReturnType<typeof useConversations>;
@@ -92,6 +99,27 @@ function Workspace({ session, conversations }: {
   >(null);
   const [overlay, setOverlay] = useState<"commands" | "details" | ContentView | null>(null);
   const [cancelTarget, setCancelTarget] = useState<CancelTarget | null>(null);
+  const fileOpening = useWorkspaceFileOpening(session, activeId, conversations.visible);
+  function closeFileOpen() {fileOpening.controller?.closeFileOpen();}
+  function requestFileOpen(reference:string, messageIdentity:string) {
+    if (!session || session.signal.aborted || !conversations.visible || !fileOpening.controller) return;
+    if (fileOpening.view.phase === 'preparing' || fileOpening.view.phase === 'opening') return;
+    if (!isFileSourcePresent(reference, messageIdentity)) return;
+    setOverlay(null); setCancelTarget(null); setMobilePanel(null);
+    void fileOpening.controller.prepareFileOpen(reference, messageIdentity);
+  }
+  useEffect(() => {
+    if (fileOpening.view.phase === 'idle') return;
+    const checkReference = () => {
+      if (!isFileSourcePresent(fileOpening.view.reference, fileOpening.view.messageIdentity))
+        fileOpening.controller?.closeFileOpen();
+    };
+    checkReference();
+    const observer = new MutationObserver(checkReference);
+    const timeline = document.querySelector('.timeline');
+    if (timeline) observer.observe(timeline, {childList:true, subtree:true, attributes:true, attributeFilter:['data-file-reference','data-file-message-identity']});
+    return () => observer.disconnect();
+  }, [fileOpening.controller, fileOpening.view.reference, fileOpening.view.messageIdentity, fileOpening.view.phase]);
   useEffect(() => {
     setOverlay(currentOverlay => currentOverlay && typeof currentOverlay === 'object' && currentOverlay.image ? null : currentOverlay);
   }, [session, conversations.visible]);
@@ -183,6 +211,7 @@ function Workspace({ session, conversations }: {
 
 
   return (
+    <WorkspaceFileOpenProvider onRequest={requestFileOpen}>
     <WorkspaceImageProvider session={session} threadId={activeId} isVisible={conversations.visible}>
     <IconContext.Provider value={{ weight: "regular", size: 18 }}>
       <div
@@ -382,7 +411,15 @@ function Workspace({ session, conversations }: {
             />
           </main>
         </div>
-        {cancelTarget && <Overlay title="取消本次运行？" initialFocus="#continue-running" onClose={() => setCancelTarget(null)}>
+        {fileOpening.view.phase !== 'idle' && <Overlay title="打开本地文件？" initialFocus="#cancel-file-open" onClose={closeFileOpen}>
+          <FileOpenConfirmation view={fileOpening.view} onClose={closeFileOpen}
+            onConfirm={() => {
+              if (!isFileSourcePresent(fileOpening.view.reference, fileOpening.view.messageIdentity)) {closeFileOpen(); return;}
+              void fileOpening.controller?.confirmFileOpen();
+            }}
+            onPrepare={() => void fileOpening.controller?.prepareFileOpen(fileOpening.view.reference, fileOpening.view.messageIdentity)}/>
+        </Overlay>}
+        {fileOpening.view.phase === 'idle' && cancelTarget && <Overlay title="取消本次运行？" initialFocus="#continue-running" onClose={() => setCancelTarget(null)}>
           <div className="cancel-confirmation">
             <p className="cancel-conversation">所属会话：{sessions.find(item => item.id === cancelTarget.threadId)?.title ?? '新会话'}</p>
             <p>取消不会撤销已经发生的工具操作，已开始的操作也不保证立即停止。</p>
@@ -394,7 +431,7 @@ function Workspace({ session, conversations }: {
             </div>
           </div>
         </Overlay>}
-        {overlay === "commands" && (
+        {fileOpening.view.phase === 'idle' && overlay === "commands" && (
           <Overlay title="命令面板" onClose={() => setOverlay(null)}>
             <div className="commands">
               <button onClick={createSession}>
@@ -429,7 +466,7 @@ function Workspace({ session, conversations }: {
             </div>
           </Overlay>
         )}
-        {overlay === "details" && (
+        {fileOpening.view.phase === 'idle' && overlay === "details" && (
           <Overlay title="运行详情" drawer onClose={() => setOverlay(null)}>
             <div className="details-content">
               <span className="badge">{conversations.statusLabel}</span>
@@ -452,7 +489,7 @@ function Workspace({ session, conversations }: {
             </div>
           </Overlay>
         )}
-        {overlay && typeof overlay === 'object' && <Overlay title={overlay.title} drawer onClose={() => setOverlay(null)}>
+        {fileOpening.view.phase === 'idle' && overlay && typeof overlay === 'object' && <Overlay title={overlay.title} drawer onClose={() => setOverlay(null)}>
           {overlay.approval && <p className="business-notice">只读参数 · {conversations.approvalCards.some(record=>
             record.identity === overlay.approval!.identity && record.resolution) || ['completed','cancelled','error'].includes(
               conversations.observationView.runStatuses[overlay.approval.runId] ?? '')
@@ -463,5 +500,6 @@ function Workspace({ session, conversations }: {
       </div>
     </IconContext.Provider>
     </WorkspaceImageProvider>
+    </WorkspaceFileOpenProvider>
   );
 }

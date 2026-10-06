@@ -1057,6 +1057,11 @@ textarea::placeholder {
 
 .cancel-confirmation { padding: 0 20px 20px; color: var(--slate-600, #475569); font-size: 13px; line-height: 1.7; }
 .confirmation-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+.file-open-confirmation { padding: 0 20px 20px; color: var(--slate-600, #475569); font-size: 13px; line-height: 1.7; }
+.file-open-metadata { display: grid; gap: 12px; margin: 16px 0; }
+.file-open-metadata dt { color: var(--muted); font-size: 12px; }
+.file-open-metadata dd { margin: 2px 0 0; overflow-wrap: anywhere; color: #0f172a; }
+.file-open-control { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .generation-cancelled { color: #64748b; background: #f1f5f9; }
 .generation-error { color: #b91c1c; background: #fef2f2; }
 .run-failure { color: #b91c1c; }

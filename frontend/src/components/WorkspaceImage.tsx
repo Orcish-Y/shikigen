@@ -3,6 +3,7 @@ import type { BackendSession } from '../backend-client';
 import { WorkspaceImages, type ImageState } from '../workspace-images';
 import { CopyContent } from './ContentViewer';
 import type { ContentView } from './MessageBody';
+import { WorkspaceFileButton } from './WorkspaceFileOpen';
 
 const ImageContext = createContext<WorkspaceImages | null>(null);
 export function WorkspaceImageProvider({session, threadId, isVisible, children}: {
@@ -17,8 +18,8 @@ export function WorkspaceImageProvider({session, threadId, isVisible, children}:
   return <ImageContext.Provider value={images}>{children}</ImageContext.Provider>;
 }
 
-export function WorkspaceImage({reference, alt, onView}: {
-  reference:string; alt:string; onView:(view:ContentView) => void;
+export function WorkspaceImage({reference, messageIdentity, alt, onView}: {
+  reference:string; messageIdentity:string; alt:string; onView:(view:ContentView) => void;
 }) {
   const images = useContext(ImageContext);
   const [state, setState] = useState<ImageState>({phase:'idle'});
@@ -42,10 +43,11 @@ export function WorkspaceImage({reference, alt, onView}: {
     <span className="content-actions">
       {state.phase === 'ready' && state.url && state.resource && !decodeError && <button className="text-button" onClick={() => onView({
         title:alt || state.resource!.name, text:reference,
-        image:{url:state.url!, reference, resource:state.resource!},
+        image:{url:state.url!, reference, messageIdentity, resource:state.resource!},
       })}>查看完整图片</button>}
       {(state.phase === 'error' || decodeError) && <button className="text-button" onClick={() => reader.current?.retryImageLoad()}>重试读取</button>}
       <CopyContent text={reference} label="复制引用" />
+      <WorkspaceFileButton reference={reference} messageIdentity={messageIdentity}/>
     </span>
     {state.resource && <span className="resource-coordinates">
       <button className="text-button" aria-expanded={areCoordinatesVisible} onClick={() => setCoordinatesVisible(value => !value)}>核对实际文件</button>

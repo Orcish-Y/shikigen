@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Copy, FileCode } from '@phosphor-icons/react';
 import type { ContentView } from './MessageBody';
+import { WorkspaceFileButton } from './WorkspaceFileOpen';
 
 export function CopyContent({text, label = '复制完整内容'}: {text:string; label?:string}) {
   const [state, setState] = useState<string | null>(null);
@@ -34,6 +35,7 @@ export function ContentViewer({view}: {view:ContentView}) {
     <CopyContent text={view.image.reference} label="复制引用" />
     <p>实际文件</p><pre tabIndex={0}>{view.image.resource.absolute_path}</pre>
     <CopyContent text={view.image.resource.absolute_path} label="复制实际路径" />
+    <WorkspaceFileButton reference={view.image.reference} messageIdentity={view.image.messageIdentity}/>
     <details><summary>完整文件元数据</summary><pre tabIndex={0}>{JSON.stringify(view.image.resource, null, 2)}</pre></details>
   </div>;
   return <div className="content-viewer">

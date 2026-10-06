@@ -51,6 +51,10 @@ pub(crate) fn workspace_visibility(app: &tauri::AppHandle) -> Result<WorkspaceVi
     if snapshot.visible != visible {
         snapshot.revision += 1;
         snapshot.visible = visible;
+        if !visible {
+            app.state::<Arc<crate::workspace_file_open::WorkspaceFileOpens>>()
+                .invalidate_file_intents();
+        }
         let _ = app.emit("workspace-visibility-changed", snapshot.clone());
     }
     Ok(snapshot.clone())
@@ -132,6 +136,10 @@ fn create_tray(app: &tauri::AppHandle) -> Result<(), String> {
 }
 
 pub(crate) fn close_requested(window: &tauri::Window, api: &tauri::CloseRequestApi) {
+    if let Some(intents) = window.try_state::<Arc<crate::workspace_file_open::WorkspaceFileOpens>>()
+    {
+        intents.invalidate_file_intents();
+    }
     let Some(manager) = window.try_state::<Arc<BackendManager>>() else {
         api.prevent_close();
         return;
@@ -150,6 +158,9 @@ pub(crate) fn close_requested(window: &tauri::Window, api: &tauri::CloseRequestA
 }
 
 pub(crate) fn request_exit(app: &tauri::AppHandle) {
+    if let Some(intents) = app.try_state::<Arc<crate::workspace_file_open::WorkspaceFileOpens>>() {
+        intents.invalidate_file_intents();
+    }
     // Keep cleanup progress and any unconfirmed-reclamation error reachable.
     show_main(app);
     if let Some(manager) = app.try_state::<Arc<BackendManager>>() {

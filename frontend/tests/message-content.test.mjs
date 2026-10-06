@@ -3,9 +3,40 @@ import assert from 'node:assert/strict';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MessageBody } from '../src/components/MessageBody.tsx';
+import { FileOpenConfirmation } from '../src/components/WorkspaceFileOpen.tsx';
 
 const render = (role, content, extra = {}) => renderToStaticMarkup(React.createElement(MessageBody,
   {role, content, identity:'thread:run:message', onView:() => {}, ...extra}));
+
+test('本地文件与图片打开入口绑定原消息和内容块身份', () => {
+  const html = render('assistant', ['[报告](notes/report.txt)', '![图片](images/tall.png)']);
+  assert.match(html, /data-file-message-identity="thread:run:message:0"/);
+  assert.match(html, /data-file-message-identity="thread:run:message:1"/);
+  const otherMessageMarkup = render('assistant', '[报告](notes/report.txt)', {identity:'another-message'});
+  assert.match(otherMessageMarkup, /data-file-message-identity="another-message:0"/);
+  assert.doesNotMatch(otherMessageMarkup, /data-file-message-identity="thread:run:message:0"/);
+});
+
+test('明确目录引用只读且保留复制，普通文件仍可准备', () => {
+  const html = render('assistant', '[目录](notes/) ![目录图片](notes/) [文件](notes/report.txt)');
+  assert.match(html, /目录引用暂不支持打开（只读）/);
+  assert.doesNotMatch(html, /data-file-reference="notes\/"/);
+  assert.equal(html.match(/目录引用暂不支持打开（只读）/g).length, 2);
+  assert.match(html, /data-file-reference="notes\/report.txt"/);
+  assert.match(html, /复制引用/);
+});
+
+test('核实失败的本地引用明确只读，没有确认打开入口', () => {
+  const html = renderToStaticMarkup(React.createElement(FileOpenConfirmation, {
+    view:{phase:'error', reference:'notes', messageIdentity:'message-1:0', intent:null,
+      error:'HTTP 422：首版不支持目录资源'},
+    onClose:() => {}, onConfirm:() => {}, onPrepare:() => {},
+  }));
+  assert.match(html, /本次准备未打开文件，当前引用只读/);
+  assert.match(html, /HTTP 422：首版不支持目录资源/);
+  assert.match(html, /复制引用/);
+  assert.doesNotMatch(html, /确认打开/);
+});
 
 test('Agent 正文有 Markdown 层级，用户与工具保留原始空白和符号', () => {
   const raw = '  # 标题\n\n**原文**  \n';

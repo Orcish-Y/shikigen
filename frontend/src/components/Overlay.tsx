@@ -22,11 +22,17 @@ export function Overlay({
     if (initialFocus) dialog.querySelector<HTMLElement>(initialFocus)?.focus();
     return () => {
       dialog.close();
-      const valid = previous?.isConnected && previous !== document.body
-        && previous !== document.documentElement && !previous.closest('[inert]');
-      if (valid) previous.focus();
-      if (!valid || document.activeElement !== previous)
-        document.querySelector<HTMLElement>('.chat-workspace')?.focus();
+      // The initiating message or whole workspace can be removed in this same
+      // React commit. Restore after DOM mutations and do not steal a new modal's focus.
+      queueMicrotask(() => {
+        if (document.querySelector('dialog[open]')) return;
+        const isPreviousValid = previous?.isConnected && previous !== document.body
+          && previous !== document.documentElement && !previous.closest('[inert]')
+          && previous.getClientRects().length > 0;
+        if (isPreviousValid) previous.focus();
+        if (!isPreviousValid || document.activeElement !== previous)
+          document.querySelector<HTMLElement>('.chat-workspace, .backend-screen')?.focus();
+      });
     };
   }, []);
   return (
