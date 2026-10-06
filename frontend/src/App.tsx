@@ -12,7 +12,7 @@ import {
   Plus,
 } from "@phosphor-icons/react";
 import { Navigation, History } from "./components/Sidebar";
-import { Conversation, Composer, type ConversationHandle } from "./components/Conversation";
+import { Conversation, Composer, type ConversationActions } from "./components/Conversation";
 import { Overlay } from "./components/Overlay";
 import { ContentViewer } from './components/ContentViewer';
 import type { ContentView } from './components/MessageBody';
@@ -99,20 +99,22 @@ function Workspace({ session, conversations }: {
     setOverlay(null); setMobilePanel(null); setCancelTarget(target);
   }
   const previousConversation = useRef(activeId);
-  const timeline = useRef<ConversationHandle>(null);
+  const previousRun = useRef(conversations.run?.run_id);
+  const timeline = useRef<ConversationActions>(null);
   useEffect(() => {
-    if (previousConversation.current !== activeId) {
+    if (previousConversation.current !== activeId || previousRun.current !== conversations.run?.run_id) {
       setOverlay(null);
       previousConversation.current = activeId;
+      previousRun.current = conversations.run?.run_id;
     }
-  }, [activeId]);
+  }, [activeId, conversations.run?.run_id]);
   const shortcut = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl";
 
   function toggleNavigation() {
     setCollapsed((value) => !value);
   }
   function createSession() {
-    timeline.current?.remember();
+    timeline.current?.rememberReadingPosition();
     void conversations.create();
     setQuery("");
     setMobilePanel(null);
@@ -222,7 +224,7 @@ function Workspace({ session, conversations }: {
             query={query}
             onQuery={setQuery}
             onSelect={(id) => {
-              timeline.current?.remember();
+              timeline.current?.rememberReadingPosition();
               conversations.select(id);
               setMobilePanel(null);
             }}
@@ -251,6 +253,8 @@ function Workspace({ session, conversations }: {
                 {conversations.statusLabel}
               </span>
               <div className="toolbar-actions">
+                {conversations.run?.status === 'interrupted' && <button className="text-button"
+                  onClick={()=>timeline.current?.locateApproval()}>处理审批</button>}
                 <button
                   className="text-button"
                   onClick={exportSession}
@@ -274,14 +278,19 @@ function Workspace({ session, conversations }: {
             <RunFailure run={conversations.run} onView={setOverlay} />
             {session && <ObservationStatus view={conversations.observationView} onReconnect={conversations.reconnect} onQuery={conversations.queryStatus} />}
             {conversations.notice && <p className="business-notice" role="status">{conversations.notice}</p>}
-            {conversations.write && <section className="business-notice" aria-label="取消结果核实">
-              <p role="status">{conversations.write.phase === 'pending' ? '正在确认取消结果…'
-                : conversations.write.verifying ? '取消结果待确认，正在查询真实状态…'
-                : conversations.write.verified ? '已核实运行仍未结束。可以再次手动确认取消；先前请求仍可能迟到生效。'
-                : '取消结果待确认，请查询真实状态；不会自动再次取消。'}</p>
+            {conversations.write && <section className="business-notice" aria-label={conversations.write.kind === 'approval' ? '审批结果核实' : '取消结果核实'}>
+              <p role="status">{conversations.write.kind === 'approval'
+                ? conversations.write.phase === 'pending' ? '正在确认审批提交…'
+                  : conversations.write.verifying ? '审批提交结果待确认，正在核实当前请求…'
+                  : conversations.write.verified ? '已核实当前请求。可核对后手动重新提交；先前请求仍可能迟到生效。'
+                  : '审批提交结果待确认，请核实当前请求；不会自动再次提交。'
+                : conversations.write.phase === 'pending' ? '正在确认取消结果…'
+                  : conversations.write.verifying ? '取消结果待确认，正在查询真实状态…'
+                  : conversations.write.verified ? '已核实运行仍未结束。可以再次手动确认取消；先前请求仍可能迟到生效。'
+                  : '取消结果待确认，请查询真实状态；不会自动再次取消。'}</p>
               {conversations.write.phase === 'unknown' && <button className="secondary-button"
-                disabled={conversations.write.verifying} onClick={() => void conversations.queryStatus()}>核实取消结果</button>}
-              {conversations.write.failure && <details><summary>取消／核实错误详情</summary>
+                disabled={conversations.write.verifying} onClick={() => void conversations.queryStatus()}>{conversations.write.kind === 'approval' ? '核实审批结果' : '核实取消结果'}</button>}
+              {conversations.write.failure && <details><summary>请求／核实错误详情</summary>
                 <pre className="request-error">{JSON.stringify(conversations.write.failure, null, 2)}</pre></details>}
             </section>}
             {conversations.savedContent === 'reading' && <p className="business-notice" role="status">正在读取已保存内容</p>}
@@ -321,13 +330,19 @@ function Workspace({ session, conversations }: {
               acceptedSendId={conversations.acceptedSendId}
               approvalStatus={conversations.approvalStatus}
               approvalIdentity={conversations.run?.run_id}
+              approvals={{records:conversations.approvalCards, draft:conversations.approvalDraft,
+                activeRunId:conversations.run?.run_id ?? null, canVerify:conversations.canReconnect,
+                currentIdentity:conversations.approvalDraft?.identity ?? null, acceptedIdentity:conversations.acceptedApproval,
+                isPending:conversations.write?.phase === 'pending' || Boolean(conversations.write?.verifying),
+                canEdit:conversations.canEditApproval, canSubmit:conversations.canSubmitApproval,
+                onChoose:conversations.chooseApproval, onSubmit:conversations.submitApproval, onVerify:conversations.reconnect}}
               canCancel={conversations.canCancel}
               onCancel={requestCancel}
               toolPreferences={conversations.toolPreferences}
               preview={!session}
               session={active}
               readState={activeId ? conversations.historyState : "ready"}
-              onView={view => { setMobilePanel(null); setOverlay(view); }}
+              onView={view => { setCancelTarget(null); setMobilePanel(null); setOverlay(view); }}
               onSuggestion={(text) => {
                 updateDraft(text);
                 document.getElementById("message-draft")?.focus();
@@ -428,6 +443,10 @@ function Workspace({ session, conversations }: {
           </Overlay>
         )}
         {overlay && typeof overlay === 'object' && <Overlay title={overlay.title} drawer onClose={() => setOverlay(null)}>
+          {overlay.approval && <p className="business-notice">只读参数 · {conversations.approvalCards.some(record=>
+            record.identity === overlay.approval!.identity && record.resolution) || ['completed','cancelled','error'].includes(
+              conversations.observationView.runStatuses[overlay.approval.runId] ?? '')
+            ? '审批已处理或运行已结束，以下为历史内容' : '仅供核对，不在此处审批'}</p>}
           <ContentViewer view={overlay.preview && conversations.run && ['completed','cancelled','error'].includes(conversations.run.status)
             ? {...overlay, generating:false} : overlay} />
         </Overlay>}

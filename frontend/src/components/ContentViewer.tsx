@@ -28,6 +28,10 @@ export function ContentBlock({title, text, preview, generating, onView}: Content
 
 export function ContentViewer({view}: {view:ContentView}) {
   return <div className="content-viewer">
+    {view.approval?.namespace !== undefined && <div className="approval-description">
+      <p>来源：{view.approval.namespace || '主流程'}（namespace：{JSON.stringify(view.approval.namespace)}）</p>
+      <p>说明：{view.approval.description || '未提供说明'}</p>
+    </div>}
     {view.preview && <p>{view.generating === false ? '预览 · 尚未读取保存事实，以下为当前片段。' : '生成中 · 尚未保存，以下为当前片段。'}</p>}
     <CopyContent text={view.text} label={view.preview ? '复制当前片段' : '复制完整内容'} />
     <pre tabIndex={0} aria-label={view.title}>{view.text}</pre>

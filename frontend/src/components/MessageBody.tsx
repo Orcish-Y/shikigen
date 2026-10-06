@@ -6,7 +6,8 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 import { codeTitle, messagePrefix, messageSchema, referenceKind, rehypeFootnoteScope, remarkMessageContent } from '../markdown-policy';
 import { ContentBlock, CopyContent } from './ContentViewer';
 
-export type ContentView = { title: string; text: string; preview?: boolean; generating?:boolean };
+export type ContentView = { title: string; text: string; preview?: boolean; generating?:boolean;
+  approval?:{runId:string; identity:string; namespace?:string; description?:string | null} };
 export type MessageRole = 'assistant' | 'user' | 'tool';
 
 function Reference({reference, children, image = false}: {reference:string; children:ReactNode; image?:boolean}) {

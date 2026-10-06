@@ -14,8 +14,18 @@ import { ToolCard } from './ToolCard';
 import { ToolCardPreferences } from '../tool-card-preferences';
 import { ChatReadingPositions } from '../chat-reading-position';
 import { useChatReading } from '../useChatReading';
+import { ApprovalCard } from './ApprovalCard';
+import type { ApprovalChoice, ApprovalDraft, ApprovalRecord } from '../approval-decisions';
 
-export interface ConversationHandle { remember:() => void; locateApproval:() => void }
+export interface ApprovalTimeline {
+  records:ApprovalRecord[]; draft:ApprovalDraft | null; currentIdentity:string | null; acceptedIdentity:string | null; isPending:boolean;
+  activeRunId:string | null; canVerify:boolean;
+  canEdit:(identity:string) => boolean; canSubmit:(identity:string) => boolean;
+  onChoose:(identity:string, interruptId:string, index:number, choice:Partial<ApprovalChoice>) => void;
+  onSubmit:(identity:string) => void; onVerify:() => void;
+}
+
+export interface ConversationActions { rememberReadingPosition:() => void; locateApproval:() => void }
 
 export function Conversation({
   session,
@@ -32,6 +42,7 @@ export function Conversation({
   approvalIdentity,
   onCancel,
   canCancel = false,
+  approvals,
   ref,
 }: {
   session: Session;
@@ -48,12 +59,18 @@ export function Conversation({
   approvalIdentity?:string;
   onCancel?:() => void;
   canCancel?:boolean;
-  ref?:Ref<ConversationHandle>;
+  approvals?:ApprovalTimeline;
+  ref?:Ref<ConversationActions>;
 }) {
   const [localPreferences] = useState(() => new ToolCardPreferences());
   const [localReading] = useState(() => new ChatReadingPositions());
   const reading = useChatReading(session, readingPositions ?? localReading, factsReady, visible, acceptedSendId);
-  useImperativeHandle(ref, () => ({remember:reading.remember, locateApproval:() => {
+  const rows = [
+    ...toolRows(session).map((row, index)=>({kind:'message' as const, seq:row.message.record?.seq ?? index, row})),
+    ...(approvals?.records ?? []).map(record=>({kind:'approval' as const, seq:record.seq, record})),
+  ].sort((left, right)=>left.seq-right.seq);
+  const hasCurrentCard = approvals?.records.some(record=>record.identity === approvals.currentIdentity && !record.resolution);
+  useImperativeHandle(ref, () => ({rememberReadingPosition:reading.remember, locateApproval:() => {
     const target = reading.timeline.current?.querySelector<HTMLElement>('#current-approval-status');
     if (target) reading.locate(target);
   }}));
@@ -63,10 +80,27 @@ export function Conversation({
       <div className="message-container">
         {(readState === "loading" || readState === "idle") && <p className="timeline-caption" role="status">正在读取会话历史…</p>}
         {readState === "error" && <p className="business-notice" role="alert">会话历史读取失败，请刷新重试。已有记录已保留。</p>}
-        {session.messages.length ? (
+        {rows.length ? (
           <>
             {preview && <div className="timeline-caption">示例对话 · 仅用于布局预览</div>}
-            {toolRows(session).map(({message, tools}) => (
+            {rows.map(entry => {
+              if (entry.kind === 'approval') {
+                const record = entry.record;
+                const isCurrent = record.identity === approvals?.currentIdentity;
+                return <ApprovalCard key={`approval:${record.runId}:${record.seq}`} record={record}
+                  isCurrent={isCurrent} draft={isCurrent ? approvals!.draft : null}
+                  canEdit={Boolean(isCurrent && approvals?.canEdit(record.identity))}
+                  canSubmit={Boolean(isCurrent && approvals?.canSubmit(record.identity))}
+                  canCancel={isCurrent && canCancel} isPending={Boolean(isCurrent && approvals?.isPending)}
+                  isAccepted={record.identity === approvals?.acceptedIdentity}
+                  isActiveRun={record.runId === approvals?.activeRunId}
+                  canVerify={record.runId === approvals?.activeRunId && approvals.canVerify}
+                  hasEnded={['completed','cancelled','error'].includes(session.runStatuses?.[record.runId] ?? '')}
+                  onChoose={approvals!.onChoose} onSubmit={approvals!.onSubmit} onVerify={approvals!.onVerify}
+                  onCancel={()=>onCancel?.()} onView={onView} />;
+              }
+              const {message, tools} = entry.row;
+              return (
               <article className={`message ${message.role}`} key={message.id} data-reading-anchor={`message:${message.id}`}>
                 <div
                   className={`avatar ${message.role === "assistant" ? "agent-avatar" : ""}`}
@@ -101,7 +135,8 @@ export function Conversation({
                     text={message.code.content} onView={onView} />}
                 </div>
               </article>
-            ))}
+              );
+            })}
           </>
         ) : readState === "ready" ? (
           <div className="empty-conversation">
@@ -122,9 +157,10 @@ export function Conversation({
             </div>
           </div>
         ) : null}
-        {approvalStatus && <section id="current-approval-status" data-reading-anchor={`approval:${approvalIdentity}`}
+        {approvalStatus && !hasCurrentCard && <section id="current-approval-status" data-reading-anchor={`approval:${approvalIdentity}`}
           tabIndex={-1} className="business-notice" aria-label="当前审批">
           <p role="status">{approvalStatus}</p>
+          {approvals && <button className="secondary-button" disabled={!approvals.canVerify} onClick={approvals.onVerify}>重新核实审批</button>}
           <button className="secondary-button" disabled={!canCancel} onClick={onCancel}>取消运行</button>
         </section>}
       </div>

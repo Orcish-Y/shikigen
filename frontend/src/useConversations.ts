@@ -6,6 +6,7 @@ import { presentMessage } from './message-presentation';
 import { ToolCardPreferences } from './tool-card-preferences';
 import { ChatReadingPositions, readingHistoryReady } from './chat-reading-position';
 import { observationLabels } from './observation-recovery';
+import { collectApprovalRecords, type ApprovalChoice } from './approval-decisions';
 
 /** 在 App 中挂载，工作台卸载或 BackendSession 换代不会重建会话所有者。 */
 export function useConversations(session: BackendSession | null, previewMode = false, visible = true) {
@@ -31,7 +32,7 @@ export function useConversations(session: BackendSession | null, previewMode = f
     messages: (state.views[thread.id]?.messages ?? []).map(presentMessage),
     runStatuses:state.views[thread.id]?.runStatuses,
   }));
-  const active = sessions.find(item => item.id === activeId) ?? {
+  const active = sessions.find(conversation => conversation.id === activeId) ?? {
     id: activeId, title: activeId ? '会话待核实' : state.listing ? "正在读取会话" : "新建会话开始对话", group: "历史" as const,
     summary: "", messages: [],
   };
@@ -49,9 +50,9 @@ export function useConversations(session: BackendSession | null, previewMode = f
     select: (id: string) => previewMode ? setPreviewId(id) : store.select(id),
     create: async () => {
       if (!previewMode) return store.create();
-      const item: Session = { id: crypto.randomUUID(), title: "新会话", group: "今天", summary: "尚未开始对话", messages: [] };
-      setPreview(items => [item, ...items]);
-      setPreviewId(item.id);
+      const conversation: Session = { id: crypto.randomUUID(), title: "新会话", group: "今天", summary: "尚未开始对话", messages: [] };
+      setPreview(conversations => [conversation, ...conversations]);
+      setPreviewId(conversation.id);
     },
     send: (message: string) => store.send(message),
     submission: state.submissions[activeId],
@@ -80,12 +81,21 @@ export function useConversations(session: BackendSession | null, previewMode = f
     observationView:view,
     observationLabel:previewMode ? '示例观察' : observationLabels[view.observation],
     reconnect:store.reconnect,
+    canReconnect:!previewMode && store.canReconnect(),
     queryStatus:store.queryStatus,
     canCancel:!previewMode && store.canCancel(),
     cancelTarget:() => store.cancelTarget(),
     cancel:(target:Parameters<ConversationStore['cancel']>[0]) => store.cancel(target),
     validCancelTarget:(target:Parameters<ConversationStore['canCancel']>[0]) => store.canCancel(target),
     write:view.write,
+    approvalCards:previewMode ? [] : collectApprovalRecords(view.events),
+    approvalDraft:view.approvalDraft,
+    currentApproval:view.approval,
+    acceptedApproval:view.acceptedApproval,
+    canEditApproval:(identity:string) => !previewMode && store.canEditApproval(identity),
+    canSubmitApproval:(identity:string) => !previewMode && store.canSubmitApproval(identity),
+    chooseApproval:(identity:string, interruptId:string, index:number, choice:Partial<ApprovalChoice>) => store.chooseApproval(identity, interruptId, index, choice),
+    submitApproval:(identity:string) => store.submitApproval(identity),
     savedContent:view.savedContent,
     savedContentFailure:view.savedContentFailure,
     retrySavedContent:store.retrySavedContent,

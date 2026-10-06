@@ -1,5 +1,6 @@
 import type { BackendSnapshot } from "./backend-state";
 import { RunProtocolError, validStatus, validateFrame, validateMessage, validateRun } from './run-protocol.ts';
+import type { ApprovalResponses } from './approval-decisions.ts';
 
 export interface Thread {
   id: string;
@@ -218,17 +219,23 @@ export class BackendSession {
     return verifiedRun({ ...fields, run_id: id }, threadId, runId);
   }
 
-  send(threadId: string, message: string, receive: (frame: RunFrame) => void, signal?: AbortSignal) {
+  send(threadId: string, message: string, receiveFrame: (frame: RunFrame) => void, signal?: AbortSignal) {
     return this.stream(`/api/threads/${encodeURIComponent(threadId)}/stream`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message }),
-    }, this.runReceiver(threadId, receive), signal);
+    }, this.createRunFrameReceiver(threadId, receiveFrame), signal);
   }
 
-  observe(threadId: string, runId: string, receive: (frame: RunFrame) => void, signal?: AbortSignal) {
-    return this.stream(`/api/threads/${encodeURIComponent(threadId)}/runs/${encodeURIComponent(runId)}/stream`, {}, this.runReceiver(threadId, receive, runId), signal);
+  observe(threadId: string, runId: string, receiveFrame: (frame: RunFrame) => void, signal?: AbortSignal) {
+    return this.stream(`/api/threads/${encodeURIComponent(threadId)}/runs/${encodeURIComponent(runId)}/stream`, {}, this.createRunFrameReceiver(threadId, receiveFrame, runId), signal);
   }
 
-  private runReceiver(threadId: string, receive: (frame: RunFrame) => void, runId?: string) {
+  submitApproval(threadId:string, runId:string, responses:ApprovalResponses, receiveFrame:(frame:RunFrame) => void, signal?:AbortSignal) {
+    return this.stream(`/api/threads/${encodeURIComponent(threadId)}/runs/${encodeURIComponent(runId)}/approval-decisions`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({responses}),
+    }, this.createRunFrameReceiver(threadId, receiveFrame, runId), signal);
+  }
+
+  private createRunFrameReceiver(threadId: string, receiveFrame: (frame: RunFrame) => void, runId?: string) {
     let metadata = false;
     return (frame: RunFrame) => {
       frame = validateFrame(frame.event, frame.data, threadId, runId);
@@ -237,11 +244,11 @@ export class BackendSession {
         metadata = true;
       }
       if (!metadata && frame.event !== 'metadata' && frame.event !== 'error') throw new RunProtocolError('事件流缺少有效运行身份', frame.data);
-      receive(frame);
+      receiveFrame(frame);
     };
   }
 
-  private async stream(path: string, init: RequestInit, receive: (frame: RunFrame) => void, signal?: AbortSignal) {
+  private async stream(path: string, init: RequestInit, receiveFrame: (frame: RunFrame) => void, signal?: AbortSignal) {
     const request = await this.request(path, init, signal);
     const response = request.response;
     if (!response.body || !response.headers.get("content-type")?.startsWith("text/event-stream")) {
@@ -269,7 +276,7 @@ export class BackendSession {
               const raw = data.join('\n');
               let payload: unknown;
               try { payload = JSON.parse(raw); } catch { throw new RunProtocolError('SSE JSON 无法解析', raw); }
-              receive({ event, data: payload } as RunFrame);
+              receiveFrame({ event, data: payload } as RunFrame);
             }
             event = "";
             data = [];
