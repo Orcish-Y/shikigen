@@ -7,6 +7,7 @@ import { ToolCardPreferences } from './tool-card-preferences';
 import { ChatReadingPositions, readingHistoryReady } from './chat-reading-position';
 import { observationLabels } from './observation-recovery';
 import { collectApprovalRecords, type ApprovalChoice } from './approval-decisions';
+import { captureConversationExport, collectExportRunOutcomes } from './conversation-export';
 
 /** 在 App 中挂载，工作台卸载或 BackendSession 换代不会重建会话所有者。 */
 export function useConversations(session: BackendSession | null, previewMode = false, visible = true) {
@@ -45,6 +46,16 @@ export function useConversations(session: BackendSession | null, previewMode = f
   }
   return {
     sessions, active, activeId, toolPreferences, readingPositions, visible,
+    captureExport:() => {
+      // 点击时向事实所有者读取，避免异步渲染落后于最新提交；不发起任何请求。
+      const currentState = store.getSnapshot();
+      const currentThreadId = previewMode ? previewId : currentState.activeId;
+      const currentView = currentState.views[currentThreadId] ?? emptyConversation;
+      return captureConversationExport({threadId:currentThreadId,
+        title:currentState.threads.find(thread=>thread.id===currentThreadId)?.title ?? null,
+        messages:previewMode ? [] : currentView.messages,
+        runOutcomes:collectExportRunOutcomes(currentView.runStatuses,currentView.events,currentView.run)});
+    },
     readingFactsReady:previewMode || readingHistoryReady(view),
     acceptedSendId:view.acceptedSendId,
     select: (id: string) => previewMode ? setPreviewId(id) : store.select(id),

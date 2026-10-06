@@ -26,6 +26,7 @@ import { ApprovalRecovery } from './components/ApprovalRecovery';
 import { useWorkspaceVisibility } from './useWorkspaceVisibility';
 import { WorkspaceImageProvider } from './components/WorkspaceImage';
 import { FileOpenConfirmation, WorkspaceFileOpenProvider, useWorkspaceFileOpening } from './components/WorkspaceFileOpen';
+import { downloadConversationExport } from './conversation-export';
 
 function initialCollapsed() {
   try {
@@ -99,6 +100,7 @@ function Workspace({ session, conversations }: {
   >(null);
   const [overlay, setOverlay] = useState<"commands" | "details" | ContentView | null>(null);
   const [cancelTarget, setCancelTarget] = useState<CancelTarget | null>(null);
+  const [exportNotice, setExportNotice] = useState<{message:string; failed:boolean} | null>(null);
   const fileOpening = useWorkspaceFileOpening(session, activeId, conversations.visible);
   function closeFileOpen() {fileOpening.controller?.closeFileOpen();}
   function requestFileOpen(reference:string, messageIdentity:string) {
@@ -135,6 +137,9 @@ function Workspace({ session, conversations }: {
   const previousRun = useRef(conversations.run?.run_id);
   const timeline = useRef<ConversationActions>(null);
   useEffect(() => {
+    setExportNotice(null);
+  }, [activeId]);
+  useEffect(() => {
     if (previousConversation.current !== activeId || previousRun.current !== conversations.run?.run_id) {
       setOverlay(null);
       previousConversation.current = activeId;
@@ -156,23 +161,13 @@ function Workspace({ session, conversations }: {
   function updateDraft(value: string) {
     conversations.updateDraft(value);
   }
-  function exportSession() {
-    const content =
-      `# ${active.title}\n\n${session ? "" : "> 页面框架预览：示例消息。\n\n"}` +
-      active.messages.filter(message => !message.preview)
-        .map(
-          (message) =>
-            `## ${message.role === "user" ? "用户" : "shikigen Agent"}\n\n${message.text}${message.code ? `\n\n\`\`\`${message.code.language}\n${message.code.content}\n\`\`\`` : ""}${message.tool ? `\n\n工具：${message.tool.name}\n\n${message.tool.command}\n\n${message.tool.output}` : ""}`,
-        )
-        .join("\n\n");
-    const url = URL.createObjectURL(
-      new Blob([content], { type: "text/markdown;charset=utf-8" }),
-    );
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${active.title}.md`;
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  function exportConversation() {
+    try {
+      const filename = downloadConversationExport(conversations.captureExport());
+      setExportNotice({message:`已发起导出：${filename}。保存结果以系统下载为准。`,failed:false});
+    } catch (failure) {
+      setExportNotice({message:`导出失败：${failure instanceof Error ? failure.message : String(failure)}`,failed:true});
+    }
   }
   useEffect(() => {
     try {
@@ -292,9 +287,8 @@ function Workspace({ session, conversations }: {
                   onClick={()=>timeline.current?.locateApproval()}>处理审批</button>}
                 <button
                   className="text-button"
-                  onClick={exportSession}
-                  disabled={!active.messages.some(message => !message.preview)}
-                  aria-label="导出当前对话"
+                  onClick={exportConversation}
+                  aria-label="导出当前会话"
                 >
                   <DownloadSimple />
                   <span>导出</span>
@@ -310,6 +304,7 @@ function Workspace({ session, conversations }: {
               </div>
             </div>
             {conversations.error && <p className="business-notice" role="alert">{conversations.error}</p>}
+            {exportNotice && <p className="business-notice" aria-label="会话导出" role={exportNotice.failed ? 'alert' : 'status'}>{exportNotice.message}</p>}
             <RunFailure run={conversations.run} onView={setOverlay} />
             {session && <ObservationStatus view={conversations.observationView} onReconnect={conversations.reconnect} onQuery={conversations.queryStatus} />}
             {conversations.notice && <p className="business-notice" role="status">{conversations.notice}</p>}
