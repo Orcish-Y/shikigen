@@ -887,7 +887,26 @@ textarea::placeholder {
 .details-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
 .read-failure { color: var(--danger, #be123c); }
 .run-details-subview { display: flex; flex-direction: column; min-height: 0; overflow: auto; }
-.run-details-subview > button { align-self: flex-start; margin: 16px 20px 0; }
+.run-details-subview > button { align-self: flex-start; margin: 16px 20px 0; font-size: 12px; }
+.run-events { border-top: 1px solid var(--border); margin-top: 20px; overflow-anchor: none; }
+.event-toolbar, .event-toolbar label { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; }
+.event-toolbar { justify-content: space-between; }
+.event-toolbar label { cursor: pointer; }
+.run-events button { font-size: 12px; }
+.event-range, .event-coordinate { font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+.event-timeline { list-style: none; padding: 0; margin: 12px 0; }
+.event-row { padding: 14px 0; border-bottom: 1px solid var(--border); min-width: 0; overflow-wrap: anywhere; font-size: 14px; }
+.event-row header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.event-row strong { font-weight: 500; }
+.event-type { font-family: "JetBrains Mono", monospace; color: var(--muted); font-size: 11px; }
+.event-description { display: block; white-space: pre-wrap; max-height: 160px; overflow: auto; }
+.event-json summary { cursor: pointer; color: var(--secondary); }
+.event-json .content-actions { justify-content: flex-start; flex-wrap: wrap; margin: 8px 0; }
+.event-json pre { max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 12px; background: var(--sidebar); border: 1px solid var(--border); border-radius: var(--radius); font: 12px/20px "JetBrains Mono", monospace; }
+@media (max-width: 767px) {
+  .run-events button, .event-json summary, .event-toolbar label, .run-details-subview button { min-height: 44px; min-width: 44px; }
+  .event-json summary { align-content: center; }
+}
 .mobile-navigation,
 .history-toggle,
 .panel-backdrop {

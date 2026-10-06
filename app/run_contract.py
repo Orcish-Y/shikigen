@@ -9,6 +9,7 @@ from shikigen.contracts.events import (
   ApprovalInvalidated,
   ApprovalRequired,
   ApprovalResolved,
+  DurableEvent,
   Lifecycle,
   Usage,
 )
@@ -116,6 +117,27 @@ def observation_error(code: str) -> str:
   )
 
 
+def project_run_event(
+  event: DurableEvent,
+) -> MessageEvent | LifecycleEvent | ApprovalEvent:
+  """JSON 查询与 SSE 共用的公开已提交事件，保留载荷中的原字段。"""
+  return EventEnvelope.model_validate(
+    {
+      "data": {
+        "seq": event.seq,
+        "created_at": event.created_at,
+        "category": event.category,
+        "event_type": {
+          "message": "created",
+          "approval": event.event_type.removeprefix("approval_"),
+          "lifecycle": "status_changed",
+        }[event.category],
+        "payload": event.content.model_dump(mode="json", exclude_unset=True),
+      }
+    }
+  ).data
+
+
 class RunSseEncoder:
   """Project an execution stream into four SSE envelope kinds."""
 
@@ -129,24 +151,7 @@ class RunSseEncoder:
   def encode(self, event: StreamEventVariant) -> str | None:
     parsed = EVENT.validate_python({"event": event.event, "data": event.data})
     if parsed.event == "durable_event":
-      event_data = parsed.data
-      return encode_sse(
-        EventEnvelope.model_validate(
-          {
-            "data": {
-              "seq": event_data.seq,
-              "created_at": event_data.created_at,
-              "category": event_data.category,
-              "event_type": {
-                "message": "created",
-                "approval": event_data.event_type.removeprefix("approval_"),
-                "lifecycle": "status_changed",
-              }[event_data.category],
-              "payload": event_data.content.model_dump(mode="json", exclude_unset=True),
-            }
-          }
-        )
-      )
+      return encode_sse(EventEnvelope(data=project_run_event(parsed.data)))
     if parsed.event == "message":
       if parsed.data.done:
         return None

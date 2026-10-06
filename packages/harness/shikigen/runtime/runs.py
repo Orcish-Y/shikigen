@@ -596,7 +596,9 @@ class RunService:
     return messages
 
   async def list_run_events(self, thread_id: str, run_id: str) -> list[CommittedEvent]:
-    return await self._store.list_run_events(thread_id, run_id)
+    """纯读有序已提交事件；不执行 checkpoint 恢复或写入运行状态。"""
+    with committed_query():
+      return await self._store.list_run_events(thread_id, run_id)
 
   async def observe_run(self, thread_id: str, run_id: str) -> RunObservation:
     """全量重建并跟随已有执行；返回后调用者负责 aclose。

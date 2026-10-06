@@ -1,5 +1,5 @@
 import type { BackendSnapshot } from "./backend-state";
-import { RunProtocolError, validStatus, validateFrame, validateMessage, validateRun } from './run-protocol.ts';
+import { RunProtocolError, validStatus, validateEvent, validateFrame, validateMessage, validateRun } from './run-protocol.ts';
 import type { ApprovalResponses } from './approval-decisions.ts';
 
 export interface Thread {
@@ -262,6 +262,30 @@ export class BackendSession {
     if (!data || typeof data !== 'object') throw new RunProtocolError('运行快照无效', data);
     const { id, ...fields } = data;
     return verifiedRun({ ...fields, run_id: id }, threadId, runId);
+  }
+
+  async getRunEvents(threadId:string, runId:string, signal?:AbortSignal):Promise<RunEvent[]> {
+    const request = await this.request(
+      `/api/threads/${encodeURIComponent(threadId)}/runs/${encodeURIComponent(runId)}/events`, {cache:'no-store'}, signal).catch(error=>{
+        if(error instanceof BackendRequestError && error.status===500) {
+          let diagnostic;
+          try { diagnostic=JSON.parse(error.detail)?.detail; } catch { /* Keep ordinary HTTP failures unchanged. */ }
+          if(diagnostic?.code==='invalid_run_event' && Object.hasOwn(diagnostic,'raw_event')) {
+            throw new RunProtocolError('已存运行事件与公开协议不兼容',diagnostic.raw_event);
+          }
+        }
+        throw error;
+      });
+    const rawHistory=await request.response.text();
+    request.signal.throwIfAborted();
+    let response:unknown;
+    try { response=JSON.parse(rawHistory); }
+    catch { throw new RunProtocolError('运行事件历史 JSON 无法解析',rawHistory); }
+    const events=response && typeof response==='object' ? (response as {data?:unknown}).data : undefined;
+    if (!Array.isArray(events)) throw new RunProtocolError('运行事件历史格式无效',response);
+    // Validate the complete response before it can enter the shared fact projection.
+    for (const event of events) validateEvent(event,threadId);
+    return events.sort((left,right)=>left.seq-right.seq);
   }
 
   send(threadId: string, message: string, receiveFrame: (frame: RunFrame) => void, signal?: AbortSignal) {

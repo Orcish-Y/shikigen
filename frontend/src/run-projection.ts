@@ -10,7 +10,7 @@ export interface SnapshotAuthority {shouldPreserveStatus?:boolean; isWrite?:bool
 export function sameFact(a: unknown, b: unknown): boolean {
   if (Object.is(a, b)) return true;
   if (Array.isArray(a) || Array.isArray(b)) return Array.isArray(a) && Array.isArray(b)
-    && a.length === b.length && a.every((item, index) => sameFact(item, b[index]));
+    && a.length === b.length && a.every((factValue, index) => sameFact(factValue, b[index]));
   if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
   const left = a as Record<string, unknown>, right = b as Record<string, unknown>;
   const keys = Object.keys(left);
@@ -43,10 +43,10 @@ export class RunProjection {
 
   mergeHistory(records: StoredMessage[]) {
     this.mergeMessages(records);
-    const last = this.snapshot().messages.filter(message => !message.preview).at(-1);
-    const discovered = records.find(record => record.run_id === last?.run_id);
-    if (discovered && (!this.run || discovered.run_id === this.run.run_id || last!.seq > this.runFloor)) {
-      this.metadata({ thread_id: discovered.thread_id, run_id: discovered.run_id, status: discovered.run_status });
+    const latestMessage = this.snapshot().messages.filter(message => !message.preview).at(-1);
+    const discoveredMessage = records.find(record => record.run_id === latestMessage?.run_id);
+    if (discoveredMessage && (!this.run || discoveredMessage.run_id === this.run.run_id || latestMessage!.seq > this.runFloor)) {
+      this.metadata({ thread_id: discoveredMessage.thread_id, run_id: discoveredMessage.run_id, status: discoveredMessage.run_status });
     }
   }
 
@@ -55,26 +55,26 @@ export class RunProjection {
     for (const record of records) this.message(record);
   }
 
-  metadata(incoming: Run) {
-    const previous = this.runs.get(incoming.run_id);
-    if (previous && terminalRun(previous) && incoming.status !== previous.status) return;
-    if (this.run?.run_id !== incoming.run_id) {
+  metadata(incomingRun: Run) {
+    const existingRun = this.runs.get(incomingRun.run_id);
+    if (existingRun && terminalRun(existingRun) && incomingRun.status !== existingRun.status) return;
+    if (this.run?.run_id !== incomingRun.run_id) {
       this.runFloor = 0;
       for (const seq of this.messages.keys()) this.runFloor = Math.max(this.runFloor, seq);
     }
-    const next = { ...previous, ...incoming };
-    const version = this.snapshotVersion(incoming.run_id);
-    if (previous?.status === 'interrupted' && incoming.status === 'running') {
+    const updatedRun = { ...existingRun, ...incomingRun };
+    const version = this.snapshotVersion(incomingRun.run_id);
+    if (existingRun?.status === 'interrupted' && incomingRun.status === 'running') {
       version.stage++;
-      if (!Object.hasOwn(incoming, 'usage_pending')) next.usage_pending = null;
+      if (!Object.hasOwn(incomingRun, 'usage_pending')) updatedRun.usage_pending = null;
       version.usage++;
     }
-    if (previous?.status !== incoming.status) version.status++;
-    if (['usage','usage_pending'].some(key => Object.hasOwn(incoming,key))) version.usage++;
-    if (['error','error_code','completed_at'].some(key => Object.hasOwn(incoming,key))) version.outcome++;
-    this.versions.set(incoming.run_id,version);
-    this.runs.set(incoming.run_id, next);
-    this.run = next;
+    if (existingRun?.status !== incomingRun.status) version.status++;
+    if (['usage','usage_pending'].some(key => Object.hasOwn(incomingRun,key))) version.usage++;
+    if (['error','error_code','completed_at'].some(key => Object.hasOwn(incomingRun,key))) version.outcome++;
+    this.versions.set(incomingRun.run_id,version);
+    this.runs.set(incomingRun.run_id, updatedRun);
+    this.run = updatedRun;
   }
 
   snapshotVersion(runId:string):RunFieldVersion {
@@ -83,37 +83,37 @@ export class RunProjection {
 
   /** A new GET observation cannot prove it is still the same execution stage. */
   beginObservation(runId:string) {
-    const previous = this.runs.get(runId);
-    if (!previous) return;
+    const existingRun = this.runs.get(runId);
+    if (!existingRun) return;
     const version = this.snapshotVersion(runId);
     version.stage++; version.usage++;
     this.versions.set(runId,version);
-    const next = Object.hasOwn(previous,'usage_pending') ? {...previous,usage_pending:null} : {...previous};
-    this.runs.set(runId,next);
-    if (this.run?.run_id === runId) this.run = next;
+    const updatedRun = Object.hasOwn(existingRun,'usage_pending') ? {...existingRun,usage_pending:null} : {...existingRun};
+    this.runs.set(runId,updatedRun);
+    if (this.run?.run_id === runId) this.run = updatedRun;
   }
 
-  applySnapshot(incoming: Run, requestVersion = this.snapshotVersion(incoming.run_id), authority:SnapshotAuthority = {}) {
-    const previous = this.runs.get(incoming.run_id);
-    const currentVersion = this.snapshotVersion(incoming.run_id);
-    const updates = { ...incoming };
-    const hasStaleUsage = (Object.hasOwn(incoming,'usage') || Object.hasOwn(incoming,'usage_pending'))
+  applySnapshot(incomingRun: Run, requestVersion = this.snapshotVersion(incomingRun.run_id), authority:SnapshotAuthority = {}) {
+    const existingRun = this.runs.get(incomingRun.run_id);
+    const currentVersion = this.snapshotVersion(incomingRun.run_id);
+    const updates = { ...incomingRun };
+    const hasStaleUsage = (Object.hasOwn(incomingRun,'usage') || Object.hasOwn(incomingRun,'usage_pending'))
       && (requestVersion.stage !== currentVersion.stage || requestVersion.usage !== currentVersion.usage);
     if (requestVersion.stage !== currentVersion.stage || requestVersion.usage !== currentVersion.usage) {
       delete updates.usage; delete updates.usage_pending;
     }
     if (requestVersion.outcome !== currentVersion.outcome || requestVersion.status !== currentVersion.status
-      || previous && (authority.shouldPreserveStatus || terminalRun(previous)) && incoming.status !== previous.status) {
+      || existingRun && (authority.shouldPreserveStatus || terminalRun(existingRun)) && incomingRun.status !== existingRun.status) {
       delete updates.error; delete updates.error_code; delete updates.completed_at;
     }
     // 查询里的旧空值不能清除流中已确认的失败／完成字段。
     for (const key of ['error','error_code','completed_at'] as const) {
-      if (updates[key] === null && previous?.[key] != null) delete updates[key];
+      if (updates[key] === null && existingRun?.[key] != null) delete updates[key];
     }
-    if (previous && (authority.shouldPreserveStatus || terminalRun(previous)
-      || !authority.isWrite && requestVersion.status !== currentVersion.status)) updates.status = previous.status;
+    if (existingRun && (authority.shouldPreserveStatus || terminalRun(existingRun)
+      || !authority.isWrite && requestVersion.status !== currentVersion.status)) updates.status = existingRun.status;
     // Server timestamps can be filled even when metadata advanced during the request.
-    if (previous?.updated_at && updates.updated_at && Date.parse(updates.updated_at) < Date.parse(previous.updated_at)) delete updates.updated_at;
+    if (existingRun?.updated_at && updates.updated_at && Date.parse(updates.updated_at) < Date.parse(existingRun.updated_at)) delete updates.updated_at;
     this.metadata(updates);
     return hasStaleUsage;
   }
@@ -121,22 +121,22 @@ export class RunProjection {
   approval(replay: Iterable<RunEvent>, verified: boolean): ApprovalProjection | null {
     let request: ApprovalProjection['request'] | null = null;
     const requests: ApprovalProjection['request'][] = [];
-    const processed: ApprovalRequired['checkpoint'][] = [];
+    const processedCheckpoints: ApprovalRequired['checkpoint'][] = [];
     for (const event of [...replay].sort((a, b) => a.seq - b.seq)) {
       if (event.category !== 'approval') continue;
       const payload = event.payload;
       if (payload.status === 'required') {
-        if (processed.some(checkpoint => sameFact(checkpoint, payload.checkpoint))) throw new RunProtocolError('已处理或失效的 checkpoint 不能重新请求审批', event);
-        const previous = requests.find(item => sameFact(item.payload.checkpoint, payload.checkpoint));
-        if (previous && !sameFact(previous.payload, payload)) throw new RunProtocolError('同一 checkpoint 的审批请求内容冲突', event);
+        if (processedCheckpoints.some(checkpoint => sameFact(checkpoint, payload.checkpoint))) throw new RunProtocolError('已处理或失效的 checkpoint 不能重新请求审批', event);
+        const existingApproval = requests.find(approvalRequest => sameFact(approvalRequest.payload.checkpoint, payload.checkpoint));
+        if (existingApproval && !sameFact(existingApproval.payload, payload)) throw new RunProtocolError('同一 checkpoint 的审批请求内容冲突', event);
         request = { ...event, payload };
         requests.push(request);
       } else {
-        processed.push(payload.checkpoint);
-        const required = requests.find(item => sameFact(item.payload.checkpoint, payload.checkpoint));
-        if (!required) continue; // 查询可以缺项，不凭空补出对应 required。
+        processedCheckpoints.push(payload.checkpoint);
+        const requiredRequest = requests.find(approvalRequest => sameFact(approvalRequest.payload.checkpoint, payload.checkpoint));
+        if (!requiredRequest) continue; // 查询可以缺项，不凭空补出对应 required。
         const ids = payload.status === 'resolved' ? Object.keys(payload.responses) : payload.interrupt_ids;
-        if (ids.length !== required.payload.interrupts.length || !required.payload.interrupts.every(item => ids.includes(item.id))) {
+        if (ids.length !== requiredRequest.payload.interrupts.length || !requiredRequest.payload.interrupts.every(interrupt => ids.includes(interrupt.id))) {
           throw new RunProtocolError('审批处理身份必须覆盖全部 Interrupt', event);
         }
         if (request && sameFact(request.payload.checkpoint, payload.checkpoint)) request = null;
@@ -164,24 +164,25 @@ export class RunProjection {
       || message.created_at && fact.event.created_at !== message.created_at)) {
       throw new RunProtocolError(`消息 seq=${message.seq} 与已确认事件冲突`, message);
     }
-    const previous = this.messages.get(message.seq);
-    const conflicts = previous && (previous.run_id !== message.run_id || previous.content.message_id !== message.content.message_id
-      || !previous.preview && Object.entries(message).some(([key, value]) => key !== 'run_status' && key !== 'preview'
-        && Object.hasOwn(previous, key) && !sameFact(key === 'content' ? messageFact(previous.content)
-          : (previous as Record<string, unknown>)[key], key === 'content' ? messageFact(message.content) : value)));
+    const existingMessage = this.messages.get(message.seq);
+    const conflicts = existingMessage && (existingMessage.run_id !== message.run_id || existingMessage.content.message_id !== message.content.message_id
+      || !existingMessage.preview && Object.entries(message).some(([key, value]) => key !== 'run_status' && key !== 'preview'
+        && Object.hasOwn(existingMessage, key) && !sameFact(key === 'content' ? messageFact(existingMessage.content)
+          : (existingMessage as Record<string, unknown>)[key], key === 'content' ? messageFact(message.content) : value)));
     if (conflicts) {
       throw new RunProtocolError(`消息 seq=${message.seq} 与已确认事实冲突`, message);
     }
-    const complete = { ...previous, ...message };
-    delete complete.preview;
-    this.messages.set(message.seq, complete);
+    const completeMessage = { ...existingMessage, ...message };
+    delete completeMessage.preview;
+    this.messages.set(message.seq, completeMessage);
   }
 
-  event(runId: string, event: RunEvent) {
+  mergeEvent(runId: string, event: RunEvent) {
     // seq 是会话级顺序，不能被另一 Run 或类别重新占用。
-    const previous = this.eventAt(event.seq);
-    const canonicalEvent = (item:RunEvent) => item.category === 'message' ? {...item, payload:messageFact(item.payload)} : item;
-    if (previous && (previous.runId !== runId || !sameFact(canonicalEvent(previous.event), canonicalEvent(event)))) throw new RunProtocolError(`事件 seq=${event.seq} 与已确认事实冲突`, event);
+    const existingEvent = this.eventAt(event.seq);
+    const normalizeEvent = (runEvent:RunEvent) => runEvent.category === 'message' ? {...runEvent, payload:messageFact(runEvent.payload)} : runEvent;
+    if (existingEvent && (existingEvent.runId !== runId || !sameFact(normalizeEvent(existingEvent.event), normalizeEvent(event)))) throw new RunProtocolError(`事件 seq=${event.seq} 与已确认事实冲突`, event);
+    if (existingEvent) return;
     const message = this.messages.get(event.seq);
     if (message && (message.run_id !== runId || event.category !== 'message')) throw new RunProtocolError(`事件 seq=${event.seq} 与消息身份冲突`, event);
     if (message?.created_at && message.created_at !== event.created_at) throw new RunProtocolError(`事件 seq=${event.seq} 与已确认时间冲突`, event);
@@ -192,14 +193,27 @@ export class RunProjection {
     this.events.set(runId, events);
   }
 
+  /** A conflicting query remains a read-only protocol issue; none of its batch replaces facts. */
+  mergeEvents(runId:string, events:RunEvent[]) {
+    const previousMessages=this.messages, previousEvents=this.events;
+    this.messages=new Map(previousMessages);
+    this.events=new Map([...previousEvents].map(([id,records])=>[id,new Map(records)]));
+    try {
+      for (const event of [...events].sort((left,right)=>left.seq-right.seq)) this.mergeEvent(runId,event);
+    } catch (error) {
+      this.messages=previousMessages; this.events=previousEvents;
+      throw error;
+    }
+  }
+
   delta(runId: string, data: Extract<RunFrame, {event:'delta'}>['data']) {
     if (data.field !== 'content') return;
-    const previous = this.messages.get(data.seq);
+    const existingMessage = this.messages.get(data.seq);
     const fact = this.eventAt(data.seq);
     if (fact && (fact.runId !== runId || fact.event.category !== 'message')) throw new RunProtocolError('增量 seq 与已确认事件冲突', data);
-    if (previous && (previous.run_id !== runId || previous.content.message_id !== data.message_id)) throw new RunProtocolError('增量消息身份冲突', data);
-    if (previous && !previous.preview) return;
-    const text = typeof previous?.content.content === 'string' ? previous.content.content : '';
+    if (existingMessage && (existingMessage.run_id !== runId || existingMessage.content.message_id !== data.message_id)) throw new RunProtocolError('增量消息身份冲突', data);
+    if (existingMessage && !existingMessage.preview) return;
+    const text = typeof existingMessage?.content.content === 'string' ? existingMessage.content.content : '';
     const content: MessageContent = {type:'ai', message_id:data.message_id, content:text + data.value, tool_calls:[]};
     this.messages.set(data.seq, {run_id:runId, seq:data.seq, preview:true, content});
   }

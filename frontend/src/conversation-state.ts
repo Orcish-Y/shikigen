@@ -5,6 +5,7 @@ import { MessageDrafts, type DraftStorage, type MessageSubmission } from './mess
 import { ObservationRecovery, StreamObservationError, UnexpectedObservationEnd, observationFailure, retryAfterTime, waitUntil, type ObservationState, type ObservationFailure, type RecoveryUpdate } from './observation-recovery.ts';
 import { collectApprovalRecords, createApprovalIdentity, buildApprovalResponses, parseApproval, updateApprovalChoice, type ApprovalChoice, type ApprovalDraft } from './approval-decisions.ts';
 import { ApprovalDrafts, type ApprovalBackup } from './approval-drafts.ts';
+import { RunEventHistoryReader, emptyEventRead, type EventRead } from './run-event-history.ts';
 export type { ConversationMessage } from './run-projection.ts';
 
 const THREAD_PAGE_SIZE = 20;
@@ -56,6 +57,7 @@ export interface ConversationView {
   savedContent:'idle' | 'reading' | 'ready' | 'error';
   savedContentFailure:ObservationFailure | null;
   snapshotRead:SnapshotRead;
+  eventRead:EventRead;
 }
 export interface ConversationState {
   threads: Thread[];
@@ -75,7 +77,7 @@ export interface ConversationState {
   approvalBackups:ApprovalBackup[];
 }
 export const emptyConversation: ConversationView = {
-  messages: [], run: null, runStatuses:{}, history: "idle", verified: false, error: null, sending: false, acceptedSendId:null, events:{}, approval:null, approvalDraft:null, acceptedApproval:null, observation:'idle', retry:null, observationFailure:null, querying:false, queryFailure:null, sendFailure:null, protocolIssue:null, missing:false, write:null, savedContent:'idle', savedContentFailure:null, snapshotRead:emptySnapshotRead,
+  messages: [], run: null, runStatuses:{}, history: "idle", verified: false, error: null, sending: false, acceptedSendId:null, events:{}, approval:null, approvalDraft:null, acceptedApproval:null, observation:'idle', retry:null, observationFailure:null, querying:false, queryFailure:null, sendFailure:null, protocolIssue:null, missing:false, write:null, savedContent:'idle', savedContentFailure:null, snapshotRead:emptySnapshotRead, eventRead:emptyEventRead,
 };
 
 interface ObservationAttempt {
@@ -117,6 +119,19 @@ export class ConversationStore {
   private savedDeadlines = new Map<string, number>();
   private snapshotRequest: {session:BackendSession; threadId:string; runId:string; controller:AbortController;
     task:Promise<void>; hasStarted:boolean; shouldReadAgain:boolean} | null = null;
+  private isDetailsOpen=false;
+  private isEventReadPaused=true;
+  private eventHistory=new RunEventHistoryReader((target,events)=>{
+    const projection=this.projection(target.threadId);
+    projection.mergeEvents(target.runId,events);
+    const previousApproval=this.state.views[target.threadId]?.approval;
+    const approval=projection.approval(projection.snapshot().events[target.runId] ?? [],false);
+    this.updateView(target.threadId,{...projection.snapshot(),approval:approval
+      ? {...approval,verified:Boolean(previousApproval?.verified && sameFact(previousApproval.request,approval.request))} : null});
+  },(target,eventRead)=>{
+    if(this.state.activeId===target.threadId && this.state.views[target.threadId]?.run?.run_id===target.runId)
+      this.updateView(target.threadId,{eventRead});
+  });
 
   constructor(options: {storage?: DraftStorage | null} = {}) {
     this.inputs = new MessageDrafts(options.storage);
@@ -154,7 +169,7 @@ export class ConversationStore {
     if (viewUpdate.run && previous?.run?.run_id !== viewUpdate.run.run_id) {
       this.snapshotRequest?.controller.abort();
       this.snapshotRequest = null;
-      viewUpdate = {snapshotRead:emptySnapshotRead, savedContent:'idle', savedContentFailure:null, write:null, approvalDraft:null, acceptedApproval:null, ...viewUpdate};
+      viewUpdate = {snapshotRead:emptySnapshotRead,eventRead:emptyEventRead, savedContent:'idle', savedContentFailure:null, write:null, approvalDraft:null, acceptedApproval:null, ...viewUpdate};
       const runId = viewUpdate.run!.run_id;
       queueMicrotask(() => {if(this.state.activeId === threadId && this.state.views[threadId]?.run?.run_id === runId) void this.refreshRunDetails();});
     }
@@ -192,6 +207,7 @@ export class ConversationStore {
     this.publishState({ ...this.inputState(), views: { ...this.state.views,
       [threadId]: { ...(this.state.views[threadId] ?? emptyConversation), ...viewUpdate },
     } });
+    this.syncEventTarget();
     const view = this.state.views[threadId];
     if (view.verified && view.run && terminalRun(view.run)) {
       queueMicrotask(() => {void this.readSavedContent(threadId, view.run!.run_id);});
@@ -199,6 +215,8 @@ export class ConversationStore {
   }
 
   private stopSelection() {
+    this.isEventReadPaused=true;
+    this.eventHistory.setTarget(null);
     const id = this.state.activeId;
     this.writeRequest?.abort();
     this.writeRequest = null;
@@ -743,6 +761,7 @@ export class ConversationStore {
       if (!this.live(session, controller) || this.state.activeId !== threadId
         || this.state.views[threadId].run?.run_id !== runId) return false;
       const hasStaleUsage = this.applyWriteSnapshot(threadId, snapshot,version);
+      this.notifyEventBoundary(threadId,runId);
       if (hasStaleUsage || snapshot.usage_pending === true) void this.refreshRunDetails(true);
       return true;
     } catch (error) {
@@ -767,6 +786,7 @@ export class ConversationStore {
     this.updateView(threadId, {...projection.snapshot(), verified:true,
       write:terminalRun(projection.run!) ? null : write ? {...write, phase:'unknown', verified:true, verifying:false} : null,
       approval:terminalRun(projection.run!) ? null : this.state.views[threadId].approval});
+    if(terminalRun(projection.run!)) this.notifyEventBoundary(threadId,snapshot.run_id);
     return hasStaleUsage;
   }
 
@@ -875,6 +895,7 @@ export class ConversationStore {
   }
 
   private async restoreSelectedRun(session:BackendSession, controller:AbortController, threadId:string) {
+    this.isEventReadPaused=false;
     const projection = this.projection(threadId);
     const run = projection.run;
     this.updateView(threadId, {...projection.snapshot(), history:'ready', verified:!run});
@@ -970,6 +991,24 @@ export class ConversationStore {
     return this.readSnapshot(session, new AbortController(), threadId, runId,shouldReadAfterBoundary);
   };
 
+  setDetailsOpen=(isOpen:boolean)=>{
+    this.isDetailsOpen=isOpen;
+    if(isOpen && this.visible && this.state.views[this.state.activeId]?.history==='ready') this.isEventReadPaused=false;
+    this.syncEventTarget();
+  };
+  private syncEventTarget() {
+    const threadId=this.state.activeId, runId=this.state.views[threadId]?.run?.run_id;
+    this.eventHistory.setTarget(this.isDetailsOpen && !this.isEventReadPaused && this.visible && this.session && !this.session.signal.aborted && runId
+      ? {session:this.session,threadId,runId} : null);
+  }
+  private notifyEventBoundary(threadId:string,runId:string) {
+    if(this.state.activeId!==threadId || this.state.views[threadId]?.run?.run_id!==runId) return;
+    const projection=this.projection(threadId);
+    this.eventHistory.notifyBoundary(`${runId}:${projection.snapshotVersion(runId).stage}:${projection.run?.status}`);
+  }
+  refreshDetails=async()=>{await Promise.all([this.refreshRunDetails(),this.eventHistory.refreshHistory()]);};
+  refreshRunEvents=()=>this.eventHistory.refreshHistory();
+
   private readSnapshot(session:BackendSession, caller:AbortController, threadId:string, runId:string,shouldReadAfterBoundary=false):Promise<void> {
     if (!this.live(session,caller) || this.state.activeId !== threadId
       || this.state.views[threadId]?.run?.run_id !== runId) return Promise.resolve();
@@ -1049,10 +1088,12 @@ export class ConversationStore {
         && writeState.runId === projection.run?.run_id
         ? {write:{...writeState, verified:true, verifying:false}} : {}),
       ...(!normal ? {verified:false, error:this.state.views[attempt.threadId].error ?? '观察连接结束，运行结果尚未核实。请刷新数据。'} : {})});
+    if(normal && projection.run) this.notifyEventBoundary(attempt.threadId,projection.run.run_id);
     return Boolean(normal);
   }
 
   private createFrameReceiver(session: BackendSession, controller: AbortController, threadId: string, targetRun?: string, isGet = targetRun !== undefined) {
+    this.isEventReadPaused=false;
     const projection = this.projection(threadId);
     if (isGet && targetRun) projection.beginObservation(targetRun);
     const attempt: ObservationAttempt = {controller, threadId, runId:targetRun ?? null,
@@ -1079,7 +1120,7 @@ export class ConversationStore {
       }
       if (!attempt.metadata || !attempt.runId) throw new Error("事件流缺少有效运行身份");
       if (frame.event === 'event') {
-        projection.event(attempt.runId, frame.data);
+        projection.mergeEvent(attempt.runId, frame.data);
         attempt.replay.set(frame.data.seq, frame.data);
       } else if (frame.event === 'delta') projection.delta(attempt.runId, frame.data);
       // 历史 lifecycle 不覆盖当前 metadata 中的状态。

@@ -7,6 +7,7 @@ import type { ContentView } from './MessageBody';
 import { ContentViewer, CopyContent } from './ContentViewer';
 import { ObservationStatus } from './ObservationStatus';
 import type { ConversationView } from '../conversation-state';
+import { RunEvents } from './RunEvents';
 
 export function formatRunNumber(value:number | undefined) {
   return value === undefined ? '未提供' : value.toLocaleString();
@@ -71,9 +72,10 @@ function RunTime({label,timestamp,fallback,onView}: {label:string; timestamp?:st
   </> : fallback}</dd></div>;
 }
 
-export function RunDetails({threadId,title,view,availability,onRefresh,onReload,onReconnect,onQuery,onApproval,onClose}: {
+export function RunDetails({threadId,title,view,availability,onRefresh,onRefreshEvents=async()=>{},onReload,onReconnect,onQuery,onApproval,onClose}: {
   threadId:string; title:string; view:ConversationView; availability:string;
   onRefresh:()=>Promise<void>; onReload:()=>void; onReconnect:()=>void; onQuery:()=>Promise<void>;
+  onRefreshEvents?:()=>Promise<void>;
   onApproval:()=>void; onClose:()=>void;
 }) {
   const [contentView,setContentView]=useState<ContentView | null>(null);
@@ -87,7 +89,7 @@ export function RunDetails({threadId,title,view,availability,onRefresh,onReload,
     if(contentView) document.querySelector<HTMLElement>('.run-details-subview button')?.focus();
     else {
       if(readingArea.current) readingArea.current.scrollTop=returnPosition.current.scrollTop;
-      if(returnPosition.current.trigger?.isConnected) returnPosition.current.trigger.focus();
+      if(returnPosition.current.trigger?.isConnected) returnPosition.current.trigger.focus({preventScroll:true});
       else {
         const dialog=document.querySelector<HTMLDialogElement>('dialog[open]');
         if(dialog && !dialog.contains(document.activeElement)) dialog.querySelector<HTMLElement>('.overlay-heading button')?.focus();
@@ -103,7 +105,7 @@ export function RunDetails({threadId,title,view,availability,onRefresh,onReload,
   return <>
     <div className="details-content run-details" ref={readingArea} hidden={Boolean(contentView)}>
       <span className="badge">{run ? runStatusLabels[run.status] : availability}</span><h3>{title}</h3>
-      <button className="secondary-button" disabled={!run || snapshotRead.phase==='reading'} onClick={()=>void onRefresh()}>{snapshotRead.phase==='reading' ? '正在刷新详情…' : '刷新详情'}</button>
+      <button className="secondary-button" disabled={!run || snapshotRead.phase==='reading' || view.eventRead.phase==='reading'} onClick={()=>void onRefresh()}>{snapshotRead.phase==='reading' || view.eventRead.phase==='reading' ? '正在刷新详情…' : '刷新详情'}</button>
       {snapshotRead.retry && <p role="status">等待后重试读取（第 {snapshotRead.retry.attempt} 次）：{new Date(snapshotRead.retry.at).toLocaleTimeString()}</p>}
       {snapshotRead.phase==='error' && <section className="details-read-error" aria-label="运行信息读取错误">
         <p role="alert">{snapshotRead.failure?.status===404 ? '运行不可读取，请重新读取会话定位。' : '运行信息读取失败，已有内容保留。'}</p>
@@ -132,6 +134,7 @@ export function RunDetails({threadId,title,view,availability,onRefresh,onReload,
         </section>}
       </section>
       <RunUsage run={run} snapshotRead={snapshotRead} availability={availability} onView={openContent}/>
+      <RunEvents events={run ? view.events[run.run_id] ?? [] : []} eventRead={view.eventRead} status={run?.status} onRefresh={onRefreshEvents} onReload={onReload} onView={openContent}/>
       <section aria-label="观察连接"><h3>观察连接</h3><p>{observationLabels[view.observation]}</p><ObservationStatus view={view} onReconnect={onReconnect} onQuery={onQuery}/></section>
       <div className="details-actions">
         {run?.status==='interrupted' && <button className="secondary-button" onClick={onApproval}>处理审批</button>}

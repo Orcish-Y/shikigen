@@ -154,6 +154,10 @@ function Workspace({ session, conversations }: {
     setCancelTarget(null); setMobilePanel(null); setOverlay('details');
     void conversations.refreshRunDetails();
   }
+  useEffect(()=>{
+    conversations.setDetailsOpen(overlay==='details' && fileOpening.view.phase==='idle');
+    return ()=>conversations.setDetailsOpen(false);
+  },[overlay,fileOpening.view.phase,conversations.setDetailsOpen]);
   const shortcut = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl";
 
   function toggleNavigation() {
@@ -477,7 +481,7 @@ function Workspace({ session, conversations }: {
           <Overlay title="运行详情" drawer onClose={() => setOverlay(null)}>
             <RunDetails key={`${activeId}:${conversations.run?.run_id}`} threadId={activeId} title={active.title}
               view={conversations.observationView} availability={conversations.detailsAvailability}
-              onRefresh={conversations.refreshRunDetails} onReload={conversations.reload}
+              onRefresh={conversations.refreshDetails} onRefreshEvents={conversations.refreshRunEvents} onReload={conversations.reload}
               onReconnect={conversations.reconnect} onQuery={conversations.queryStatus}
               onApproval={()=>{setOverlay(null);queueMicrotask(()=>timeline.current?.locateApproval());}}
               onClose={()=>setOverlay(null)}/>

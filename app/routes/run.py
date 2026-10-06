@@ -3,7 +3,7 @@ from collections.abc import AsyncGenerator
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ValidationError
-from shikigen.contracts.events import ApprovalSubmission
+from shikigen.contracts.events import ApprovalSubmission, DurableEvent
 from shikigen.contracts.runs import (
   InvalidApprovalResponse,
   InvalidRunState,
@@ -23,6 +23,7 @@ from app.run_contract import (
   RunSseEncoder,
   encode_sse,
   observation_error,
+  project_run_event,
 )
 
 router = APIRouter(prefix="/api/threads/{thread_id}")
@@ -36,6 +37,39 @@ async def get_run_snapshot(
   with query_response_policy(response):
     snapshot = await runtime.runs.get_run_snapshot(thread_id, run_id)
   return {"data": snapshot}
+
+
+@router.get("/runs/{run_id}/events", summary="只读获取全部已提交公开运行事件")
+async def get_run_events(
+  thread_id: str, run_id: str, request: Request, response: Response
+) -> dict[str, object]:
+  runtime: Runtime = request.app.state.runtime
+  invalid_event = None
+  with query_response_policy(response):
+    history = await runtime.runs.list_run_events(thread_id, run_id)
+    events = []
+    for event in history:
+      try:
+        events.append(
+          project_run_event(DurableEvent.model_validate(event)).model_dump(
+            mode="json", exclude_unset=True
+          )
+        )
+      except ValidationError:
+        invalid_event = event
+        break
+  if invalid_event is not None:
+    # The whole query failed. The owned raw record is a diagnostic, never a fact.
+    raise HTTPException(
+      500,
+      detail={
+        "code": "invalid_run_event",
+        "message": "Stored run event is incompatible with the public contract",
+        "raw_event": invalid_event,
+      },
+      headers=dict(response.headers),
+    )
+  return {"data": events}
 
 
 @router.get(
