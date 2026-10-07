@@ -8,6 +8,7 @@ from unittest.mock import patch
 from langchain.agents import create_agent
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.graph import START, MessagesState, StateGraph
 from langgraph.types import Command, interrupt
 from pydantic import ValidationError
@@ -140,6 +141,65 @@ class MessageContractTests(unittest.IsolatedAsyncioTestCase):
       await self.store.append_message(
         thread_id="thread", run_id="first", content={**second, "artifact": None}
       )
+
+  async def test_checkpoint_tool_replay_preserves_artifact_presence_and_content(self):
+    registry = ExecutionRegistry()
+    execution = RunExecution(run_id="first", thread_id="thread")
+    registry.install(execution)
+    ingestor = RunEventIngestor(self.store, registry)
+    serializer = JsonPlusSerializer()
+
+    for artifact in (None, {"path": "result.txt"}, False, 0, "", [], {}):
+      with self.subTest(artifact=artifact):
+        call_id = f"call-{repr(artifact)}"
+        tool_message = ToolMessage(
+          content="tool failed", tool_call_id=call_id, status="error", name="work"
+        )
+        if artifact is not None:
+          tool_message.artifact = artifact
+        original_content = message_content(tool_message)
+        original_seq = await ingestor.ingest_message(
+          original_content, thread_id="thread", run_id="first"
+        )
+        replay_message = serializer.loads_typed(serializer.dumps_typed(tool_message))
+        replay_event = {
+          "method": "values",
+          "params": {"namespace": [], "data": {"messages": [replay_message]}},
+        }
+        replay_content = GraphEventAdapter().messages(replay_event)[0]
+        self.assertEqual(
+          await ingestor.ingest_message(
+            replay_content, thread_id="thread", run_id="first"
+          ),
+          original_seq,
+        )
+        stored_event = await self.store.get_message("thread", f"tool:{call_id}")
+        self.assertEqual(stored_event["content"], original_content)
+        with self.assertRaises(MessageConflict):
+          await ingestor.ingest_message(
+            {**replay_content, "content": "different result"},
+            thread_id="thread",
+            run_id="first",
+          )
+        with self.assertRaises(MessageConflict):
+          await ingestor.ingest_message(
+            {**replay_content, "artifact": {"changed": True}},
+            thread_id="thread",
+            run_id="first",
+          )
+    explicit_null = ToolMessage(
+      content="ok", tool_call_id="explicit-null", artifact=None
+    )
+    explicit_content = message_content(explicit_null)
+    self.assertIn("artifact", explicit_content)
+    await ingestor.ingest_message(explicit_content, thread_id="thread", run_id="first")
+    restored_null = serializer.loads_typed(serializer.dumps_typed(explicit_null))
+    await ingestor.ingest_message(
+      message_content(restored_null), thread_id="thread", run_id="first"
+    )
+    stored_null = await self.store.get_message("thread", "tool:explicit-null")
+    self.assertEqual(stored_null["content"], explicit_content)
+    execution.stream.close()
 
   async def test_two_checkpointed_rounds_have_separate_facts_and_stable_preview_ids(
     self,

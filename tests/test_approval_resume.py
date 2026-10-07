@@ -6,9 +6,11 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 from langchain.agents import create_agent
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.tools import tool
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from langgraph.prebuilt import ToolRuntime
 from langgraph.types import Command
 from pydantic import ValidationError
 from runtime_fixtures import ToolModel
@@ -431,3 +433,79 @@ class ApprovalResumeTests(unittest.IsolatedAsyncioTestCase):
     responses[next(iter(responses))]["decisions"][0] = {"type": "reject"}
     with self.assertRaises(InvalidApprovalResponse):
       validate_responses(required, ApprovalSubmission(responses=responses))
+
+  async def test_sqlite_resume_after_tool_error_replays_without_duplicate_messages(
+    self,
+  ):
+    bash_commands = []
+
+    @tool
+    def time_failure(runtime: ToolRuntime) -> ToolMessage:
+      """Return a tool failure without an artifact."""
+      return ToolMessage(
+        content="No time zone found with key Asia/Shanghai",
+        tool_call_id=runtime.tool_call_id,
+        name="time_failure",
+        status="error",
+      )
+
+    @tool
+    def bash(command: str) -> str:
+      """Record approved commands without executing a subprocess."""
+      bash_commands.append(command)
+      return "Wednesday"
+
+    async with AsyncSqliteSaver.from_conn_string(str(self.path)) as checkpointer:
+      agent = create_agent(
+        ToolModel(
+          responses=[
+            AIMessage(
+              id="time-call",
+              content="",
+              tool_calls=[{"id": "time-1", "name": "time_failure", "args": {}}],
+            ),
+            AIMessage(
+              id="bash-call",
+              content="",
+              tool_calls=[
+                {"id": "bash-fallback", "name": "bash", "args": {"command": "date /t"}}
+              ],
+            ),
+            AIMessage(id="weekday", content="Wednesday"),
+          ]
+        ),
+        tools=[time_failure, bash],
+        middleware=[build_approval_middleware(["write_file", "bash"])],
+        checkpointer=checkpointer,
+      )
+      runtime = self.make_runtime(agent, self.store)
+      try:
+        thread = await runtime.threads.create_thread()
+        first = await runtime.runs.start_run(thread, "What day is it today?")
+        self.assertEqual((await runtime.runs.wait_run(first))["status"], "interrupted")
+        initial_facts = await runtime.runs.list_run_events(thread, first.run_id)
+        error_fact = next(e for e in initial_facts if e["event_key"] == "tool:time-1")
+        self.assertNotIn("artifact", error_fact["content"])
+        self.assertEqual(error_fact["content"]["status"], "error")
+        self.assertEqual(bash_commands, [])
+        pending = next(
+          e for e in initial_facts if e["event_type"] == "approval_required"
+        )
+        responses = {
+          request["id"]: {"decisions": [{"type": "approve"}]}
+          for request in pending["content"]["interrupts"]
+        }
+        resumed = await runtime.runs.resume_run(thread, first.run_id, responses)
+        self.assertEqual(resumed.run_id, first.run_id)
+        self.assertEqual((await runtime.runs.wait_run(resumed))["status"], "completed")
+        final_facts = await runtime.runs.list_run_events(thread, first.run_id)
+        self.assertEqual(bash_commands, ["date /t"])
+        self.assertEqual(
+          [e for e in final_facts if e["event_key"] == "tool:time-1"], [error_fact]
+        )
+        messages = [e for e in final_facts if e["category"] == "message"]
+        self.assertEqual(len(messages), 6)
+        self.assertEqual(len({e["event_key"] for e in messages}), len(messages))
+        self.assertEqual(messages[-1]["content"]["content"], "Wednesday")
+      finally:
+        await runtime.lifecycle.shutdown()

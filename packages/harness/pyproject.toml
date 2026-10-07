@@ -17,6 +17,7 @@ dependencies = [
     "pydantic>=2.13.4",
     "pywin32>=306 ; sys_platform == 'win32'",
     "readabilipy>=0.3.0",
+    "tzdata>=2025.2",
 ]
 
 [build-system]

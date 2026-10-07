@@ -182,6 +182,17 @@ class RunEventIngestor:
         ):
           # 根 Graph 后续重放不得覆盖封存正文或把它归给下一 Run。
           return existing["seq"]
+      if (
+        category == "message"
+        and content["type"] == "tool"
+        and "artifact" in content
+        and content["artifact"] is None
+      ):
+        existing = await self._store.get_message(thread_id, event_key or "")
+        if existing is not None and "artifact" not in existing["content"]:
+          # checkpoint 反序列化会把 ToolMessage 的默认 artifact=None 标成已提供。
+          # 重放沿用已提交事实的字段存在性；其余内容仍交给存储严格校验。
+          content = {key: value for key, value in content.items() if key != "artifact"}
       result = await self._store.append_committed_event(
         thread_id=thread_id,
         run_id=run_id,
