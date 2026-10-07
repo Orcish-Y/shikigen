@@ -4,7 +4,7 @@ Status: done
 
 实施进度：已验收
 
-来源：[统一实施规格](../../../../.scratch/frontend-completion/PRD.md)；[公共要求与依赖总览](index.md)。
+来源：[统一实施规格](../../../archive/2026-10-07/development/frontend-completion/PRD.md)；[公共要求与依赖总览](index.md)。
 
 **What to build:** 首次打开看最新，切回继续原阅读位置，上翻后新输出不抢位置，并可主动回到最新或定位审批。
 
@@ -27,6 +27,6 @@ Status: done
 
 2026-10-05：按用户 `/implement` 授权开始第 09 票；重新读取根 AGENTS.md。架构为 App 生命周期内的按会话锚点／偏移／跟随记录，主时间线观察滚动与布局变化；运行事实与草稿沿用现有所有者。复用已确认的工作台 UI、浏览器布局及公开 HTTP／SSE 边界进行 TDD／原生验收，最终由 `gpt-6-luna / max` 子 agent 验证并按 Standards／Spec 两轴独立审查，验收前不改 done。代码审查基点为 `eceb02064c0c77d18ac68e651e3dc84ffe21797d`。
 
-2026-10-05：最后修复的56项定向、类型／构建及本票3项真实Tauri验收通过；Standards／Spec独立审查无剩余finding。主agent已核对日志、锚点／偏移数据和截图。第07／08票共6项受影响回归脚本已准备，须完成当前受限沙箱的原生启动审批、执行回归及最终文档核对后再关闭本票并提交；当前未标done、未stage／commit。实际分批结果与历史失败见[第09票报告](../../../../.scratch/frontend-completion/ticket-09/report.md)。
+2026-10-05：最后修复的56项定向、类型／构建及本票3项真实Tauri验收通过；Standards／Spec独立审查无剩余finding。主agent已核对日志、锚点／偏移数据和截图。第07／08票共6项受影响回归脚本已准备，须完成当前受限沙箱的原生启动审批、执行回归及最终文档核对后再关闭本票并提交；当前未标done、未stage／commit。实际分批结果与历史失败见[第09票报告](../../../archive/2026-10-07/frontend-history.zip)（包内：`docs/archive/2026-10-07/development/frontend-completion/ticket-09/report.md`）。
 
 2026-10-05：原生启动审批后，第07两项／第08四项受影响回归均通过，三批依09→07→08串行且exit0。显式 `gpt-6-luna / max` 最终验证：前端初轮全套121通过，最后修复四文件定向56通过；Rust25通过，后端290通过／1环境跳过，类型／构建／格式检查通过。主agent核对实际日志、请求、几何及截图后将六项验收条件完成；此前03–06十项加本轮九项，共19个唯一原生案例，未把重试累计或声称一轮全19。软键盘／系统IME／真实多尺寸联合验收仍归第23票；所有历史失败及两份未确认根因的回归问题保留。

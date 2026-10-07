@@ -4,7 +4,7 @@ Status: done
 
 实施进度：已验收
 
-来源：[统一实施规格](../../../../.scratch/frontend-completion/PRD.md)；[公共要求与依赖总览](index.md)。
+来源：[统一实施规格](../../../archive/2026-10-07/development/frontend-completion/PRD.md)；[公共要求与依赖总览](index.md)。
 
 **What to build:** 运行中或等待审批时经确认取消，立即看到真实终态，并在重开后读取取消前后端已接入的全部正文。
 
@@ -29,8 +29,8 @@ Status: done
 
 2026-10-05：主 agent 已实现取消正文原子保存、generation_status 旧缺省兼容、取消确认、同 Run 写 pending、有限 GET 核实与一次终态正文补读。规格中的公开 HTTP/SSE、Runtime/持久查询和真实 Tauri 入口为已约定测试边界，按 TDD 开发；初始基准 d7862fb50a7c5654661ca6d8967195d863c2d80e。最终验证由显式 gpt-6-luna / max 子 agent 执行，当前仍在验证与审查，尚未标记 done。
 
-证据与剩余覆盖以[验证交接](../../../../.scratch/frontend-completion/ticket-10/validation-context.md)及后续验收报告为准；不把开发定向检查当成最终验收。
+证据与剩余覆盖以[验证交接](../../../archive/2026-10-07/frontend-history.zip)（包内：`docs/archive/2026-10-07/development/frontend-completion/ticket-10/validation-context.md`）及后续验收报告为准；不把开发定向检查当成最终验收。
 
 2026-10-05 验收完成：显式 `gpt-6-luna / max` 测试子 agent 执行后端专项 10 通过、最终串行后端全套 301 项（300 通过、0 失败／错误、1 Windows 符号链接环境跳过）、前端 Node 134 通过、真实 Tauri 单个 runner 串行 4＋19＝23 个唯一用例通过；最终 TypeScript／构建／11 文件 Ruff 与产品及测试范围 ty 通过。主 agent 已核对原始日志、取消确认和保存截图、重开历史及阅读位置记录；全部 8 条核心验收关闭。Standards／Spec 双轴审查无剩余硬性问题，两项 P2 修复保留历史，非硬性维护建议记录于报告。
 
-本票包含原生回归中阅读锚点亚像素抖动的窄修复，未削弱 Home／按钮／请求数量断言。较早完整回归及审批隔离二曾在既有结算用例超时，最终全套未复现，但根因未确认；[独立问题](../../../../.scratch/approval-cleanup-test-timeout/issues/01-approval-resume-settlement-timeout.md)继续 needs-triage，不将最新通过覆盖历史失败。第二轮原生发送前的 Failed to fetch 最终未复现，证据保留。完整过程与边界见[第 10 票报告](../../../../.scratch/frontend-completion/ticket-10/report.md)。物理键盘／系统 IME、多窗口联合验收仍归第 23 票；第 11 票失败正文与第 12 票完整审批待实施。
+本票包含原生回归中阅读锚点亚像素抖动的窄修复，未削弱 Home／按钮／请求数量断言。较早完整回归及审批隔离二曾在既有结算用例超时，最终全套未复现，但根因未确认；[独立问题](../../../issues/approval-resume-settlement-timeout.md)继续 needs-triage，不将最新通过覆盖历史失败。第二轮原生发送前的 Failed to fetch 最终未复现，证据保留。完整过程与边界见[第 10 票报告](../../../archive/2026-10-07/frontend-history.zip)（包内：`docs/archive/2026-10-07/development/frontend-completion/ticket-10/report.md`）。物理键盘／系统 IME、多窗口联合验收仍归第 23 票；第 11 票失败正文与第 12 票完整审批待实施。

@@ -4,7 +4,7 @@ Status: done
 
 实施进度：已验收
 
-来源：[统一实施规格](../../../../.scratch/frontend-completion/PRD.md)；[公共要求与依赖总览](index.md)。
+来源：[统一实施规格](../../../archive/2026-10-07/development/frontend-completion/PRD.md)；[公共要求与依赖总览](index.md)。
 
 **What to build:** 切换或重开后先核实当前请求，再恢复同一审批的选择与原因；失败或未知提交可以核实后人工继续。
 
@@ -26,6 +26,6 @@ Status: done
 
 ## Comments
 
-2026-10-06：按用户授权实施本票，明确不执行 Git 修改。新增应用级审批草稿与捕获提交记录；沿用全量 GET、有限恢复和同 Run 写互斥；本地输入只读核对，公开接口与原稿样式保持既有契约。最终验证交接见[第 13 票上下文](../../../../.scratch/frontend-completion/ticket-13/validation-context.md)，验收结果待轻量测试子 agent 核实。
+2026-10-06：按用户授权实施本票，明确不执行 Git 修改。新增应用级审批草稿与捕获提交记录；沿用全量 GET、有限恢复和同 Run 写互斥；本地输入只读核对，公开接口与原稿样式保持既有契约。最终验证交接见[第 13 票上下文](../../../archive/2026-10-07/frontend-history.zip)（包内：`docs/archive/2026-10-07/development/frontend-completion/ticket-13/validation-context.md`），验收结果待轻量测试子 agent 核实。
 
-2026-10-06：已完成七条验收。显式 `gpt-6-luna / max` 验证：唯一完整前端回归 164 通过；之后身份清理修复及新增用例的最终受影响专项 91 通过（含全部 13 项恢复测试）；分批 7 个唯一真实 Tauri 用例各有最终通过证据，真实 HTTP／SQLite／Graph 专项 1 通过；TypeScript、最终构建及 6 个 Python 文件 Ruff 通过，38 个 dist 文件与预置服务字节一致。原生早期夹具失败及范围边界完整保留，不改算通过；Standards／Spec 无剩余硬问题。主 agent 已核对原始日志、请求、结果和窗口截图，详见[第 13 票报告](../../../../.scratch/frontend-completion/ticket-13/report.md)。未暂存、未提交、未切换分支；物理输入／IME 和多尺寸联合验收仍归第 23 票。
+2026-10-06：已完成七条验收。显式 `gpt-6-luna / max` 验证：唯一完整前端回归 164 通过；之后身份清理修复及新增用例的最终受影响专项 91 通过（含全部 13 项恢复测试）；分批 7 个唯一真实 Tauri 用例各有最终通过证据，真实 HTTP／SQLite／Graph 专项 1 通过；TypeScript、最终构建及 6 个 Python 文件 Ruff 通过，38 个 dist 文件与预置服务字节一致。原生早期夹具失败及范围边界完整保留，不改算通过；Standards／Spec 无剩余硬问题。主 agent 已核对原始日志、请求、结果和窗口截图，详见[第 13 票报告](../../../archive/2026-10-07/frontend-history.zip)（包内：`docs/archive/2026-10-07/development/frontend-completion/ticket-13/report.md`）。未暂存、未提交、未切换分支；物理输入／IME 和多尺寸联合验收仍归第 23 票。

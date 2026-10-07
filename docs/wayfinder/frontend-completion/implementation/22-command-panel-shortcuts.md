@@ -4,7 +4,7 @@ Status: done
 
 实施进度：已验收
 
-来源：[统一实施规格](../../../../.scratch/frontend-completion/PRD.md)；[公共要求与依赖总览](index.md)。
+来源：[统一实施规格](../../../archive/2026-10-07/development/frontend-completion/PRD.md)；[公共要求与依赖总览](index.md)。
 
 **What to build:** 搜索操作与已加载会话并用键盘执行；输入时也能 Cmd/Ctrl+K／N／B，但输入法、长按和其他前景面板不会误触后台操作。
 
@@ -31,4 +31,4 @@ Status: done
 
 五个唯一本票原生场景分批各有最终通过证据：final-2其余四场景通过，四档final-4定向通过；另第21票导航与第04票原文／IME／重启草稿两项回归各通过。1440×900／1280×800／1024×768／390×844真实CSS内容区的dialog宽480／480／480／358px，DPR1.5／DPI144与Win32窗口记录保留。双层测试记录器、390px宽度及取证覆盖问题分别修正，原失败批次及Ruff E501记录保留，不改算通过；没有放宽正式断言。
 
-Standards硬项0、低风险判断观察1；Spec六AC符合且无未决遗漏／错误实现／范围蔓延。主agent核对原始日志、JSON、请求事实、截图和双轴报告后标记done；完整命令、批次范围、六AC对应及证据见[第22票报告](../../../../.scratch/frontend-completion/ticket-22/report.md)。Windows物理键盘／OS候选面板／原生边框与全流程联合验收留第23票；本票IME与repeat采用真实WebView CDP及明确事件，macOS Cmd仅单测。Vite主chunk642.05kB告警保留。无后端／Rust产品、API、依赖或配置变更，本轮未执行任何Git命令；第23票尚未开始。
+Standards硬项0、低风险判断观察1；Spec六AC符合且无未决遗漏／错误实现／范围蔓延。主agent核对原始日志、JSON、请求事实、截图和双轴报告后标记done；完整命令、批次范围、六AC对应及证据见[第22票报告](../../../archive/2026-10-07/frontend-history.zip)（包内：`docs/archive/2026-10-07/development/frontend-completion/ticket-22/report.md`）。Windows物理键盘／OS候选面板／原生边框与全流程联合验收留第23票；本票IME与repeat采用真实WebView CDP及明确事件，macOS Cmd仅单测。Vite主chunk642.05kB告警保留。无后端／Rust产品、API、依赖或配置变更，本轮未执行任何Git命令；第23票尚未开始。

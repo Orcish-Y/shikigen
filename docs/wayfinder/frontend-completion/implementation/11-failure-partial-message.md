@@ -4,7 +4,7 @@ Status: done
 
 实施进度：已验收
 
-来源：[统一实施规格](../../../../.scratch/frontend-completion/PRD.md)；[公共要求与依赖总览](index.md)。
+来源：[统一实施规格](../../../archive/2026-10-07/development/frontend-completion/PRD.md)；[公共要求与依赖总览](index.md)。
 
 **What to build:** 执行实际失败时保存已接入正文，展示真实失败原因和独立中止标记，重新读取后仍保留。
 
@@ -29,8 +29,8 @@ Status: done
 
 显式 `gpt-6-luna / max` 验证：新增后端 12 通过；最终串行完整回归 313 项，312 通过、0 失败／错误、1 Windows 符号链接权限跳过。前端全套 140 通过，样式修正后受影响专项 6 通过；TypeScript／构建、产品及新增测试 ty、9 个唯一 Python 文件的 Ruff 检查通过。专项与全套重叠，不相加。
 
-真实 Tauri 首轮 24 项为 22 通过、2 失败。新专项的长原因夹具改为 120 条换行明细，保留滚动断言；随后修正失败颜色，最终本票 1 项通过，确认实际正文／原因／草稿跨退出重开保留。旧 04 IME 首轮没有 POST、等待历史超时，原样隔离诊断 1 项通过，根因仍未知；未将隔离通过改算为首轮完整通过，见[独立问题](../../../../.scratch/native-ime-enter-timeout/issues/01-composition-enter-no-post.md)。
+真实 Tauri 首轮 24 项为 22 通过、2 失败。新专项的长原因夹具改为 120 条换行明细，保留滚动断言；随后修正失败颜色，最终本票 1 项通过，确认实际正文／原因／草稿跨退出重开保留。旧 04 IME 首轮没有 POST、等待历史超时，原样隔离诊断 1 项通过，根因仍未知；未将隔离通过改算为首轮完整通过，见[独立问题](../../../issues/composition-enter-no-post.md)。
 
 Standards／Spec 审查 0 项剩余硬问题，Standards 保留 2 项非阻塞建议。本票核心验收完成不表示所有历史回归问题已解决。无 Rust 产品改动，未重复 Rust 构建／测试；物理系统 IME、窗口边框和多尺寸联合验收归第 23 票。
 
-实现、六条验收证据、原始失败／修复、完整命令与日志、截图及边界见[第 11 票报告](../../../../.scratch/frontend-completion/ticket-11/report.md)。下一票为[逐项审批并继续同一运行](12-approval-resume.md)，本轮未启动。
+实现、六条验收证据、原始失败／修复、完整命令与日志、截图及边界见[第 11 票报告](../../../archive/2026-10-07/frontend-history.zip)（包内：`docs/archive/2026-10-07/development/frontend-completion/ticket-11/report.md`）。下一票为[逐项审批并继续同一运行](12-approval-resume.md)，本轮未启动。

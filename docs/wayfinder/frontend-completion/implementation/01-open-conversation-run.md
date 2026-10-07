@@ -4,7 +4,7 @@ Status: done
 
 实施进度：已验收（2026-10-04）
 
-来源：[统一实施规格](../../../../.scratch/frontend-completion/PRD.md)；[公共要求与依赖总览](index.md)。
+来源：[统一实施规格](../../../archive/2026-10-07/development/frontend-completion/PRD.md)；[公共要求与依赖总览](index.md)。
 
 **What to build:** 从工作台新建或打开会话，读取完整历史，确认当前／最近运行身份和中文状态；重新进入工作台后已有记录和输入仍可继续使用。
 
@@ -45,8 +45,8 @@ Status: done
 - [HTTP／Runtime 专项](../../../../tests/test_conversation_queries.py)：3 项通过，覆盖完整历史、各 Run 状态、暂停快照纯读、身份归属、暂不可读与损坏时事实不变。
 - [客户端边界](../../../../frontend/tests/backend-client.test.mjs)、[会话状态](../../../../frontend/tests/conversation-state.test.mjs)与既有宿主状态测试：前端全量 17 项通过。覆盖租约更换、迟到选择、创建失败／未知结果、正常发送、完整回放记录及新 Run 字段隔离。
 - [真实 Tauri 验收](../../../../frontend/src-tauri/tests/client_acceptance.py)：4 项全部通过；使用隔离临时项目／数据库和确定性 Agent，实际 Windows 宿主及 WebView。验证新建、历史与终态读取、正常发送、审批后观察、旧请求隔离，以及宿主从 45200 换到 45201 后记录／草稿保留且不重发。
-- Tauri 证据：[验收产物目录](../../../../.scratch/frontend-completion/ticket-01-native/)、[恢复后的窗口内容截图](../../../../.scratch/frontend-completion/ticket-01-native/test_running_sse_survives_page_reload_and_recovers_on_new_port_without_resend/window.png)。截图来自原生窗口内 WebView；已查看并核对现有工作台样式。
-- Python 全量：276 项，275 通过、1 项按环境跳过、无失败（312.123 秒）；[完整日志](../../../../.scratch/frontend-completion/ticket-01-python-tests.log)。命令为 `.venv/Scripts/python.exe -X utf8 -m unittest discover -s tests -v`。
+- Tauri 证据：[验收产物目录（原始产物已删除）](../../../archive/2026-10-07/README.md#已删除的材料)、[恢复后的窗口内容截图（原始产物已删除）](../../../archive/2026-10-07/README.md#已删除的材料)。截图来自原生窗口内 WebView；已查看并核对现有工作台样式。
+- Python 全量：276 项，275 通过、1 项按环境跳过、无失败（312.123 秒）；[完整日志（原始产物已删除）](../../../archive/2026-10-07/README.md#已删除的材料)。命令为 `.venv/Scripts/python.exe -X utf8 -m unittest discover -s tests -v`。
 - `tsc --noEmit`、`ty check app packages/harness`、本票变更的 Python 文件 `ruff check`、Vite 生产构建、`git diff --check` 与票据本地链接核对均通过。沙箱下检查较慢；自动审批曾因额度不足拒绝执行一次构建，用户要求继续后已重新执行成功。
 
 本票保留草稿至本次应用关闭；跨应用重启持久化与完整发送确认由第 4 票继续实施。仅第 1 票进入本轮实现，未修改 Git 暂存或创建提交。

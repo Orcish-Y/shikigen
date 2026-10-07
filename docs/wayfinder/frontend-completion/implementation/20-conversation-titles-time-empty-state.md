@@ -4,7 +4,7 @@ Status: done
 
 实施进度：已验收
 
-来源：[统一实施规格](../../../../.scratch/frontend-completion/PRD.md)；[公共要求与依赖总览](index.md)。
+来源：[统一实施规格](../../../archive/2026-10-07/development/frontend-completion/PRD.md)；[公共要求与依赖总览](index.md)。
 
 **What to build:** 用易识别标题与本地时间浏览会话，真实空态提供任务示例，已有草稿点击示例只追加。
 
@@ -29,6 +29,6 @@ Status: done
 
 2026-10-06：完成并验收。临时标题从首条已提交明确用户文本派生，跨重启缓存及完整历史重核；列表／工具栏／过滤共用标题，完整只读抽屉沿用原稿风格。真实时间按本地日历／相对时长展示，可复制本地时区时间及原始UTC；独立可见分钟计时不增HTTP，真实隐藏／托盘恢复通过。空态三例只填入或保留原文追加并同步聚焦，不发送、不抢其他会话／模态焦点。标题存储故障独立提示，不误报可持久保存的消息草稿；新增布尔属性统一为isCreating。
 
-最终验证显式由 **GPT-6-Luna / max** 子agent执行：最新完整Node **246通过，0失败／跳过／取消**；TypeScript、Vite构建及三个Python文件Ruff check／format通过；最新真实Tauri单批final-5 **4／4通过，0失败／错误／跳过**。Standards硬性违规0／判断性建议0，Spec六AC符合、严重度发现0。主agent已核对日志、退出码、公开请求、四个结果JSON及五张截图后勾选全部条件；[完整报告及验收映射](../../../../.scratch/frontend-completion/ticket-20/report.md)。较早原生1通过／3失败、2通过／2失败及受限环境CDP初始化4失败均保留，权限执行获准后的final-5使用最新dist完整复验，不覆盖旧失败。
+最终验证显式由 **GPT-6-Luna / max** 子agent执行：最新完整Node **246通过，0失败／跳过／取消**；TypeScript、Vite构建及三个Python文件Ruff check／format通过；最新真实Tauri单批final-5 **4／4通过，0失败／错误／跳过**。Standards硬性违规0／判断性建议0，Spec六AC符合、严重度发现0。主agent已核对日志、退出码、公开请求、四个结果JSON及五张截图后勾选全部条件；[完整报告及验收映射](../../../archive/2026-10-07/frontend-history.zip)（包内：`docs/archive/2026-10-07/development/frontend-completion/ticket-20/report.md`）。较早原生1通过／3失败、2通过／2失败及受限环境CDP初始化4失败均保留，权限执行获准后的final-5使用最新dist完整复验，不覆盖旧失败。
 
 范围：CDP输入、页面clipboard stub、虚拟墙钟不等于物理输入／系统IME、OS剪贴板或等待真实一分钟；原生边框和多尺寸联合检查仍在第23票。631.72kB构建chunk提示保留。本票无后端／Rust产品、依赖或API改动，本轮未执行任何Git命令。

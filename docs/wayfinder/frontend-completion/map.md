@@ -25,7 +25,7 @@ assignee: null
 - 使用 wayfinder；决策讨论使用 grilling 与 domain-modeling，沿用 Thread、Run、RunExecution、观察连接、Interrupt 的现有含义，已确认用语见[领域词汇](../../../CONTEXT.md)。用户负责代码，未授权修改 Git、暂存或提交。
 - 本目录 tracker 见 [本地追踪规则](tracker.md)。每次只认领并处理一个决策票据；建图会话不同时解决票据。开放子票据通过元数据查询，地图正文只索引已关闭的决策。
 - 2026-10-04 用户已完整确认最后的交互、实施与验收安排；七项子决策均已关闭，地图规划完成。应用代码及实机验收分别按实施计划推进，不由 closed 状态推断完成。
-- 2026-10-04 按用户的 to-spec 请求，综合本地图及定稿契约发布[首版实施规格](../../../.scratch/frontend-completion/PRD.md)，本地 tracker 状态为 ready-for-agent，包含用户故事、实施决策、测试边界和验收矩阵。
+- 2026-10-04 按用户的 to-spec 请求，综合本地图及定稿契约发布[首版实施规格](../../archive/2026-10-07/development/frontend-completion/PRD.md)，本地 tracker 状态为 ready-for-agent，包含用户故事、实施决策、测试边界和验收矩阵。
 
 ## Decisions so far
 

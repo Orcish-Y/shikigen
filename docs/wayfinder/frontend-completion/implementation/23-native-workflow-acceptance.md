@@ -4,7 +4,7 @@ Status: done
 
 实施进度：已验收
 
-来源：[统一实施规格](../../../../.scratch/frontend-completion/PRD.md)；[公共要求与依赖总览](index.md)。
+来源：[统一实施规格](../../../archive/2026-10-07/development/frontend-completion/PRD.md)；[公共要求与依赖总览](index.md)。
 
 **What to build:** 在真实 Windows Tauri 应用验证首版17条与新增要求，记录可复查的预期、实际和证据，完成跨分支交互及视觉收尾。
 
@@ -34,7 +34,7 @@ Status: done
 - 五条真实 provider 场景通过；生产程序实际拥有 Python、动态地址、单实例及原生托盘路径有独立通过证据。1440×900、1280×800、1024×768、390×844 与 OSK／长草稿／TrayNotice 的 390×600 共五个唯一操作场景分批各有通过，核对发送、审批、GET 重连、确认取消、身份及完整原文；没有累计重叠批次。
 - 原生 IME Space 选中文再 Enter 单次发送、候选 Enter 不发送、OS 触控、完整系统剪贴板、默认下载完成并在退出后留存均有证据。旧 OSK 背景截图无效，补拍后实际检查真实键盘；历史失败不覆盖。
 - 主 agent 已核对八项验收及原始日志／JSON／图片／源码哈希／清理记录后关闭本票。17 条标准与 116 故事按实际范围逐项映射，不把增强探针或未执行硬件记成通过。实体外设、TabTip、OSK 点键和候选 UIA 截图未验；下载第 7 批隔离临时目录因工具层拒绝清理仍保留，测试进程与端口已清理。
-- 完整结果、八 AC、审查及范围见[联合报告](../../../../.scratch/frontend-completion/ticket-23/report.md)、[覆盖映射](../../../../.scratch/frontend-completion/ticket-23/coverage.md)、[原始操作事实核对](../../../../.scratch/frontend-completion/ticket-23/validation/native/workflow-matrix-audit.json)。未执行任何 Git 命令；父地图保持已关闭。
+- 完整结果、八 AC、审查及范围见[联合报告](../../../archive/2026-10-07/development/frontend-completion/ticket-23/report.md)、[覆盖映射](../../../archive/2026-10-07/development/frontend-completion/ticket-23/coverage.md)、[原始操作事实核对](../../../archive/2026-10-07/native-acceptance-evidence.zip)（包内：`docs/archive/2026-10-07/development/frontend-completion/ticket-23/validation/native/workflow-matrix-audit.json`）。未执行任何 Git 命令；父地图保持已关闭。
 
 ### 2026-10-07：联合验收开始
 
@@ -45,7 +45,7 @@ Status: done
 
 ### 2026-10-04：第 2 票可复用证据与剩余实机范围
 
-- [会话分页票](02-paginated-conversation-list.md)已完成接口、客户端及真实 Tauri WebView 验证，其[续验收报告](../../../../.scratch/frontend-completion/ticket-02-native-resume/report.md)、JSON、日志与截图可在联合验收时复用。
+- [会话分页票](02-paginated-conversation-list.md)已完成接口、客户端及真实 Tauri WebView 验证，其[续验收报告](../../../archive/2026-10-07/frontend-history.zip)（包内：`docs/archive/2026-10-07/development/frontend-completion/ticket-02-native-resume/report.md`）、JSON、日志与截图可在联合验收时复用。
 - 滚轮、错误区重试／重载、End 与 PageDown 的成功输入证据来自可信 CDP 事件；本票仍须按既有验收条件覆盖真实 Windows 焦点、物理输入与 IME。此前物理按键注入没有到达目标 DOM，不能记为通过，也未证实产品缺陷。
 - 第 2 票实测 1440×900 CSS 内容区、DPR 2，截图只有 WebView 内容；原生标题栏／边框、其他三个尺寸、跨分支状态仍按本票验收条件执行。五种会话数量已覆盖 HTTP 全页与 WebView 首屏，实机全页路径有 41 条 20／20／1，以及 21 条错误后重试；其余数量的实机末页检查可在联合验收补齐。
 - 本节只记录后续可复用材料与覆盖边界，本票仍为待实施，未执行联合验收。

@@ -4,7 +4,7 @@ Status: done
 
 实施进度：已验收（本票核心路径通过；完整后端回归有独立未解决问题）
 
-来源：[统一实施规格](../../../../.scratch/frontend-completion/PRD.md)；[公共要求与依赖总览](index.md)。
+来源：[统一实施规格](../../../archive/2026-10-07/development/frontend-completion/PRD.md)；[公共要求与依赖总览](index.md)。
 
 **What to build:** 按原文发送消息，运行期间仍能编辑下一条草稿；重启后保留文字，发送结果未知时可以查询核对和主动决定后续动作。
 
@@ -28,8 +28,8 @@ Status: done
 
 2026-10-05：实现并完成本票核心验收，未启动第 05 票。新增应用级按会话持久草稿／版本／提交记录；只有本 POST 有效 metadata 清对应版本。未知结果只 GET，可人工核对已提交消息或经说明主动发起新任务；保留原文和新草稿，不自动重发。恢复失败保留文字，支持复制及转到新会话。
 
-最终验证与独立审查由 `gpt-6-luna / max` 执行。前端全套 69 通过，最后补修后相关 49 通过；类型检查、构建、Ruff 通过；本票真实 Tauri 4/4 和第 03 票实机回归 3/3 通过。后端公开接口专项 17/17、正文安全专项 2/2、ty 通过。Standards 最终 0 硬违规／1 heuristic，Spec 0 违规／0 scope creep。完整命令、日志及截图见[本票报告](../../../../.scratch/frontend-completion/ticket-04/report.md)。
+最终验证与独立审查由 `gpt-6-luna / max` 执行。前端全套 69 通过，最后补修后相关 49 通过；类型检查、构建、Ruff 通过；本票真实 Tauri 4/4 和第 03 票实机回归 3/3 通过。后端公开接口专项 17/17、正文安全专项 2/2、ty 通过。Standards 最终 0 硬违规／1 heuristic，Spec 0 违规／0 scope creep。完整命令、日志及截图见[本票报告](../../../archive/2026-10-07/frontend-history.zip)（包内：`docs/archive/2026-10-07/development/frontend-completion/ticket-04/report.md`）。
 
-**完整后端回归未全绿：**291 项中 289 通过、1 因 Windows symlink 权限跳过、1 审批恢复结算超时错误；正式隔离复测两次仍失败。本票未修改该产品路径或正式用例，根因未确认，另建[独立问题](../../../../.scratch/approval-cleanup-test-timeout/issues/01-approval-resume-settlement-timeout.md)，不计为通过。
+**完整后端回归未全绿：**291 项中 289 通过、1 因 Windows symlink 权限跳过、1 审批恢复结算超时错误；正式隔离复测两次仍失败。本票未修改该产品路径或正式用例，根因未确认，另建[独立问题](../../../issues/approval-resume-settlement-timeout.md)，不计为通过。
 
 实机 IME 证据为实际 Tauri WebView 的 CDP 中文合成输入保护；系统候选面板、物理键盘、所有 IME 与多尺寸／焦点联合验收归第 23 票。running“取消运行”入口当前禁用，interrupted“处理审批”定位现有提示；完整可操作取消／审批仍归第 10／12 票。新核对区和弹窗沿用当前样式，未改 CSS、Rust 或后端产品；未执行 Git 写操作。

@@ -4,7 +4,7 @@ Status: done
 
 实施进度：已验收
 
-来源：[统一实施规格](../../../../.scratch/frontend-completion/PRD.md)；[公共要求与依赖总览](index.md)。
+来源：[统一实施规格](../../../archive/2026-10-07/development/frontend-completion/PRD.md)；[公共要求与依赖总览](index.md)。
 
 **What to build:** 导出点击时已加载的已提交消息，包含完整工具记录和中止正文，范围可核对且原文不会破坏记录结构。
 
@@ -25,6 +25,6 @@ Status: done
 
 ## Comments
 
-2026-10-06：实现事实快照、完整 Markdown 序列化及工具栏 UTF-8 Blob 下载。以编辑前文件副本固定审查点，不执行 Git 命令。显式 `gpt-6-luna / max` 执行完整 Node 基线188通过；围栏／字段修正后的最终导出专项7通过，TypeScript／构建及最新两Python文件Ruff通过。六个正式Tauri导出场景＋两个既有回归，共八个唯一用例分批各有通过证据，不声称一次8／8全绿。实际UTF-8文件、点击后新消息排除、完整HTTP记录、中止正文与真实原因、空记录、同步失败及真实WebView同GUID下载取消均有证据；主agent已核对原始日志、字节、JSON与截图，六条验收对应见[实施与验证报告](../../../../.scratch/frontend-completion/ticket-16/report.md)。
+2026-10-06：实现事实快照、完整 Markdown 序列化及工具栏 UTF-8 Blob 下载。以编辑前文件副本固定审查点，不执行 Git 命令。显式 `gpt-6-luna / max` 执行完整 Node 基线188通过；围栏／字段修正后的最终导出专项7通过，TypeScript／构建及最新两Python文件Ruff通过。六个正式Tauri导出场景＋两个既有回归，共八个唯一用例分批各有通过证据，不声称一次8／8全绿。实际UTF-8文件、点击后新消息排除、完整HTTP记录、中止正文与真实原因、空记录、同步失败及真实WebView同GUID下载取消均有证据；主agent已核对原始日志、字节、JSON与截图，六条验收对应见[实施与验证报告](../../../archive/2026-10-07/frontend-history.zip)（包内：`docs/archive/2026-10-07/development/frontend-completion/ticket-16/report.md`）。
 
 Standards／Spec无剩余硬问题；lifecycle文案与Run.error分字段保留。早期CDP连接错误与误改夹具标记导致的失败均保留。默认SaveAs窗口探针两次失败，代码及日志不删除、不改算通过；规格未要求特定窗口形态，实际下载取消已验证。默认保存UI／目录和物理用户操作仍未验证，归第23票联合实机检查；CDP指定隔离目录不代表默认UI通过。无后端／Rust产品、HTTP或依赖变更，未重复相关全套回归。当前Vite主chunk595.78kB提示保留。

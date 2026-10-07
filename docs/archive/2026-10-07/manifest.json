@@ -1,0 +1,1154 @@
+{
+  "date": "2026-10-07",
+  "policy": "Keep development guidance as Markdown; compress historical reports and minimal unresolved/final-native evidence; delete reproducible routine logs and repeated runs.",
+  "previous_archive_files": 1522,
+  "previous_archive_bytes": 35113125,
+  "guidance_markdown_files": 14,
+  "packages": {
+    "backend-history.zip": {
+      "members": 13,
+      "bytes": 32786,
+      "sha256": "4f8ea0bfaa412504ea35f320dd9b79d3b8134d87fcc97475fcf3da669afa0f34"
+    },
+    "frontend-history.zip": {
+      "members": 164,
+      "bytes": 555526,
+      "sha256": "61efee058e7f7728b79afecd21c975b270688cf0fdc7b5e957a1ca2d5bf57165"
+    },
+    "native-acceptance-evidence.zip": {
+      "members": 10,
+      "bytes": 107686,
+      "sha256": "bfced6c86df9f946fd6e605e850b0db9cbe346c3f398fa5230a4bcc1dddcccd4"
+    },
+    "unresolved-issues-evidence.zip": {
+      "members": 22,
+      "bytes": 193241,
+      "sha256": "51b487ea85941a09a66c6938fa532a791fd45c78dc317a3b8556dbfac185f58c"
+    }
+  },
+  "retained": [
+    {
+      "path": "docs/archive/2026-10-07/development/desktop-network-refactor/report.md",
+      "storage": "markdown",
+      "sha256": "bf9cd520b32f985a4e7469b6c773053b77e87c6f557ff42fa117034f14f41790"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/desktop-network-refactor/validation/python/report.md",
+      "storage": "markdown",
+      "sha256": "98cd9901663527a49eeea22997bd105980bf921edac655b6f3a17b3bcd5f696c"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/desktop-network-refactor/validation/rust/report.md",
+      "storage": "markdown",
+      "sha256": "6266d3c50c0a3a16ce72777fd11c3787b0695edeab01573132e16e6558708690"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/dev-port-fallback/report.md",
+      "storage": "markdown",
+      "sha256": "76dd45976bd1303da8d96f5524298cfc4c150fec40c29c43ab94c0cd223fda24"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/dev-port-fallback/validation/backend/report.md",
+      "storage": "markdown",
+      "sha256": "acf8d6f49e1eb47507188784dda1a3d72195396c47bf24704351f64c4192dbda"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/PRD.md",
+      "storage": "markdown",
+      "sha256": "d1f92e8f4dbcecf2d6fa6f149aefb236572daf0af9ded6c492f0771f79150ca4"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-23/coverage.md",
+      "storage": "markdown",
+      "sha256": "543703c1b4fc234f5e0bd2ec187667fc3ab15b3a0592ff6c8a065204383d807b"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-23/manual-acceptance.md",
+      "storage": "markdown",
+      "sha256": "8bdf7094ba224a58cead2a9fa54d3d718a53a6b0acd52ae58a6b184ba6a93534"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-23/report.md",
+      "storage": "markdown",
+      "sha256": "fdcfb7634af7177be76aef0916f6902d874252572b44a14009c14b9dbebe0277"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/tickets.proposal.md",
+      "storage": "markdown",
+      "sha256": "d8c5b466fa55e56adc5f397532abba2065614c6f2e503c031eeb42b7e8dfa567"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/message-write-refactor/report.md",
+      "storage": "markdown",
+      "sha256": "22ce847942e91c85a23630e025856ff2cf979f790cd5d26fe881eb91594887d8"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/query-response-headers/report.md",
+      "storage": "markdown",
+      "sha256": "6200a740a75bedf173b2da402155e45048b0230e71f296018fb7d88a1c89db54"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/thread-page-limit/report.md",
+      "storage": "markdown",
+      "sha256": "56557729ce7641c2b88011b59703f8d19f75bba3a6f056f90033c4a3d9d8647e"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/windows-backend-lifecycle/README.md",
+      "storage": "markdown",
+      "sha256": "66addd4ec4dbaba61edd282990348ef94ebcb7450d705a202680cbd578e27af4"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/dev-port-fallback/validation/backend/approval-timing.log",
+      "storage": "unresolved-issues-evidence.zip",
+      "sha256": "3489eb4dd1f594818e36538b956bcaf1f9ed88be4032ba07d048e41f834a9cd0"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/dev-port-fallback/validation/backend/approval_timing_probe.py",
+      "storage": "unresolved-issues-evidence.zip",
+      "sha256": "3b1ff30b9aff15e57f2138634ce545fd1fa744de221de173dc480c744a7b0797"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/dev-port-fallback/validation/backend/python-full.log",
+      "storage": "unresolved-issues-evidence.zip",
+      "sha256": "f10ded3f63842f15c10ca03622abeb330340dd320557b95854bfe66c4c2c0098"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/dev-port-fallback/validation/cors-final/report.md",
+      "storage": "backend-history.zip",
+      "sha256": "748e65ae999d3f45b0bd1a43d131292536780a3543b86669ef54d1cbce11eb4d"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/dev-port-fallback/validation/native/report.md",
+      "storage": "backend-history.zip",
+      "sha256": "4f6b0cff8c560ceb707469eed9ab347aadc566fba480a892b808324942b0761c"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/dev-port-fallback/validation/static/cors-final/summary.md",
+      "storage": "backend-history.zip",
+      "sha256": "b8f74de10c4366ad39fd66045b855b94ab7d6665525ea9c4b4a3789fb05e9566"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/dev-port-fallback/validation/static/summary.md",
+      "storage": "backend-history.zip",
+      "sha256": "dcac5b4681096c528f12b57338a40920b33404eb10c2e09ce0455153d20ffe7b"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-02-backend-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "8acbc83b08839f3a8d1ab8ba0089672a1aad52d9424479b884a91df4257e2365"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-02-cors-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "9ca8a551651304c4831780c0c768fb645c2251f153b0c2792514aa67b4438d40"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-02-cors-spec-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "dd898faeb495ced24539ba438a6e5a28447a363f47773007b77c20dd412b7786"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-02-cors-standards-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "1b21b1795ba1d348e198568c1ea42bf84d3516a69dcf7927990d75953181337b"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-02-native-resume/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "af18e8fb947480a13faf5dd955ce9a1e8960b5ce8d1d7c0214f32d0292ddb361"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-02-spec-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "ffa6374791029e54e1f0be6d95223155c3d8fe3f6d9acb850bd01a0931af9337"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-03/backend-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "461bc3f036545a48bc618134c431403b38ca06d4501b2015e2aebb8b16d8429e"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-03/frontend-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "7c29eeb8451d6780c7623f227c5dc5ebd6bd12d46cd8e0ac5c8f98819494b88e"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-03/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "f0323dafe96fc4f935363a00460181ec998b2f25de3420a0c2fb7a417e8259f1"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-03/spec-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "efcddf1e84cd7810751eb596a7db6afdd8868ec908b513e522d2a017d93b905a"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-03/standards-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "7d63cea04da0cdf9c2a5358a79c10abf16b3f4e7d0c41415b7eed6888c123531"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-03/validation-context.md",
+      "storage": "frontend-history.zip",
+      "sha256": "98cfee0f147c4fb3d0328280d3d620bab2a550df576213f7e996a45156aa8216"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-04/backend-approval-resume-confirmation.log",
+      "storage": "unresolved-issues-evidence.zip",
+      "sha256": "8e6525ecd1feeb0cb8471122936953ac7166d88df08c968c2f057dffdc2d05d8"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-04/backend-approval-resume-diagnostic.log",
+      "storage": "unresolved-issues-evidence.zip",
+      "sha256": "a0cc7beda53874eb5fca9ff60ef6c00e5721244a248e200d59781ebdd4f2c3f7"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-04/backend-approval-resume-repro.log",
+      "storage": "unresolved-issues-evidence.zip",
+      "sha256": "3c230fa015b56f51fb2f019fac0bfd585404be96012e435926c6915bdd568536"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-04/backend-full-suite.log",
+      "storage": "unresolved-issues-evidence.zip",
+      "sha256": "30d2fcfefcc8d9dc7ee20aa11868accf104bc6adda6db921b0b69702fd2a6052"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-04/backend-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "9d46e823a3308702d4a529badc2a3fa21f8f1a898e0af4436971cc83225169f1"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-04/diagnose_approval_resume.py",
+      "storage": "unresolved-issues-evidence.zip",
+      "sha256": "6788972e822d8d7806dcbcf8ffd92cd3a40f79414078de2c1c69ffb89b5baf9f"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-04/frontend-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "da76adda7f57767a7cf50bce3f854f78133c13d748527788fea4ddd2bfaaa188"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-04/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "41e2445d4d77460432133ebb42a9b815a33b3fc85ef58b80cd22bc3334dbb668"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-04/spec-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "2d769f86da686f1a16f8db84af6b9d67d2a5af4c6d8c75bd62eb9cfd27f31dc3"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-04/standards-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "d1cabf4a637b21569c3f6d65620dadf7f597854c7f1da46d73faea069bd2f5ce"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-04/validation-context.md",
+      "storage": "frontend-history.zip",
+      "sha256": "39274dda9e4ca50c76ec05c1495f3d06aa83e842418c959f36f06b400aae7f0b"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-05/backend-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "580cf457b511c69eb4182073eb6ea3ae830c74f6be9cd033c0cefb0561ba54ca"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-05/frontend-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "a594bc97c51a0ba816a37f141659afa58731e3c34dd7aa80e525c236641ffd99"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-05/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "ae263b1b2d5d08a294caf0e84753c0c59af74e2f0fb80ece4a7fdfd17a262dbd"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-05/spec-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "427efba68d9a57acecf7a071ab39e9b415ae6d8d4f12c098e290c38ede4db90e"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-05/standards-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "723b64c9c86acd5e9980d96956e4f39235d32de3b06f287c2cab09aac32635b8"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-05/validation-context.md",
+      "storage": "frontend-history.zip",
+      "sha256": "251574c2c649ea7b7969aad53a3ab4b8e794403f130780d700f18b1be6f9c9d5"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-06/backend-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "8820ec5b05e0ad030a79ad92a8d496497f9d04a7016998f4ed2edd6ae09bf382"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-06/diagnosis.md",
+      "storage": "frontend-history.zip",
+      "sha256": "45a3a9485bc95eb0af6fc51b79c38427fab9322fcf2a49e425f320765486c3f4"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-06/frontend-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "11ca0568c4315ffeb46abdb6a473ce46b9b65040d2cfbca1a93d9baecf6db62e"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-06/native-fresh-agent-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "3112845235c058e4393d165ad419c9a00e01bdda97612136defc66345dd94864"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-06/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "943b401139968dee0dfd0bec173ead6d9cbb2fe16c664aac756cc5a41fdd3439"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-06/spec-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "07017974dc5a4419e31e1bfc1d0a68186d1caadc6211eab4f0f9e06605a64e9b"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-06/standards-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "57177c337aebed0b891a13eddce68001e8059d57a055296346a6d73111d20919"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-06/validation-context.md",
+      "storage": "frontend-history.zip",
+      "sha256": "6c9346ac57581201ae8685709aceabd09c5e26d69921239cea5e0bd384965a5b"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-07/backend-isolated-environment-test.log",
+      "storage": "unresolved-issues-evidence.zip",
+      "sha256": "9d630c0da7fe14714243e840c5e7c5794b54294829a11c6b393c16e320f896ff"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-07/backend-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "92b20389795b10ba128b2332a6e7bc6a12bb926984400c195f2847d428603f77"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-07/backend-unittest.log",
+      "storage": "unresolved-issues-evidence.zip",
+      "sha256": "99ddadbd3c7e51404266a39ed8c59db0889ee2ea75cbd244159555dee02c6f4e"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-07/diagnosis.md",
+      "storage": "frontend-history.zip",
+      "sha256": "055c58a079d1a88ef839cdaf1b14c856d36131d389dbbe8f1b6b07eb46e0c3f1"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-07/frontend-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "a242e22b80df8041239ae50c7d5b05e7f5f305447d5db30ec613ea1d34ca0452"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-07/native-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "a7c00ec29263de9ac2e81a5b1b3c835bd98c61d75a0c7ffe5fe23754caf9fb47"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-07/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "11f140464e67cba8e126abefee909ceca61f7ea429770ac5074a15a55f4414ff"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-07/spec-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "a0c44ce78a174a900f4ab84344580d07c7863a724373992226e2a77956570b53"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-07/standards-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "179a3ddf26bc058af4dece3d6a1a964573e9b6b0683c1cf1cb541ec114241db4"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-07/validation-context.md",
+      "storage": "frontend-history.zip",
+      "sha256": "28b1c9c15acad166410ea7f777816fb6f9c282829e4ca9bd8c638667dea903ad"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-08/backend-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "8f7d3be6218d9a8dff95a0c9f8837554fcc49a8d8cc08461207812d89bff0e62"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-08/diagnosis.md",
+      "storage": "frontend-history.zip",
+      "sha256": "6de776edabc254e91b3341af138dc3d8d94c9dbc11f09090f9a8c3e360e5bd7e"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-08/frontend-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "6c065e3f0cf70e128fe4d79c4c3afe818dfd39048eac1996fbe5b6a35daaba31"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-08/native-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "79d0e4726de1ebdb752e63f0e5d8b1b49784c235ecfe95d4bfbbe00e8fe6aaef"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-08/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "9edffd47348f7c526720f1bdd3cc670540f901ccdaca6e008e67c038fc7bc71c"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-08/spec-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "e59fa190a56b5e3d2c682b8fed8af70b511790345096b041db51761dc1a0b747"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-08/standards-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "b7383aa7e0274a89cc4d75bc00ccfbfb6504f371ea6f414bc9cacd8cc8921561"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-08/validation-context.md",
+      "storage": "frontend-history.zip",
+      "sha256": "32243c3e3099272d588ba7bee93a9c1d62087c16863719972453207bf8178ec0"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-09/backend-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "1e215ce6ad976cf83c873cd9fb6de6517142d201a53ace63e5b1299a66e29d73"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-09/diagnosis.md",
+      "storage": "frontend-history.zip",
+      "sha256": "75c633d27947d3c8be4fa8dceb0a5c91acea050878b45662ed2f5c82c9420c2b"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-09/frontend-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "be9e90cc652adbe9855bce949aba46a40fcee932e5d403f804573a7365b43a64"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-09/native-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "d11e25b80bf5299ea835e765aa3142f28670c9b40021d05cf0b065d480579d49"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-09/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "0ba66d2b5058133987d07403c52b9fc568511e23e2f476c6d82e720940905d56"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-09/spec-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "2004beb7702bdb48c6ab0b0ec862d898c1ac9732ad0e05fb3b6a805352c612b9"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-09/standards-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "45d338f4396227ea5a7b3c236514d4c6038fc5249f9d170fdf0381e01e497836"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-09/validation-context.md",
+      "storage": "frontend-history.zip",
+      "sha256": "2276844d0d0baf83344acbb735ecc1940a028d2df0eb70919442e6249f1ead23"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-10/backend/approval-timeout-isolated-2.log",
+      "storage": "unresolved-issues-evidence.zip",
+      "sha256": "7fa7fd9c0568048551946c250b3f142dde011da5d1d6c4e19a2b4666900b6150"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-10/backend/backend-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "eb901e3d3dffbaca6a6ed253af155a357b415f25c6ed7a4f6c871fe4cddb01bc"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-10/backend/full-unittest-final5.log",
+      "storage": "unresolved-issues-evidence.zip",
+      "sha256": "3c2b554d49395f9dad077518d74aacf132c934af65738c46703a6e2e46cf1e26"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-10/delivery-audit.md",
+      "storage": "frontend-history.zip",
+      "sha256": "7065fee712575c0fae925794fda327208eda13f784635c068c4da0567362680b"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-10/frontend-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "5b908a53ff6deaa0293417082ed14618c237861912ed1451ca54d1a7ebce4ee5"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-10/home-diagnosis.md",
+      "storage": "frontend-history.zip",
+      "sha256": "65ac104584db961ee2e6e3aad5de33a5c739dbc728222f0f41657f0048fd1c8f"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-10/native-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "a94062718fe104ed1ac7b0ad46a8ca9bf4c36e7200736e8f31f74b3eccca42b3"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-10/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "6904f9b9ef050481dbc717693ed1cd7434f152f06bbcb945ff21da095f9634ca"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-10/spec-final-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "5a1ad12492c0772e507a3e3aa094f734dee73c5213d69ba4859545902e1afe42"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-10/spec-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "4f14ba2a94cba6c1ddf984870b0b93303454d3b01e8243f0d3e98c665482be39"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-10/standards-final-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "eb95f81aba1042ad8b1b1e0016b73c942b8908a6a8174c8f615e9304f64950b3"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-10/standards-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "2aafe10544982e198528eea9c1204822ada8377122035f155f3bb80336c72045"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-10/validation-context.md",
+      "storage": "frontend-history.zip",
+      "sha256": "c3c6a2bb02bc126269dfcbdb31aef930064b7774ca8fb269ed7409069949082d"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-11/backend-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "f451ceaf9c9acde06a37f0256d5f61815599a33c41eefbb994fe5f86bd46b9e2"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-11/delivery-audit.md",
+      "storage": "frontend-history.zip",
+      "sha256": "215970747954e4a5182df3e8658d369ad6a7addd1f673ff38a9211a5d095292d"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-11/frontend-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "752ae3039de9f1da85505239e24260c856ed32d6c361d7964e5af67c97eea14b"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-11/ime-diagnostic/04-ime/test_original_enter_composition_and_draft_survive_native_restart/ime-events.json",
+      "storage": "unresolved-issues-evidence.zip",
+      "sha256": "e1a708486ff568b0f22c0812805e51ac86a3acc9a6c91d5867b3501fb83cfa24"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-11/ime-diagnostic/04-ime/test_original_enter_composition_and_draft_survive_native_restart/result.json",
+      "storage": "unresolved-issues-evidence.zip",
+      "sha256": "d6ef0b107e5d16eae2d5f0149608809ca81c5ba2ba4b99d10a707957dbd7d500"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-11/ime-diagnostic.py",
+      "storage": "unresolved-issues-evidence.zip",
+      "sha256": "66c61d42c09220e215c08a1571166f0cef30bf13e3798d7767fc8e0a7a366d0d"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-11/logs/native-all.meta.json",
+      "storage": "unresolved-issues-evidence.zip",
+      "sha256": "d1e1813cac39605a5d2fc6f3227e62eb4f4c3a725c089a9c30d4fd383c89dc3d"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-11/logs/native-all.stderr.log",
+      "storage": "unresolved-issues-evidence.zip",
+      "sha256": "cdd379a201ca145e9ec1efcc44d2052247944b8b72bed01458fc27129e53b1d8"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-11/logs/native-ime-diagnostic.stderr.log",
+      "storage": "unresolved-issues-evidence.zip",
+      "sha256": "0af0b5f16f05585e3e7d2dbb68537e6efaf2f0c89166b803fff25c446e390457"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-11/native/04-message-drafts/test_original_enter_composition_and_draft_survive_native_restart/failure-dom.html",
+      "storage": "unresolved-issues-evidence.zip",
+      "sha256": "5178ae5ad27303752aca43e298079f401968bc42456ee6685fe5e72b6999a816"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-11/native/04-message-drafts/test_original_enter_composition_and_draft_survive_native_restart/failure-evidence.json",
+      "storage": "unresolved-issues-evidence.zip",
+      "sha256": "d1ccb4d4e49d2655a9896bf94e3eca403d5c1bcfe87cd4e411c58f057c01e4f4"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-11/native/04-message-drafts/test_original_enter_composition_and_draft_survive_native_restart/window.png",
+      "storage": "unresolved-issues-evidence.zip",
+      "sha256": "cf54405fca4a13815b6987edc983a924499eb6e267c03f82122c7c812430378b"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-11/native-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "af872a21d8089027e8b6567fc0ad2e405cd55fcbbda926e7a736812bb5aa84d9"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-11/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "e2d688d7c7aac66baddfaa161a9b0d1c590329891d146c5fef09539e6be679a8"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-11/spec-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "b4ff9583e2ecf9a9de4bd6e147b95b751153e92ba2566a299ceac2454c61f9ad"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-11/standards-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "09e1adf5b7fc8405effff7461986021927d0c9fc601d4258ac25cc2c9bebfff5"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-11/validation-context.md",
+      "storage": "frontend-history.zip",
+      "sha256": "a4130982f094f93dc55e4570ce1ebb2c11a92acff05dd17f1f803561be8e5f36"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-12/backend-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "323a56dccafa087c0a558c263391c4fed8e19ddf955e38296e2a125d91896c80"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-12/frontend-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "214c12c7d12435c858b576207030301dc4c326ffee8577b5cbe55b00c51e3209"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-12/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "df58964ce7686e37a6134005fafdb7572be6388a1cd7d5ce3da7d0b85982b04d"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-12/review-context.md",
+      "storage": "frontend-history.zip",
+      "sha256": "895978c49de8ed4020aab75ac9556b6ad792c3e27f6dc205d42ff95b7db36418"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-12/spec-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "158361909e2f8c114d4fbced490cf291edf8ffc8b7986057551a302367707c8c"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-12/standards-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "0a8d6e4ca4fc3b743dabd2909c08d4580ddfa5ac6914d86dfeaa0b5ee0eccbbd"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-12/validation-context.md",
+      "storage": "frontend-history.zip",
+      "sha256": "2716649be67bf2e650986a68e81abe62b3a1528edc0f9c7f921a7abe3446d723"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-13/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "10ab2ebd508a54ce38252d3d3d67b39527aba8409db2c6cfa79a94f64e31102c"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-13/spec-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "fec739f431a959c2e388171e6ca24adf722f24f9142cfdaef27c6288b1bb0552"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-13/standards-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "23f386527ad05b9aac90b704b3ea3f8ff9afdf779da7839d593c9cda2fe614dc"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-13/validation-context.md",
+      "storage": "frontend-history.zip",
+      "sha256": "444bf66d1c4e27ea39076b619ac744b28f140e0ba8a9d41820d53b07fdcbf832"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-13/validation-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "f3678b5b75cc37b9acc8e4a338ea21eb6b05901146a5b17fe55359081fd22044"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-14/frontend-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "9dc8d990c58d115152ef3e25dae82e71d6e43b69f02b189bf5ac4a54cd7b37ac"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-14/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "4d507ae1ee408ceac0d379547f49065913cb806a1153c31dac6d71b61e7bbd68"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-14/review-context.md",
+      "storage": "frontend-history.zip",
+      "sha256": "e8cf1b1a34d223bab281a6119bcaf435809ca59728bc03fd991c7b5a0a1041b5"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-14/spec-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "f76846b93805806de9b663f40556a39dbae280778073b59f042be8af542b5b8a"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-14/standards-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "fb198a2de1a04ef54bf9b0c8c8702a5219eb795254f6068bdfb5f97cf8e31ebd"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-14/validation/backend-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "54d7957f8023c5b12bca27e97efbfe5c7f756693237ddd8ae8bab9de692f1c2a"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-14/validation-context.md",
+      "storage": "frontend-history.zip",
+      "sha256": "c5ec3dde65253abadd17b4c5941c9caaa496e1c8c6e8bb6696b6d17c4dd94322"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-15/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "32f4dca5eacf3dc55afe47ff9f804da5addde24ab8c563222e182c080ad8f89a"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-15/spec-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "c10b788ec6104d0225d1dbdbb727a14ed3d3c2734708da7e03da79ef843da780"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-15/standards-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "fd9b8509a70a36e5c78f7a8e7823bbf4f26470e644c713d34ea27ffa62437cb1"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-15/validation/frontend/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "d81fca4110c62668cbfbf736300b52e47a6fa652e8000b49a90ff9db8b7cacaa"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-15/validation/native-current-environment/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "a5e63efa955d8ee86738d73b5ea4d790ac7895381cb16d03c5e873f2ea6db88f"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-15/validation/rust-backend/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "6deeddecc43d7eab92ead9332fd501385803ecf1d27543b2aea8f8dbd18cd001"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-15/validation-handoff.md",
+      "storage": "frontend-history.zip",
+      "sha256": "df73f6d10b380cc5c3cd84bc7375bd5793388111f6c19059fb239cfee523abc3"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-16/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "47b38c8e1c93d1e05daf62a23a79500b8ecc4d6ff6a0580c1dd777343a848d90"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-16/spec-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "2ffd95f6c42216e85d08240119195c63f5a6df1bcb2e0cd04fd3056f54225fd1"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-16/standards-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "a2dbe66c8993a5a1a985973604c35259c6443bf3b8cf0e44837c03884463a078"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-16/validation/frontend/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "1be5c14cf59b6f3f1931aeed1e4fa110ced1568d8850d40177605fe9fa9d672a"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-16/validation/native/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "7f8a44e07d6cda17973e39d87666c4b7cc7bb2362d2b54774a6f28d60fa7b53a"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-17/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "66e00c00fab11ac03f12590d3337e1d99cff364e8b325e284afaf0860636c431"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-17/spec-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "b0107e69b3792a91dfad2132059103ee337b08449f7fdfe85fb536e95a2b623c"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-17/standards-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "9911809da0569c1c0b532457b4cd51d2c465679e51e25e4dfcc08e0a0f75a7dc"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-17/validation/frontend/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "9f0a1874ee6458e623243ab0fcabe184e0ecc0dd5111bdb92fb42a8572a9998b"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-17/validation/native/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "9bcc090ba433d7ffbfe1ed6aac4824f85421f771af1d6555ee96749bb9f63be3"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-18/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "4920c0f0688c115fd8010d9cec138be011b634dd43146fb5583f629457fc55fe"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-18/spec-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "e4c21f9cd94abc4b4829facbd603b6b8caf43b17c7085c9890a8c4139476a779"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-18/standards-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "a06cd3800c53f6eafa8fce28e131e66b4c597c1ef8b90d552243a06b0e978596"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-18/validation/backend/incremental-2026-10-06/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "6279177305240aa95ca7095e49010950c4b110949868489b9fe444b660e32233"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-18/validation/backend/naming-final-2026-10-06/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "9cd825ff650b6a6c168ce9d06a1b77fa5ad1e3da1cce7db66e42fae702e7c1dc"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-18/validation/backend/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "aaa44afbe8141b813558211169d5882c3d5545c71e2842767a35fdfc140196d5"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-18/validation/frontend/naming-fix-2/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "e918c5d582dc4a2aa8a52e0ddabae94a58c464f3c23981842179e5a16db4cd04"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-18/validation/frontend/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "af1b7e6036fd9b0e5e76d50cf8088e0e8ba8677d54ef444f8bd89e1353642518"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-18/validation/frontend/style-final-1/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "a972ad6e22b6a7e19f6e5fc8a862bd8fa1ff0fd49433c229c1fc035927529f08"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-18/validation/native/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "9db7c12f334c1781b168f3bf1a4daae27030f48476cfac14543e8d037fe33466"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-19/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "34f6191b8ba891b8c72241af9ddeffaab4d7912237902480ca26678b29b1e2a8"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-19/spec-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "cfdf0a909255cafb3c251f6b6ab864795ac1277036139b8b10330d8af4036af6"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-19/standards-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "36337eb71ee268b033642476e2ec65ac9b1b16d4556bee5b62ad605afabf12fa"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-19/validation/frontend/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "a4fe89dc1e0f1e343ae33801e037b2924f201714cd97b70bf9f7a27cfa897727"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-19/validation/native/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "d72968cfc3cf62d08da10ea3946077908cf09610eda91e04eb9b63bf08fb9e6d"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-19/validation/native-final/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "b2429e1daaa78dbe1c185e3b12037b8ffe3df81687229b575c054ee311ad1859"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-20/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "d54ffa69043cf95dc52b16f52ee86950bc6bbb09a03ebc445fa672dcebb2bfa5"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-20/spec-final-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "d048df5aadb1186a71f456ef5b6a1baa8155d0e36cd40835d6d477eedc6b7910"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-20/spec-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "b9771107c0b92da228bc38a274475fba91d01e5fbb552b8130faf4ff9e74ec0c"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-20/standards-final-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "50768a41ff4aed57dd28e05bbf786f5b08e7334afb69b2aa2f27eb8c60f706b1"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-20/standards-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "b01958e9718125c096e956ffeef75db201cdb4b7b9a7807ebb1a70950c2c39d0"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-20/validation/frontend/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "a6502384c6fec9eaa66f3ae3c1493bbe055930d8a7779abfacf1f5d3f4e0eca9"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-20/validation/native/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "157b8e5768dcc36307834522060dcab791997fa2eb55678bf18ec0b420a3877e"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-21/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "66a851ac83819e2ff84f607e70a5325d506281691e3fbd828c15c3745559aa13"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-21/spec-final-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "89391e59d344b2346098020c787b9bbd851f3c69ec5234342f2ed81b13b10f8b"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-21/spec-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "110b35d9cbb189d246a7fbce37442d70c4cfb9f7c1e50f83a654526da9771e30"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-21/standards-final-2-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "b1d357f05700941cf90b51278c1193ad31d02072a1dfb32c5600238982ddc5be"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-21/standards-final-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "53175c585ba5a31262bdcb60723c0c03c20cb0cebb9683ec3cf2381ca57497b7"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-21/standards-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "294a7856171b0397c8e377e233bcc04baae64798da1a239503726761fb5096ba"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-21/validation/frontend/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "c65b51fae8845cf90c6eb306c0d52ced8e1de11afc312cd4e732993e07ea82fa"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-21/validation/native/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "b3b37c61013af5924b0e6011d1aa6485973e8ba64973414687b1e2b818ed6b14"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-22/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "57f7993372aae8d73e9bb7bf085776731b7a01df2fb2144d45ccd3e6cbb5e31c"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-22/spec-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "abd1261eb1c8d3a7cd9285244163ac15061fad4265e8bdc900f7ceeea74f815c"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-22/standards-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "cadacc24cdec16b7b033e915fa3ee59a41fbc1521f52a3d519664111dde736aa"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-22/validation/frontend/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "60cb7bd710849674372cb9f663e0a4ca35753eeedbbb12015c14c067aafee644"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-22/validation/native/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "4ac726de2db026ae84700eedcdd4ea8f1612215b5a7f5f489668384efc526e19"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-23/debug/README.md",
+      "storage": "frontend-history.zip",
+      "sha256": "f01679861c209a0c6379114dfbd77e331caf8940dfdfac41534825c9b5a05829"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-23/native/default-download-7-final/NativeSaveCancelExportAcceptance/downloads-test_default_dow/验证完整工具记录-2026-10-07T00-58-33-221Z.md",
+      "storage": "frontend-history.zip",
+      "sha256": "58ef8e650770730eed0e728448486e92a41fce6fe6c72dc3ac2a42df35f5d3cf"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-23/native/default-download-7-final/summary.json",
+      "storage": "native-acceptance-evidence.zip",
+      "sha256": "1ea9edf99f20ea848abbe8c5c2cdbd6c0270b15a33e784417b476469c4f51055"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-23/native/interaction-matrix-final-4/NativePlatformAcceptance/test_osk_long_draft_tray_notice_and_native_cancel_remain_reachable/result.json",
+      "storage": "native-acceptance-evidence.zip",
+      "sha256": "8554446c8e83497b3766919b0f99198e16d3dcbd1e245bd4b0a20848ebc664f2"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-23/native/os-ime-enter-2/NativePlatformAcceptance/test_real_system_ime_enter_ends_composition_without_creating_run/ime-completion-trace.json",
+      "storage": "native-acceptance-evidence.zip",
+      "sha256": "9d08e663f3d700836964a744531a2bea259d8fc3016b4f14d43a12b7bc979118"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-23/native/os-ime-full-preedit-1/cases.json",
+      "storage": "native-acceptance-evidence.zip",
+      "sha256": "efe6833a2ca4f2cd9e0e40f3b6e7f60cfcaeeaeefd05fa1907a2dff1f0b7be44"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-23/spec-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "7dff5c2d8829833bb133e2487c2a6abde21a672dd7f4d89db2805885419da125"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-23/standards-review.md",
+      "storage": "frontend-history.zip",
+      "sha256": "7f6eb6e15a3b08f6ea39c60649f25d512a606a47a07ae7211157ff5bb1279499"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-23/validation/backend/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "bce03c3d7c2b7a92dbc7ab43c378f236d0f29d2ab9659024321d0d29c5b5b551"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-23/validation/frontend-rust/final-1/report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "0645f4c93a6800f39af83601fd3f0c1dede8c9bcf6e6a9ea67061deae0c25250"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-23/validation/frontend-rust/final-3/报告.md",
+      "storage": "frontend-history.zip",
+      "sha256": "5d9bfa699380dc230487937289796edd4f2762ea656d119ba1322ebf1b57efb7"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-23/validation/frontend-rust/final-4/报告.md",
+      "storage": "frontend-history.zip",
+      "sha256": "ec081dd7b321348ca41375dd9d2ce246a63a6b9a4a6af0af979fd8291749bff7"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-23/validation/native/default-download-7-final/temp-fixture-cleanup.json",
+      "storage": "native-acceptance-evidence.zip",
+      "sha256": "ebe83240efd4972e02c5f573ff899520fafc67c7c5620fb9425404b4be232402"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-23/validation/native/default-download-7-final-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "cf325fb0f7ffd302a52745d022ef99d7772bec001ec4d339d813a7aeb1c5c04c"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-23/validation/native/input-control-1/osk.json",
+      "storage": "native-acceptance-evidence.zip",
+      "sha256": "7af47079e59f5451b650b66d440acee75a6450381b2eee5e5e60ce3a5b1b4ba1"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-23/validation/native/interaction-matrix-1-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "42452e7c09230872fe9d30dd7de2d72be2bd4a56efa21dab0bb00d807f2afb31"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-23/validation/native/interaction-matrix-2-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "d477e7a361cc901ab5cbdecdb2f5540fc7f1de2c9486d8fa8e2af371089cae1d"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-23/validation/native/interaction-matrix-final-2-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "3acfb7a04c2758362aba36e2da32b04f7466ebab90e12dfbb524be72a9904a11"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-23/validation/native/interaction-matrix-final-3-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "a5b6a16330aeb995d6327ab6e650cd68bdff9e78a02a706aa3cdc5a8ff1b78df"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-23/validation/native/interaction-matrix-final-4/post-batch-cleanup-observation.json",
+      "storage": "native-acceptance-evidence.zip",
+      "sha256": "01dd4b4f322c9358111dda8ca9c01a506f4c241d18f9a48963e90d8c2cc735c7"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-23/validation/native/interaction-matrix-final-4-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "17703501ad245f73a73ceaf3c4368b85430ec0c065e244e3e7947450e6ee6ab0"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-23/validation/native/os-input-final-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "f13fa4a5cc1481babb1f0e7bcdc0e2e584b8b2b470cc94c350ec0b340911dbc8"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-23/validation/native/osk-coexistence-2-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "7d35863439eec378a479994c9a70ac905f7b5abc200f8ea582065507fe8a261a"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-23/validation/native/resume-report.md",
+      "storage": "frontend-history.zip",
+      "sha256": "43e61ac9c43a1b1b18d14bb0c180721869b9dd5d9801fd569d6c42b3bb34f7d1"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/frontend-completion/ticket-23/validation/native/workflow-matrix-audit.json",
+      "storage": "native-acceptance-evidence.zip",
+      "sha256": "b6d6899c83492542962994e8c0f298565533e6217657efecdc3d06f4943b7101"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/message-write-refactor/runtime-report.md",
+      "storage": "backend-history.zip",
+      "sha256": "1946b7972f9630b826aeff141b49e142395aa5e3f0c828fb85b5fd4643557d80"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/message-write-refactor/static-report.md",
+      "storage": "backend-history.zip",
+      "sha256": "db3c12e46fe371efe8744e4c5992dd0e1cb444198ceb65536d41f29838c99f82"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/message-write-refactor/validation-context.md",
+      "storage": "backend-history.zip",
+      "sha256": "2d0d875735f476f230a19bd0083a4fb4184dd28f3661d8540c77af4a31501a22"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/thread-page-limit/backend-report.md",
+      "storage": "backend-history.zip",
+      "sha256": "e01d72f5d60294fbb065c59048c24f2c29129b53cb4cf591e02f8912f3071d38"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/thread-page-limit/frontend-report.md",
+      "storage": "backend-history.zip",
+      "sha256": "d8506c88c22e19bf6036de61144e661e376df72eb9eb22780bd22ac96b076337"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/thread-page-limit/PRD.md",
+      "storage": "backend-history.zip",
+      "sha256": "13fcba33c3e167f51abb4fe3162efef28a6570801d5136da5f28792f6a4062d6"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/thread-page-limit/spec-review.md",
+      "storage": "backend-history.zip",
+      "sha256": "711d6c335de8a8c0c9af005cea48384344e20bdd2f218d5b6c10aebbd7ab1e54"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/thread-page-limit/standards-review.md",
+      "storage": "backend-history.zip",
+      "sha256": "5077bcb728d11b6c85b4e8f84d1e559ef3a32017f9609bf13d19eda2e3aac65c"
+    },
+    {
+      "path": "docs/archive/2026-10-07/development/windows-backend-lifecycle/run-10-windows.py",
+      "storage": "unresolved-issues-evidence.zip",
+      "sha256": "3998a10a65f5cfcb775cb9542d3e05efaba11604be18a33326026b77b32fde44"
+    },
+    {
+      "path": "docs/archive/2026-10-07/evidence/48a0992c3fac1e75-osk-coexistence-app-native.png",
+      "storage": "native-acceptance-evidence.zip",
+      "sha256": "67707e982e6ebaf55216e667ec59ec7fbb0c074f064ae7586c8025c50b97fdef"
+    },
+    {
+      "path": "docs/archive/2026-10-07/evidence/4d84a7a3eec8ecf9-osk-coexistence-native.png",
+      "storage": "native-acceptance-evidence.zip",
+      "sha256": "7b93abfab7b39b13c80bbf82fe4f7a11c6402b3c9778c7eb7ea6311ce2b636ef"
+    },
+    {
+      "path": "docs/archive/2026-10-07/evidence/8da5ba861d2a1cd8-observed-default-export.md",
+      "storage": "backend-history.zip",
+      "sha256": "723af223366a540b6df8653ea35d95376495479f17b71a193b57fb51912a6e7a"
+    }
+  ],
+  "evidence_aliases": {
+    "docs/archive/2026-10-07/development/frontend-completion/ticket-23/native/os-touch-2/summary.json": "docs/archive/2026-10-07/development/frontend-completion/ticket-23/native/default-download-7-final/summary.json"
+  },
+  "deleted_file_count": 1293,
+  "duplicate_evidence_count": 1,
+  "removed_artifact_link_count": 1342,
+  "final_loose_files": 23,
+  "final_archive_bytes": 1321169
+}

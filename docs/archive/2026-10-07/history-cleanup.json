@@ -1,0 +1,39 @@
+{
+  "original_refs": {
+    "refs/heads/master": "dfd41a872ab20681a825a6405b0d77feb49a01cb",
+    "refs/heads/refactor/workspace-tools": "b03571afee1f141a7b5e2b824b8c948222bbf24c",
+    "refs/remotes/origin/master": "dfd41a872ab20681a825a6405b0d77feb49a01cb"
+  },
+  "new_refs": {
+    "refs/heads/master": "4fb06ab090c658370d24eb6b5bcba1330e3d4aa6",
+    "refs/heads/refactor/workspace-tools": "9259355175c973967aa74bd2c3de4f7a955c58f8",
+    "refs/remotes/origin/master": "4fb06ab090c658370d24eb6b5bcba1330e3d4aa6"
+  },
+  "commits_verified": 73,
+  "product_files_verified": 346,
+  "index_paths_removed": {
+    "main": 5639,
+    "shikigen-agent": 2,
+    "shikigen-agent1": 2,
+    "shikigen-agent2": 2,
+    "shikigen-agent3": 2
+  },
+  "remote_url": "git@github.com:Orcish-Y/shikigen.git",
+  "remote_updated": true,
+  "original_git_objects": "count: 6973\nsize: 2.43 GiB\nin-pack: 8077\npacks: 2\nsize-pack: 159.43 MiB\nprune-packable: 0\ngarbage: 0\nsize-garbage: 0 bytes",
+  "method": "Filtered isolated bare mirror; imported objects; compare all 73 commit trees excluding only two requested directories; update refs and remove only scratch index paths; no worktree reset or product changes.",
+  "remote_verified_master": "4fb06ab090c658370d24eb6b5bcba1330e3d4aa6",
+  "final_git_objects": "count: 0\nsize: 0 bytes\nin-pack: 2100\npacks: 1\nsize-pack: 26.62 MiB\nprune-packable: 0\ngarbage: 0\nsize-garbage: 0 bytes",
+  "git_fsck_exit_code": 0,
+  "scratch_directories_empty": true,
+  "temporary_recovery_copies_removed": true,
+  "initial_retained_files": 1520,
+  "initial_retained_bytes": 34377753,
+  "archive_compaction": {
+    "guidance_markdown_files": 14,
+    "themed_packages": 4,
+    "historical_markdown_members": 177,
+    "essential_evidence_members": 32,
+    "ordinary_artifacts_deleted": 1293
+  }
+}

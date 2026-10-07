@@ -4,7 +4,7 @@ Status: done
 
 实施进度：已验收
 
-来源：[统一实施规格](../../../../.scratch/frontend-completion/PRD.md)；[公共要求与依赖总览](index.md)。
+来源：[统一实施规格](../../../archive/2026-10-07/development/frontend-completion/PRD.md)；[公共要求与依赖总览](index.md)。
 
 **What to build:** 在调用下查看对应参数和真实结果，失败首次展开，完整读取与复制 artifact 和未配对结果。
 
@@ -27,7 +27,7 @@ Status: done
 
 2026-10-05：开始实施。起始 HEAD 为 `0c52c18`，工作树干净。只读投影保留原消息记录，唯一关联后调整阅读位置；展开偏好属于应用生命周期。专项入口沿用已确认的公开消息、HTTP／SSE、工作台及完整查看／复制边界。最终验证和两轴审查由 `gpt-6-luna / max` 执行。
 
-2026-10-05：本票实现与验收完成。应用级展开偏好、工具唯一关联、独立结果、真实状态、各自 seq、完整原始记录、全部非 null artifact 空值及长正文查看／复制已接入；浏览器工作台含明确标注的完整工具示例。前端 117 项、Rust 25 项、真实 Tauri 15 项（本票 3 项、旧票 12 项）通过；后端 291 项为 290 通过、1 Windows 权限跳过，0 失败／错误。类型、构建、格式与修后 Ruff 通过；Standards／Spec 独立审查均无剩余 finding。主 agent 已核公开记录、复制结果与桌面／窄屏截图，见[验收报告](../../../../.scratch/frontend-completion/ticket-08/report.md)。
+2026-10-05：本票实现与验收完成。应用级展开偏好、工具唯一关联、独立结果、真实状态、各自 seq、完整原始记录、全部非 null artifact 空值及长正文查看／复制已接入；浏览器工作台含明确标注的完整工具示例。前端 117 项、Rust 25 项、真实 Tauri 15 项（本票 3 项、旧票 12 项）通过；后端 291 项为 290 通过、1 Windows 权限跳过，0 失败／错误。类型、构建、格式与修后 Ruff 通过；Standards／Spec 独立审查均无剩余 finding。主 agent 已核公开记录、复制结果与桌面／窄屏截图，见[验收报告](../../../archive/2026-10-07/frontend-history.zip)（包内：`docs/archive/2026-10-07/development/frontend-completion/ticket-08/report.md`）。
 
 原生首批旧类证据目录错误已独立归档并恢复旧票记录，不改变验收计数；旧后端两个超时问题本次未复现，仍保留 needs-triage。物理窗口／IME／多尺寸联合验收继续归第 23 票，本票窄屏为真实 WebView 设备视口模拟。下一票为第 09 票“恢复聊天阅读位置与自动跟随”。
 

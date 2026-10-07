@@ -4,7 +4,7 @@ Status: done
 
 实施进度：已验收
 
-来源：[统一实施规格](../../../../.scratch/frontend-completion/PRD.md)；[公共要求与依赖总览](index.md)。
+来源：[统一实施规格](../../../archive/2026-10-07/development/frontend-completion/PRD.md)；[公共要求与依赖总览](index.md)。
 
 **What to build:** 发送或重开会话时，以同一投影接入真实消息、流式预览、运行状态和审批事件，全量回放后不重复、不串会话。
 
@@ -38,7 +38,7 @@ Status: done
 
 ### 2026-10-05：验收完成
 
-由 `gpt-6-luna / max` 执行，主 agent 核对原始日志、退出码、真实请求 JSON 与截图后关闭本票。完整记录：[实施与验证报告](../../../../.scratch/frontend-completion/ticket-03/report.md)。
+由 `gpt-6-luna / max` 执行，主 agent 核对原始日志、退出码、真实请求 JSON 与截图后关闭本票。完整记录：[实施与验证报告](../../../archive/2026-10-07/frontend-history.zip)（包内：`docs/archive/2026-10-07/development/frontend-completion/ticket-03/report.md`）。
 
 - 后端 6 模块专项 60 通过；完整 Python 回归一次共 290 项，289 通过、1 项 Windows symlink 权限跳过、0 失败；production ty 通过。公开 GET 探针补证 interrupted 正常 EOF、重复 body、损坏 checkpoint 核实，以及无自动 start／resume 或工具调用。
 - 前端完整 48 项通过后，最后 checkpoint guard 变化再执行受影响的 3 个文件共 42 项通过，另外 9 项无关验证沿用前一批；最终 tsc／Vite build 通过。未将其描述成最终另跑完整 51 项。

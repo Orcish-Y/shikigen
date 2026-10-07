@@ -1,5 +1,7 @@
 # 历史材料与证据归档
 
+最新整理见 [2026-10-07 开发文档归档](2026-10-07/README.md)和[开发交接](../development-handoff.md)。下面保留 2026-10-02 的归档背景；最新目录与验证范围以新索引为准。
+
 归档日期：2026-10-02。先查 [文档导航](../README.md)、[Windows 收尾摘要](../windows-backend-lifecycle.md) 和 [研究索引](../research/README.md)。本次只整理材料与校正文档阶段信息，没有重新运行产品测试或重新核验外部项目。
 
 ## 归档包
@@ -23,7 +25,7 @@ ZIP 统一保存仓库相对路径。需要回看时，解压到单独目录即�
 - 最新截图和结构化结果：`log-acceptance/`、`log-regression/`；早期阶段保存在其他 acceptance/regression 目录。
 - 用户确认过程：`docs/wayfinder/windows-backend-lifecycle/tickets/002-runtime-contract.discussion.md`；早期规划：`docs/windows-backend-lifecycle-plan.md`。
 
-日志和 JSON 可由现存测试重新生成，截图也属于对应代码阶段的证据，不需要全部作为活跃文档。此次集中压缩保存便于追溯，未永久丢弃失败记录。第 10 票联合 runner 保留在 [.scratch 原路径](../../.scratch/windows-backend-lifecycle/run-10-windows.py)。
+日志和 JSON 可由现存测试重新生成，截图也属于对应代码阶段的证据，不需要全部作为活跃文档。此次集中压缩保存便于追溯，未永久丢弃失败记录。第 10 票联合 runner 保留在 [.scratch 原路径](2026-10-07/unresolved-issues-evidence.zip)（包内：`docs/archive/2026-10-07/development/windows-backend-lifecycle/run-10-windows.py`）。
 
 ## 调查原文
 

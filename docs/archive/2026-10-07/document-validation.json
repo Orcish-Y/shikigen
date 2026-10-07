@@ -1,0 +1,13 @@
+{
+  "loose_markdown_documents_checked": 113,
+  "packed_markdown_documents_checked": 177,
+  "local_links_checked": 3429,
+  "zip_member_references_checked": 547,
+  "broken_links": 0,
+  "packages_crc_verified": 4,
+  "retained_payload_hashes_verified": 223,
+  "scratch_directories_empty": true,
+  "git_change_entries": 69,
+  "product_tests_run": false,
+  "scope": "Documentation and archive compaction; no product code, Git staging, commits or history changes."
+}

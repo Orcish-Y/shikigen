@@ -4,7 +4,7 @@ Status: done
 
 实施进度：已验收
 
-来源：[统一实施规格](../../../../.scratch/frontend-completion/PRD.md)；[公共要求与依赖总览](index.md)。
+来源：[统一实施规格](../../../archive/2026-10-07/development/frontend-completion/PRD.md)；[公共要求与依赖总览](index.md)。
 
 **What to build:** 意外断流后自动有限次数恢复同一运行，停止后保留手动重连和状态查询，正常等待审批或终态结束保持真实结果。
 
@@ -30,4 +30,4 @@ Status: done
 
 2026-10-05 验收：有限 GET 恢复、手动重连／纯状态查询、结构化错误与中文状态已接入工作台，已接受发送断流时补读真实原文，草稿和事实保留。最新前端全套 **93／93**、TypeScript、构建、原生脚本 ruff 通过；真实 Tauri 本票 **2／2**、第 04 票回归 **4／4**、第 03 票回归 **3／3** 通过。后端完整套件 **291 项：290 通过、1 Windows symlink 权限跳过、0 失败／错误**，专项及 ty 通过。Spec／Standards 审查发现的空 SSE 无 metadata 误重试及 aria-live 秒级播报已修复并复核，无未解决硬缺口。
 
-主已核对实际日志、构建资源、公开 history／snapshot／请求时序及工作台截图。票据中的重新显示恢复入口将在第 06 票接入实际显隐桥接；本轮已验证手动、重新选择、有效新租约和 Abort 生命周期。Windows 当前锁屏，实机业务在真实 Tauri WebView 中验证，退出清理走核实菜单身份的原生菜单命令；物理键鼠、系统 IME、窗口边框与多尺寸联合验收留第 23 票，未计作已通过。此前审批清理超时本轮未复现，根因仍待调查。完整证据及边界见[实施与验收报告](../../../../.scratch/frontend-completion/ticket-05/report.md)。
+主已核对实际日志、构建资源、公开 history／snapshot／请求时序及工作台截图。票据中的重新显示恢复入口将在第 06 票接入实际显隐桥接；本轮已验证手动、重新选择、有效新租约和 Abort 生命周期。Windows 当前锁屏，实机业务在真实 Tauri WebView 中验证，退出清理走核实菜单身份的原生菜单命令；物理键鼠、系统 IME、窗口边框与多尺寸联合验收留第 23 票，未计作已通过。此前审批清理超时本轮未复现，根因仍待调查。完整证据及边界见[实施与验收报告](../../../archive/2026-10-07/frontend-history.zip)（包内：`docs/archive/2026-10-07/development/frontend-completion/ticket-05/report.md`）。

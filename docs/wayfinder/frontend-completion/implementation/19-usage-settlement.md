@@ -4,7 +4,7 @@ Status: done
 
 实施进度：已验收
 
-来源：[统一实施规格](../../../../.scratch/frontend-completion/PRD.md)；[公共要求与依赖总览](index.md)。
+来源：[统一实施规格](../../../archive/2026-10-07/development/frontend-completion/PRD.md)；[公共要求与依赖总览](index.md)。
 
 **What to build:** 等待审批或终态时用量仍待结算可自动有限核实，达到上限明确暂停，用户可主动继续核实。
 
@@ -32,4 +32,4 @@ Status: done
 
 原生完整行为批次 **4／4 通过**；采集深拷贝与稳定页面握手修正后，两项注入场景复验 **2／2 通过**。四个唯一场景均有最终通过证据，两批重叠不累计为六项。五秒真实时钟、12 次暂停／手动继续、四次 503 后停止、实际取消同 updated_at 晚量、完整事件／审批／阅读位置均已核对。pending／503 注入只验证公开传输与 UI 协调，真实 HTTP／SQLite／Graph 的 27 Token 与取消晚量 0 单独核实；不声称后端真实持续 pending 或数据库忙。历史 CDP 失败、两次权限等待中断及取证字段别名问题保留，最终原始快照与注入值已分开。
 
-Standards／Spec 无剩余硬问题。主 agent 核对日志、请求、快照、机器结果与截图后关闭七项验收。完整命令、模型、失败批次、证据和覆盖边界见[第 19 票报告](../../../../.scratch/frontend-completion/ticket-19/report.md)。物理 OS 剪贴板、IME、原生边框和四档视口联合验收归第 23 票；Vite 主 chunk 622.80kB 提示保留。无后端／Rust 产品或依赖改动。本轮未执行任何 Git 命令。
+Standards／Spec 无剩余硬问题。主 agent 核对日志、请求、快照、机器结果与截图后关闭七项验收。完整命令、模型、失败批次、证据和覆盖边界见[第 19 票报告](../../../archive/2026-10-07/frontend-history.zip)（包内：`docs/archive/2026-10-07/development/frontend-completion/ticket-19/report.md`）。物理 OS 剪贴板、IME、原生边框和四档视口联合验收归第 23 票；Vite 主 chunk 622.80kB 提示保留。无后端／Rust 产品或依赖改动。本轮未执行任何 Git 命令。

@@ -33,4 +33,7 @@ skills-lock.json
 
 # Local scratch notes
 /docs/temp.md
-design/
+
+# Local development notes, logs and isolated build caches
+/.scratch/
+/frontend/.scratch/

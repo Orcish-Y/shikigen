@@ -4,7 +4,7 @@ Status: done
 
 实施进度：已验收
 
-来源：[统一实施规格](../../../../.scratch/frontend-completion/PRD.md)；[公共要求与依赖总览](index.md)。
+来源：[统一实施规格](../../../archive/2026-10-07/development/frontend-completion/PRD.md)；[公共要求与依赖总览](index.md)。
 
 **What to build:** 按角色阅读真实正文与内容块，完整查看和复制代码／JSON；网页链接用系统默认浏览器打开，保持当前会话。
 
@@ -26,6 +26,6 @@ Status: done
 
 ## Comments
 
-2026-10-05：已实现角色正文、完整代码／JSON 查看与复制、受控网页打开及弹层焦点恢复／循环，沿用现有 Slate、单色代码和靛蓝焦点样式。最终验证及两轴审查由显式 `gpt-6-luna / max` 子 agent 执行，主 agent 核对日志、复制／焦点记录和最新截图：前端111项、Rust25项、本票真实Tauri2项及旧03／04／05／06共10项通过，类型／构建／Ruff通过。实现中实际焦点问题和测试oracle修正的失败证据保留；验收映射见[第07票报告](../../../../.scratch/frontend-completion/ticket-07/report.md)。
+2026-10-05：已实现角色正文、完整代码／JSON 查看与复制、受控网页打开及弹层焦点恢复／循环，沿用现有 Slate、单色代码和靛蓝焦点样式。最终验证及两轴审查由显式 `gpt-6-luna / max` 子 agent 执行，主 agent 核对日志、复制／焦点记录和最新截图：前端111项、Rust25项、本票真实Tauri2项及旧03／04／05／06共10项通过，类型／构建／Ruff通过。实现中实际焦点问题和测试oracle修正的失败证据保留；验收映射见[第07票报告](../../../archive/2026-10-07/frontend-history.zip)（包内：`docs/archive/2026-10-07/development/frontend-completion/ticket-07/report.md`）。
 
-完整后端291项为289通过、1退出超时错误、1 Windows权限跳过；原错误用例隔离两次通过，原因未确认，见[独立问题](../../../../.scratch/desktop-environment-exit-timeout/issues/01-empty-host-environment-startup-exit.md)。本票关闭不表示完整仓库回归通过。窄屏为真实WebView设备视口模拟；物理窗口、IME与边框联合检查仍归23票。完整工具关联／卡片属于下一票08，本轮未启动。
+完整后端291项为289通过、1退出超时错误、1 Windows权限跳过；原错误用例隔离两次通过，原因未确认，见[独立问题](../../../issues/empty-host-environment-startup-exit.md)。本票关闭不表示完整仓库回归通过。窄屏为真实WebView设备视口模拟；物理窗口、IME与边框联合检查仍归23票。完整工具关联／卡片属于下一票08，本轮未启动。

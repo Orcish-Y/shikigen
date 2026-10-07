@@ -4,7 +4,7 @@ Status: done
 
 实施进度：已验收
 
-来源：[统一实施规格](../../../../.scratch/frontend-completion/PRD.md)；[公共要求与依赖总览](index.md)。
+来源：[统一实施规格](../../../archive/2026-10-07/development/frontend-completion/PRD.md)；[公共要求与依赖总览](index.md)。
 
 **What to build:** 点击 Agent 本地文件链接先核实真实目标，每次确认后用系统默认程序打开，目标变化时重新确认。
 
@@ -29,4 +29,4 @@ Status: done
 
 显式 `gpt-6-luna / max` 完成最新Node定向15通过、锁修复后Rust定向10通过、Python资源HTTP8通过及类型／构建／格式检查。完整Node179与Rust34是后续修正之前的基线，不能混称最终全量结果。当前构建原生先1项探针通过，再剩余7项专项＋3项回归10通过，互不重复，共11个唯一用例有最终通过证据；不声称一次11／11全绿。真实默认程序出现测试Notepad窗口，无默认关联由Windows关联查询核实且本轮OpenWith派发获证，均不承诺文件内容已显示。五分钟边界由Rust虚拟时钟验证；ready→ready租约帧为公开桥模拟，实际后端失败另有真实进程验收，不混称重启。
 
-Standards／Spec 无剩余硬问题，来源身份封装建议留作后续结构讨论。原生历史9通过／2失败及11项连接失败、开发红灯均保留。主agent已核对日志、退出码、公开命令响应、实际OS结果和确认截图，按六条验收关闭本票。派发开始后关闭不承诺撤销OS操作；Vite主chunk591.51kB提示保留。详见[实施与验证报告](../../../../.scratch/frontend-completion/ticket-15/report.md)。本轮未执行任何Git命令；第16票尚未实施。
+Standards／Spec 无剩余硬问题，来源身份封装建议留作后续结构讨论。原生历史9通过／2失败及11项连接失败、开发红灯均保留。主agent已核对日志、退出码、公开命令响应、实际OS结果和确认截图，按六条验收关闭本票。派发开始后关闭不承诺撤销OS操作；Vite主chunk591.51kB提示保留。详见[实施与验证报告](../../../archive/2026-10-07/frontend-history.zip)（包内：`docs/archive/2026-10-07/development/frontend-completion/ticket-15/report.md`）。本轮未执行任何Git命令；第16票尚未实施。

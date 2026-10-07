@@ -4,7 +4,7 @@ Status: done
 
 实施进度：已验收
 
-来源：[统一实施规格](../../../../.scratch/frontend-completion/PRD.md)；[公共要求与依赖总览](index.md)。
+来源：[统一实施规格](../../../archive/2026-10-07/development/frontend-completion/PRD.md)；[公共要求与依赖总览](index.md)。
 
 **What to build:** 在聊天卡片核对真实动作与参数，逐项批准或拒绝，统一提交后继续同一 Run，并可经确认取消。
 
@@ -29,4 +29,4 @@ Status: done
 
 2026-10-06：按 /implement 开始第 12 票。复用既有审批 POST、取消确认、GET stream 校验、内容抽屉与事件投影；应用内选择绑定完整请求身份。最终验证交由显式 gpt-6-luna / max 子 agent，跨重启审批草稿仍由第 13 票实施。
 
-2026-10-06：八条验收满足并标记 done。gpt-6-luna / max 验证最终 Node 152 通过、后端完整 321 项中 320 通过／1 Windows 符号链接权限跳过、最终 HTTP 专项 1 通过、最终 Tauri 定向 7 通过；分批覆盖 12 个唯一原生用例，先前环境失败及业务失败不改算通过。TypeScript、构建、产品 ty、三文件 Ruff 通过；新增 Graph 测试仍有两条 ty TypedDictLike 兼容诊断，官方状态类型可复现，未忽略或算通过。Standards／Spec 无剩余硬问题。逐条证据、命令、截图、历史失败及范围见[本票报告](../../../../.scratch/frontend-completion/ticket-12/report.md)。
+2026-10-06：八条验收满足并标记 done。gpt-6-luna / max 验证最终 Node 152 通过、后端完整 321 项中 320 通过／1 Windows 符号链接权限跳过、最终 HTTP 专项 1 通过、最终 Tauri 定向 7 通过；分批覆盖 12 个唯一原生用例，先前环境失败及业务失败不改算通过。TypeScript、构建、产品 ty、三文件 Ruff 通过；新增 Graph 测试仍有两条 ty TypedDictLike 兼容诊断，官方状态类型可复现，未忽略或算通过。Standards／Spec 无剩余硬问题。逐条证据、命令、截图、历史失败及范围见[本票报告](../../../archive/2026-10-07/frontend-history.zip)（包内：`docs/archive/2026-10-07/development/frontend-completion/ticket-12/report.md`）。
