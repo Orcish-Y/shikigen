@@ -6,10 +6,61 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import httpx
 
+from app.desktop_network import get_desktop_frontend_origins
+
 ROOT = Path(__file__).resolve().parents[1]
+
+
+class DesktopOriginTests(unittest.TestCase):
+  def test_default_origin_keeps_direct_desktop_development_compatible(self):
+    with patch.dict(os.environ, {}):
+      os.environ.pop("SHIKIGEN_DESKTOP_DEV_ORIGIN", None)
+      self.assertEqual(
+        get_desktop_frontend_origins(),
+        ["http://127.0.0.1:5173", "http://tauri.localhost"],
+      )
+
+  def test_selected_origin_is_exact_and_does_not_allow_other_development_ports(self):
+    for origin in (
+      "http://127.0.0.1:5175",
+      "http://[::1]:5176",
+      "https://localhost:5177",
+    ):
+      with (
+        self.subTest(origin=origin),
+        patch.dict(os.environ, {"SHIKIGEN_DESKTOP_DEV_ORIGIN": origin}),
+      ):
+        self.assertEqual(
+          get_desktop_frontend_origins(), [origin, "http://tauri.localhost"]
+        )
+
+  def test_invalid_origin_cannot_expand_cors_or_include_a_non_origin_url(self):
+    for origin in (
+      "",
+      "*",
+      "null",
+      "file:///report.txt",
+      "http://*",
+      "http://127.0.0.1:0",
+      "http://127.0.0.1:65536",
+      "http://127.0.0.1:no-port",
+      "http://user:password@127.0.0.1:5175",
+      "http://127.0.0.1:5175/",
+      "http://127.0.0.1:5175?query",
+      "http://127.0.0.1:5175#fragment",
+      " http://127.0.0.1:5175",
+      "http://127.0.0.1:5175\n",
+    ):
+      with (
+        self.subTest(origin=origin),
+        patch.dict(os.environ, {"SHIKIGEN_DESKTOP_DEV_ORIGIN": origin}),
+        self.assertRaises(ValueError),
+      ):
+        get_desktop_frontend_origins()
 
 
 class DesktopTests(unittest.IsolatedAsyncioTestCase):
@@ -151,6 +202,63 @@ class DesktopTests(unittest.IsolatedAsyncioTestCase):
       )
       self.assertEqual(denied.status_code, 200)
       self.assertNotIn("access-control-allow-origin", denied.headers)
+    process.stdin.write(b'{"version":1,"startup_id":"test-start","type":"shutdown"}\n')
+    await process.stdin.drain()
+    _, stderr = await asyncio.wait_for(process.communicate(), 20)
+    self.assertEqual(process.returncode, 0, stderr.decode())
+
+  async def test_selected_dev_origin_can_call_backend_and_other_ports_are_denied(self):
+    selected_origin = "http://127.0.0.1:5175"
+    process = await self.launch(env={"SHIKIGEN_DESKTOP_DEV_ORIGIN": selected_origin})
+    port = await self.bound(process)
+    await self.ready(port)
+    url = f"http://127.0.0.1:{port}/api/threads"
+    async with httpx.AsyncClient(trust_env=False) as client:
+      preflight = await client.options(
+        url,
+        headers={
+          "Origin": selected_origin,
+          "Access-Control-Request-Method": "POST",
+          "Access-Control-Request-Headers": "content-type",
+        },
+      )
+      self.assertEqual(preflight.status_code, 200)
+      self.assertEqual(
+        preflight.headers["access-control-allow-origin"], selected_origin
+      )
+      for origin in (selected_origin, "http://tauri.localhost"):
+        response = await client.get(
+          url, params={"limit": 20}, headers={"Origin": origin}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["access-control-allow-origin"], origin)
+        self.assertIn("Retry-After", response.headers["access-control-expose-headers"])
+      created = await client.post(url, headers={"Origin": selected_origin})
+      self.assertEqual(created.status_code, 200)
+      self.assertEqual(created.headers["access-control-allow-origin"], selected_origin)
+      thread_id = created.json()["thread_id"]
+      stream = await client.post(
+        f"{url}/{thread_id}/stream",
+        headers={"Origin": selected_origin},
+        json={"message": "1 + 2"},
+        timeout=10,
+      )
+      self.assertEqual(stream.status_code, 200)
+      self.assertEqual(stream.headers["access-control-allow-origin"], selected_origin)
+      self.assertIn('"status":"completed"', stream.text)
+      for origin in (
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:5174",
+        "http://127.0.0.1:5176",
+        "https://unrelated.example",
+      ):
+        with self.subTest(origin=origin):
+          denied = await client.options(
+            url,
+            headers={"Origin": origin, "Access-Control-Request-Method": "POST"},
+          )
+          self.assertEqual(denied.status_code, 400)
+          self.assertNotIn("access-control-allow-origin", denied.headers)
     process.stdin.write(b'{"version":1,"startup_id":"test-start","type":"shutdown"}\n')
     await process.stdin.drain()
     _, stderr = await asyncio.wait_for(process.communicate(), 20)

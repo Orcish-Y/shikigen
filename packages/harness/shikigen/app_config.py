@@ -100,7 +100,7 @@ class DatabaseConfig(BaseModel):
 
 
 class BackendConfig(BaseModel):
-  """桌面宿主每次启动固定的端口和期限。"""
+  """桌面宿主每次启动的起始端口和期限；端口占用后递增尝试。"""
 
   model_config = ConfigDict(extra="forbid", strict=True)
 

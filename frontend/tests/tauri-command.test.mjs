@@ -22,6 +22,7 @@ function createViteFixture(overrides = {}) {
 test("desktop dev starts Vite before passing its bound URL and disabling duplicate startup", async () => {
   const { viteServer, lifecycleCalls } = createViteFixture();
   const originalArguments = ["dev", "--no-watch"];
+  const previousDevOrigin = process.env.SHIKIGEN_DESKTOP_DEV_ORIGIN;
   const isCommandSuccessful = await runTauriCommand(originalArguments, {
     async createViteServer(options) {
       assert.equal(options.root, frontendRoot);
@@ -31,6 +32,7 @@ test("desktop dev starts Vite before passing its bound URL and disabling duplica
     async invokeTauriCli(cliArguments, commandName) {
       lifecycleCalls.push("invoke");
       assert.equal(commandName, "pnpm tauri");
+      assert.equal(process.env.SHIKIGEN_DESKTOP_DEV_ORIGIN, "http://127.0.0.1:5174");
       assert.deepEqual(cliArguments.slice(0, 2), originalArguments);
       assert.equal(cliArguments[2], "--config");
       assert.deepEqual(JSON.parse(cliArguments[3]), {
@@ -40,6 +42,7 @@ test("desktop dev starts Vite before passing its bound URL and disabling duplica
     },
   });
   assert.equal(isCommandSuccessful, true);
+  assert.equal(process.env.SHIKIGEN_DESKTOP_DEV_ORIGIN, previousDevOrigin);
   assert.deepEqual(originalArguments, ["dev", "--no-watch"]);
   assert.deepEqual(lifecycleCalls, ["create", "listen", "print", "invoke", "close"]);
 });
@@ -80,11 +83,42 @@ test("build, mobile, help, version and other commands never start Vite", async (
 test("desktop dev closes Vite after a Tauri startup failure", async () => {
   const { viteServer, lifecycleCalls } = createViteFixture();
   const startupError = new Error("cargo failed");
+  const previousDevOrigin = process.env.SHIKIGEN_DESKTOP_DEV_ORIGIN;
   await assert.rejects(runTauriCommand(["dev"], {
     async createViteServer() { return viteServer; },
     async invokeTauriCli() { throw startupError; },
   }), (error) => error === startupError);
+  assert.equal(process.env.SHIKIGEN_DESKTOP_DEV_ORIGIN, previousDevOrigin);
   assert.deepEqual(lifecycleCalls, ["listen", "print", "close"]);
+});
+
+test("the prior development origin is restored after both CLI success and failure", async () => {
+  const originalDevOrigin = process.env.SHIKIGEN_DESKTOP_DEV_ORIGIN;
+  const priorDevOrigin = "http://127.0.0.1:5199";
+  try {
+    for (const shouldCliFail of [false, true]) {
+      process.env.SHIKIGEN_DESKTOP_DEV_ORIGIN = priorDevOrigin;
+      const { viteServer, lifecycleCalls } = createViteFixture();
+      const commandPromise = runTauriCommand(["dev"], {
+        async createViteServer() { return viteServer; },
+        async invokeTauriCli() {
+          assert.equal(process.env.SHIKIGEN_DESKTOP_DEV_ORIGIN, "http://127.0.0.1:5174");
+          if (shouldCliFail) throw new Error("CLI failure");
+          return true;
+        },
+      });
+      if (shouldCliFail) {
+        await assert.rejects(commandPromise, /CLI failure/);
+      } else {
+        assert.equal(await commandPromise, true);
+      }
+      assert.equal(process.env.SHIKIGEN_DESKTOP_DEV_ORIGIN, priorDevOrigin);
+      assert.deepEqual(lifecycleCalls, ["listen", "print", "close"]);
+    }
+  } finally {
+    if (originalDevOrigin === undefined) delete process.env.SHIKIGEN_DESKTOP_DEV_ORIGIN;
+    else process.env.SHIKIGEN_DESKTOP_DEV_ORIGIN = originalDevOrigin;
+  }
 });
 
 test("Vite listen failure closes its resources and never launches Tauri", async () => {
@@ -155,6 +189,7 @@ test("real Vite skips an occupied port, holds the new listener through Tauri, an
         assert.notEqual(developmentPort, occupiedPort);
         assert.equal(developmentPort, viteServer.httpServer.address().port);
         assert.equal(build.beforeDevCommand, null);
+        assert.equal(process.env.SHIKIGEN_DESKTOP_DEV_ORIGIN, new URL(build.devUrl).origin);
         const frontendResponse = await fetch(build.devUrl);
         assert.equal(frontendResponse.status, 200);
         assert.match(await frontendResponse.text(), /\/@vite\/client/);

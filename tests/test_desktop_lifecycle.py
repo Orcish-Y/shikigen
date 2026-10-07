@@ -15,8 +15,9 @@ from runtime_fixtures import deterministic_agent
 from shikigen.app_config import AppConfig
 from shikigen.runtime import open_runtime
 
-from app.desktop import bind_listener, serve_backend
+from app.desktop import serve_backend
 from app.desktop_control import ControlChannel
+from app.desktop_network import bind_listener
 from app.server import create_app
 
 

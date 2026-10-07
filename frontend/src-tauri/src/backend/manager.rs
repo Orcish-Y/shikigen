@@ -223,7 +223,7 @@ impl BackendManager {
                 "--startup-id".into(),
                 id.into(),
                 "--port".into(),
-                plan.config.port.to_string().into(),
+                plan.config.start_port.to_string().into(),
             ],
             env: vec![("PYTHONIOENCODING".into(), "utf-8".into())],
         };
@@ -303,12 +303,12 @@ impl BackendManager {
                         }
                         match message.get("type").and_then(Value::as_str) {
                             Some("bound") if address.is_none() => {
-                                let port = message
+                                let bound_port = message
                                     .get("port")
                                     .and_then(Value::as_u64)
                                     .filter(|v| *v > 0 && *v <= 65535)
                                     .ok_or_else(|| protocol("bound.port 无效"))?;
-                                address = Some(format!("http://127.0.0.1:{port}"));
+                                address = Some(format!("http://127.0.0.1:{bound_port}"));
                                 probe_at = Instant::now();
                             }
                             Some("startup_error") => {

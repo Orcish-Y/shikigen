@@ -2,7 +2,6 @@
 
 import argparse
 import asyncio
-import errno
 import logging
 import os
 import socket
@@ -15,34 +14,13 @@ from dotenv import load_dotenv
 from shikigen.app_config import AppConfig, load_app_config
 
 from app.desktop_control import ControlChannel
+from app.desktop_network import bind_listener, get_desktop_frontend_origins
 
 if TYPE_CHECKING:
   from shikigen.runtime import Runtime
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 logger = logging.getLogger(__name__)
-
-
-def bind_listener(start_port: int) -> socket.socket:
-  """保留成功绑定的 IPv4 socket；只有占用及 Windows 10013 可以跳过。"""
-  if not 1 <= start_port <= 65535:
-    raise ValueError("port must be between 1 and 65535")
-  for port in range(start_port, 65536):
-    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    try:
-      if sys.platform == "win32":
-        listener.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
-      listener.bind(("127.0.0.1", port))
-      listener.setblocking(False)
-      return listener
-    except OSError as error:
-      listener.close()
-      code = getattr(error, "winerror", None) or error.errno
-      if code == 10013:
-        logger.warning("Cannot bind 127.0.0.1:%s: %s", port, error)
-      elif code not in (errno.EADDRINUSE, 10048):
-        raise
-  raise OSError("No available backend port through 65535")
 
 
 async def serve_backend(
@@ -85,7 +63,7 @@ async def _serve_runtime(
   # Desktop WebView origins; ordinary HTTP/CLI entry points keep their policy.
   app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1:5173", "http://tauri.localhost"],
+    allow_origins=get_desktop_frontend_origins(),
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type"],
     expose_headers=["Retry-After"],
@@ -122,13 +100,14 @@ async def _serve_runtime(
       await serving
 
 
-async def run(control: ControlChannel, config_path: Path, port: int) -> int:
+async def run(control: ControlChannel, config_path: Path, start_port: int) -> int:
   control.start()
   try:
     load_dotenv(PROJECT_ROOT / ".env", override=False)
     config = load_app_config(config_path)
-    with bind_listener(port) as listener:
-      control.send("bound", port=listener.getsockname()[1])
+    with bind_listener(start_port) as listener:
+      bound_port = listener.getsockname()[1]
+      control.send("bound", port=bound_port)
       await serve_backend(config, listener, control)
     return 1 if control.error else 0
   except Exception as error:
@@ -147,14 +126,20 @@ def main() -> None:
   parser = argparse.ArgumentParser(description=__doc__)
   parser.add_argument("--config", type=Path, required=True)
   parser.add_argument("--startup-id", required=True)
-  parser.add_argument("--port", type=int, required=True)
+  parser.add_argument(
+    "--port",
+    dest="start_port",
+    type=int,
+    required=True,
+    help="后端起始端口；占用后递增尝试",
+  )
   args = parser.parse_args()
   with output:
     # 独立的无缓冲描述符由 daemon 线程持有，避免解释器退出等待 stdin 缓冲锁。
     source = os.fdopen(os.dup(sys.stdin.fileno()), "rb", buffering=0)
     os.set_inheritable(source.fileno(), False)
     control = ControlChannel(source, output, args.startup_id)
-    raise SystemExit(asyncio.run(run(control, args.config, args.port)))
+    raise SystemExit(asyncio.run(run(control, args.config, args.start_port)))
 
 
 if __name__ == "__main__":

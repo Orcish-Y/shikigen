@@ -14,7 +14,9 @@
 | 正常关窗隐藏到托盘，显式退出受控清理 | 后台执行持续，退出有明确边界 | 单实例插件、Tray 菜单、永久退出意图 |
 | 错误页按需查看最近 1 MiB stderr | 有界诊断，日志查询不阻碍退出或重试 | `StartupLogs`、`get_backend_logs`、`BackendLogs.tsx` |
 
-开发态直接启动项目 `.venv/Scripts/python.exe`，加载根目录 `.env`，托管模式不使用 reload。Windows 桌面最低要求来自现有契约的 Windows 10；安装包 Python 分发另行设计。起始端口默认 43127，实际绑定 `127.0.0.1`，占用后递增，保留绑定 socket 交给 Uvicorn。`bound` 不等于 ready；`/health/ready` 必须匹配本次 startup_id。
+开发态直接启动项目 `.venv/Scripts/python.exe`，加载根目录 `.env`，托管模式不使用 reload。Windows 桌面最低要求来自现有契约的 Windows 10；安装包 Python 分发另行设计。配置键 `backend.port` 和 CLI `--port` 表示起始端口，默认 43127；运行时使用 `start_port`，绑定结果使用 `bound_port`。监听绑定和 CORS 来源策略位于 `app/desktop_network.py`：实际绑定 `127.0.0.1`，占用后递增，保留绑定 socket 交给 Uvicorn。控制消息 `bound.port` 传递实际端口。`bound` 不等于 ready；`/health/ready` 必须匹配本次 startup_id。
+
+Python 和 Rust 的后端配置测试共用 `tests/fixtures/desktop_backend_config_cases.json`，核对默认值、端口范围、期限、非法类型及错误信息不回显输入值。Vite 仍由其 SDK 绑定并选择开发端口；实际前端 origin 由启动协调器传给后端 CORS。
 
 启动期限默认 60 秒，正常清理默认 10 秒，强制回收确认最多 5 秒；本次启动沿用配置快照，不按步骤重新计时。发送 shutdown、主进程退出、所属进程树清空是不同结果。回收未确认时禁止重试并继续观察；显式退出意图不会因为进入 failed 状态而丢失。
 

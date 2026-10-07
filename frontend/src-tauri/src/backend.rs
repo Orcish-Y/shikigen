@@ -27,7 +27,8 @@ impl std::error::Error for BackendError {}
 
 #[derive(Clone, Debug)]
 pub struct BackendConfig {
-    pub port: u16,
+    /// Starting point for the Python listener's ascending port search.
+    pub start_port: u16,
     pub startup_timeout_seconds: f64,
     pub shutdown_timeout_seconds: f64,
 }
@@ -38,47 +39,47 @@ impl BackendConfig {
         let root = root
             .as_object()
             .ok_or_else(|| BackendError::new("config", "配置必须是对象"))?;
-        let mut result = Self {
-            port: 43127,
+        let mut backend_config = Self {
+            start_port: 43127,
             startup_timeout_seconds: 60.0,
             shutdown_timeout_seconds: 10.0,
         };
         if let Some(value) = root.get("backend") {
-            let fields = value
+            let backend_fields = value
                 .as_object()
                 .ok_or_else(|| BackendError::new("config", "backend 必须是对象，不能为 null"))?;
-            for (name, value) in fields {
-                let invalid =
-                    || BackendError::new("config", format!("backend.{name}: 类型或取值无效"));
-                match name.as_str() {
+            for (field_name, field_value) in backend_fields {
+                let make_invalid_field_error =
+                    || BackendError::new("config", format!("backend.{field_name}: 类型或取值无效"));
+                match field_name.as_str() {
                     "port" => {
-                        result.port = value
+                        backend_config.start_port = field_value
                             .as_u64()
                             .and_then(|v| u16::try_from(v).ok())
                             .filter(|v| *v > 0)
-                            .ok_or_else(invalid)?
+                            .ok_or_else(make_invalid_field_error)?
                     }
                     "startup_timeout_seconds" | "shutdown_timeout_seconds" => {
-                        let seconds = value
+                        let seconds = field_value
                             .as_f64()
                             .filter(|v| v.is_finite() && *v > 0.0)
-                            .ok_or_else(invalid)?;
-                        if name == "startup_timeout_seconds" {
-                            result.startup_timeout_seconds = seconds;
+                            .ok_or_else(make_invalid_field_error)?;
+                        if field_name == "startup_timeout_seconds" {
+                            backend_config.startup_timeout_seconds = seconds;
                         } else {
-                            result.shutdown_timeout_seconds = seconds;
+                            backend_config.shutdown_timeout_seconds = seconds;
                         }
                     }
                     _ => {
                         return Err(BackendError::new(
                             "config",
-                            format!("backend.{name}: 未知字段"),
+                            format!("backend.{field_name}: 未知字段"),
                         ))
                     }
                 }
             }
         }
-        Ok(result)
+        Ok(backend_config)
     }
 }
 

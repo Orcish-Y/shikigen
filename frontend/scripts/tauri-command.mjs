@@ -31,6 +31,7 @@ export async function runTauriCommand(
   }
 
   const viteServer = await createViteServer({ root: frontendRoot });
+  const previousDevOrigin = process.env.SHIKIGEN_DESKTOP_DEV_ORIGIN;
   try {
     await viteServer.listen();
     const devUrl = viteServer.resolvedUrls?.local[0]
@@ -39,6 +40,8 @@ export async function runTauriCommand(
       throw new Error("Vite 已启动，但无法获取前端地址");
     }
     viteServer.printUrls();
+    // Inherited by the managed Python backend, whose CORS policy must match.
+    process.env.SHIKIGEN_DESKTOP_DEV_ORIGIN = new URL(devUrl).origin;
 
     // Keep the listener bound: probing and releasing a port creates a race.
     // The final override also disables Tauri's duplicate beforeDevCommand.
@@ -53,6 +56,11 @@ export async function runTauriCommand(
     ];
     return await invokeTauriCli(developmentArguments, "pnpm tauri");
   } finally {
+    if (previousDevOrigin === undefined) {
+      delete process.env.SHIKIGEN_DESKTOP_DEV_ORIGIN;
+    } else {
+      process.env.SHIKIGEN_DESKTOP_DEV_ORIGIN = previousDevOrigin;
+    }
     await viteServer.close();
   }
 }

@@ -45,32 +45,33 @@ class AppConfigTests(unittest.TestCase):
       self.assertNotIn("private-secret-value", str(raised.exception))
 
   def test_backend_defaults_and_strict_validation(self):
-    from pydantic import ValidationError
-    from shikigen.app_config import AppConfig
-
-    base = {"model": {}, "mcp": {}}
+    fixture_path = (
+      Path(__file__).parent / "fixtures" / "desktop_backend_config_cases.json"
+    )
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+    self.assertEqual(fixture["schema_version"], 1)
+    config_cases = fixture["cases"]
+    self.assertTrue(config_cases)
     self.assertEqual(
-      AppConfig.model_validate(base).backend.model_dump(),
-      {
-        "port": 43127,
-        "startup_timeout_seconds": 60,
-        "shutdown_timeout_seconds": 10,
-      },
+      len({config_case["case_name"] for config_case in config_cases}),
+      len(config_cases),
     )
-    invalid = [None, {"typo": 1}]
-    for field in ("port", "startup_timeout_seconds", "shutdown_timeout_seconds"):
-      invalid.extend({field: value} for value in (None, True, "12", 0, -1))
-    invalid.extend(
-      [
-        {"port": 65536},
-        {"port": 1.5},
-        {"startup_timeout_seconds": float("inf")},
-        {"shutdown_timeout_seconds": float("nan")},
-      ]
-    )
-    for backend in invalid:
-      with self.subTest(backend=backend), self.assertRaises(ValidationError):
-        AppConfig.model_validate({**base, "backend": backend})
+    for config_case in config_cases:
+      with (
+        self.subTest(case=config_case["case_name"]),
+        tempfile.TemporaryDirectory() as directory,
+      ):
+        config_path = Path(directory) / "config.json"
+        config_path.write_text(config_case["document"], encoding="utf-8")
+        expected_config = config_case["expected_config"]
+        if expected_config is None:
+          with self.assertRaises(AppConfigError) as raised:
+            load_app_config(config_path)
+          self.assertNotIn("secret-value", str(raised.exception))
+        else:
+          self.assertEqual(
+            load_app_config(config_path).backend.model_dump(), expected_config
+          )
 
   def test_subagent_policies_preserve_null_empty_and_reject_typos(self):
     from pydantic import ValidationError
