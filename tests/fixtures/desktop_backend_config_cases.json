@@ -1,0 +1,199 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "case_name": "missing_backend_uses_defaults",
+      "document": "{\"model\":{},\"mcp\":{}}",
+      "expected_config": {
+        "port": 43127,
+        "startup_timeout_seconds": 60,
+        "shutdown_timeout_seconds": 10
+      }
+    },
+    {
+      "case_name": "empty_backend_uses_defaults",
+      "document": "{\"model\":{},\"mcp\":{},\"backend\":{}}",
+      "expected_config": {
+        "port": 43127,
+        "startup_timeout_seconds": 60,
+        "shutdown_timeout_seconds": 10
+      }
+    },
+    {
+      "case_name": "minimum_port",
+      "document": "{\"model\":{},\"mcp\":{},\"backend\":{\"port\":1}}",
+      "expected_config": {
+        "port": 1,
+        "startup_timeout_seconds": 60,
+        "shutdown_timeout_seconds": 10
+      }
+    },
+    {
+      "case_name": "maximum_port_and_custom_timeouts",
+      "document": "{\"model\":{},\"mcp\":{},\"backend\":{\"port\":65535,\"startup_timeout_seconds\":0.5,\"shutdown_timeout_seconds\":2}}",
+      "expected_config": {
+        "port": 65535,
+        "startup_timeout_seconds": 0.5,
+        "shutdown_timeout_seconds": 2
+      }
+    },
+    {
+      "case_name": "partial_startup_timeout",
+      "document": "{\"model\":{},\"mcp\":{},\"backend\":{\"startup_timeout_seconds\":1}}",
+      "expected_config": {
+        "port": 43127,
+        "startup_timeout_seconds": 1,
+        "shutdown_timeout_seconds": 10
+      }
+    },
+    {
+      "case_name": "partial_shutdown_timeout",
+      "document": "{\"model\":{},\"mcp\":{},\"backend\":{\"shutdown_timeout_seconds\":0.125}}",
+      "expected_config": {
+        "port": 43127,
+        "startup_timeout_seconds": 60,
+        "shutdown_timeout_seconds": 0.125
+      }
+    },
+    {
+      "case_name": "invalid_backend_null",
+      "document": "{\"model\":{},\"mcp\":{},\"backend\":null}",
+      "expected_config": null
+    },
+    {
+      "case_name": "invalid_backend_array",
+      "document": "{\"model\":{},\"mcp\":{},\"backend\":[]}",
+      "expected_config": null
+    },
+    {
+      "case_name": "invalid_backend_boolean",
+      "document": "{\"model\":{},\"mcp\":{},\"backend\":true}",
+      "expected_config": null
+    },
+    {
+      "case_name": "invalid_backend_string",
+      "document": "{\"model\":{},\"mcp\":{},\"backend\":\"private-secret-value\"}",
+      "expected_config": null
+    },
+    {
+      "case_name": "invalid_backend_unknown_field",
+      "document": "{\"model\":{},\"mcp\":{},\"backend\":{\"extra\":1}}",
+      "expected_config": null
+    },
+    {
+      "case_name": "invalid_backend_misspelled_field",
+      "document": "{\"model\":{},\"mcp\":{},\"backend\":{\"typo\":1}}",
+      "expected_config": null
+    },
+    {
+      "case_name": "invalid_port_null",
+      "document": "{\"model\":{},\"mcp\":{},\"backend\":{\"port\":null}}",
+      "expected_config": null
+    },
+    {
+      "case_name": "invalid_port_boolean",
+      "document": "{\"model\":{},\"mcp\":{},\"backend\":{\"port\":true}}",
+      "expected_config": null
+    },
+    {
+      "case_name": "invalid_port_string",
+      "document": "{\"model\":{},\"mcp\":{},\"backend\":{\"port\":\"private-secret-value\"}}",
+      "expected_config": null
+    },
+    {
+      "case_name": "invalid_port_zero",
+      "document": "{\"model\":{},\"mcp\":{},\"backend\":{\"port\":0}}",
+      "expected_config": null
+    },
+    {
+      "case_name": "invalid_port_negative",
+      "document": "{\"model\":{},\"mcp\":{},\"backend\":{\"port\":-1}}",
+      "expected_config": null
+    },
+    {
+      "case_name": "invalid_startup_timeout_seconds_null",
+      "document": "{\"model\":{},\"mcp\":{},\"backend\":{\"startup_timeout_seconds\":null}}",
+      "expected_config": null
+    },
+    {
+      "case_name": "invalid_startup_timeout_seconds_boolean",
+      "document": "{\"model\":{},\"mcp\":{},\"backend\":{\"startup_timeout_seconds\":true}}",
+      "expected_config": null
+    },
+    {
+      "case_name": "invalid_startup_timeout_seconds_string",
+      "document": "{\"model\":{},\"mcp\":{},\"backend\":{\"startup_timeout_seconds\":\"private-secret-value\"}}",
+      "expected_config": null
+    },
+    {
+      "case_name": "invalid_startup_timeout_seconds_zero",
+      "document": "{\"model\":{},\"mcp\":{},\"backend\":{\"startup_timeout_seconds\":0}}",
+      "expected_config": null
+    },
+    {
+      "case_name": "invalid_startup_timeout_seconds_negative",
+      "document": "{\"model\":{},\"mcp\":{},\"backend\":{\"startup_timeout_seconds\":-1}}",
+      "expected_config": null
+    },
+    {
+      "case_name": "invalid_shutdown_timeout_seconds_null",
+      "document": "{\"model\":{},\"mcp\":{},\"backend\":{\"shutdown_timeout_seconds\":null}}",
+      "expected_config": null
+    },
+    {
+      "case_name": "invalid_shutdown_timeout_seconds_boolean",
+      "document": "{\"model\":{},\"mcp\":{},\"backend\":{\"shutdown_timeout_seconds\":true}}",
+      "expected_config": null
+    },
+    {
+      "case_name": "invalid_shutdown_timeout_seconds_string",
+      "document": "{\"model\":{},\"mcp\":{},\"backend\":{\"shutdown_timeout_seconds\":\"private-secret-value\"}}",
+      "expected_config": null
+    },
+    {
+      "case_name": "invalid_shutdown_timeout_seconds_zero",
+      "document": "{\"model\":{},\"mcp\":{},\"backend\":{\"shutdown_timeout_seconds\":0}}",
+      "expected_config": null
+    },
+    {
+      "case_name": "invalid_shutdown_timeout_seconds_negative",
+      "document": "{\"model\":{},\"mcp\":{},\"backend\":{\"shutdown_timeout_seconds\":-1}}",
+      "expected_config": null
+    },
+    {
+      "case_name": "invalid_port_above_maximum",
+      "document": "{\"model\":{},\"mcp\":{},\"backend\":{\"port\":65536}}",
+      "expected_config": null
+    },
+    {
+      "case_name": "invalid_integer_valued_decimal_port",
+      "document": "{\"model\":{},\"mcp\":{},\"backend\":{\"port\":1.0}}",
+      "expected_config": null
+    },
+    {
+      "case_name": "invalid_fractional_port",
+      "document": "{\"model\":{},\"mcp\":{},\"backend\":{\"port\":1.5}}",
+      "expected_config": null
+    },
+    {
+      "case_name": "invalid_startup_infinity",
+      "document": "{\"model\":{},\"mcp\":{},\"backend\":{\"startup_timeout_seconds\":Infinity}}",
+      "expected_config": null
+    },
+    {
+      "case_name": "invalid_shutdown_nan",
+      "document": "{\"model\":{},\"mcp\":{},\"backend\":{\"shutdown_timeout_seconds\":NaN}}",
+      "expected_config": null
+    },
+    {
+      "case_name": "invalid_startup_number_overflow",
+      "document": "{\"model\":{},\"mcp\":{},\"backend\":{\"startup_timeout_seconds\":1e400}}",
+      "expected_config": null
+    },
+    {
+      "case_name": "invalid_shutdown_number_overflow",
+      "document": "{\"model\":{},\"mcp\":{},\"backend\":{\"shutdown_timeout_seconds\":1e400}}",
+      "expected_config": null
+    }
+  ]
+}
