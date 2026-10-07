@@ -294,6 +294,14 @@ class WorkspaceFileOpenAcceptance(WorkspaceImageAcceptance):
     wait_until(
       lambda: self.evaluate("document.querySelectorAll('dialog[open]').length") == 0
     )
+    wait_until(
+      lambda: (
+        self.evaluate(
+          "document.querySelector('.session[aria-current=true]')?.dataset.conversationId"
+        )
+        not in (None, thread)
+      )
+    )
     self.select_thread(thread)
     wait_until(lambda: self.loaded_count() == 4)
     self.click_report()

@@ -118,6 +118,53 @@ test('取消与完成竞争按有效快照显示 completed 或 error，不伪造
   }
 });
 
+test('SSE 终态先于或晚于丢失取消响应，都保留待确认直到后发 GET 核实', async()=> {
+  for (const terminalStatus of ['cancelled','completed','error']) {
+    for (const notificationOrder of ['before-response-loss','after-response-loss']) {
+      let rejectCancellation, resolveVerification;
+      const app=await setup(({setStatus})=>new Promise((_resolve,rejectResponse)=>{
+        rejectCancellation=()=>{
+          setStatus(terminalStatus);
+          rejectResponse(new TypeError('cancel response lost'));
+        };
+      }),{snapshot:count=>count===1 ? undefined : new Promise(resolveSnapshot=>{
+        resolveVerification=()=>resolveSnapshot(Response.json({data:{id:'r',thread_id:'a',status:terminalStatus}}));
+      })});
+      try {
+        await until(()=>app.store.getSnapshot().views.a.snapshotRead.phase==='ready');
+        app.store.updateDraft('终态期间保留草稿');
+        const cancellation=app.store.cancel(app.store.cancelTarget());
+        await until(()=>Boolean(rejectCancellation));
+        const notifyTerminal=()=>app.stream().enqueue(encode('metadata',{
+          thread_id:'a',run_id:'r',status:terminalStatus,
+        }));
+        if(notificationOrder==='before-response-loss'){
+          notifyTerminal();
+          await until(()=>app.store.getSnapshot().views.a.run.status===terminalStatus);
+          assert.equal(app.store.getSnapshot().views.a.write.phase,'pending','SSE 不能提前确认正在发送的取消');
+        }
+        rejectCancellation();
+        await until(()=>Boolean(resolveVerification));
+        if(notificationOrder==='after-response-loss'){
+          notifyTerminal();
+          await until(()=>app.store.getSnapshot().views.a.run.status===terminalStatus);
+        }
+        const unverifiedView=app.store.getSnapshot().views.a;
+        assert.equal(unverifiedView.write.phase,'unknown','已知运行终态仍不能代替取消请求的 GET 核实');
+        assert.equal(unverifiedView.write.verified,false);
+        assert.equal(app.store.canSend(),false);
+        assert.equal(app.posts(),1);
+        resolveVerification();
+        await cancellation;
+        assert.equal(app.store.getSnapshot().views.a.write,null);
+        assert.equal(app.store.getSnapshot().views.a.run.status,terminalStatus);
+        assert.equal(app.store.getSnapshot().drafts.a,'终态期间保留草稿');
+        assert.equal(app.posts(),1,'核实绝不再次 POST');
+      } finally {app.close();}
+    }
+  }
+});
+
 test('错误身份／非终态／损坏响应只 GET 核实；核实仍活跃恢复人工确认，不自动 POST', async()=> {
   for (const data of [{id:'wrong',thread_id:'a',status:'cancelled'}, {id:'r',thread_id:'a',status:'running'}, null]) {
     const app=await setup(()=>Response.json({data}));

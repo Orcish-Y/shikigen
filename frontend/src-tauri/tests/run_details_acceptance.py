@@ -103,6 +103,14 @@ class RunDetailsAcceptance(DetailsEvidence, MessageDraftAcceptance):
     wait_until(lambda: (self.root / "usage-model-ready").exists())
     wait_until(lambda: self.evaluate("Boolean(window.__releaseDetails)"))
     before = self.details_requests()
+    snapshot_reads = [
+      request
+      for request in before
+      if request["method"] == "GET"
+      and "/runs/" in request["path"]
+      and not request["path"].endswith(("/stream", "/messages", "/events"))
+    ]
+    self.assertEqual(len(snapshot_reads), 1, "已有一个挂起的运行快照 GET")
     self.open_details()
     self.assertIn("正在读取用量", self.body())
     self.assertNotIn("暂无用量数据", self.body())
@@ -110,7 +118,21 @@ class RunDetailsAcceptance(DetailsEvidence, MessageDraftAcceptance):
     self.assertNotIn(
       "已保存", self.evaluate("document.querySelector('.run-usage').innerText")
     )
-    self.assertEqual(len(self.details_requests()), len(before), "打开详情复用在读请求")
+    current_snapshot_reads = [
+      request
+      for request in self.details_requests()
+      if request["method"] == "GET"
+      and "/runs/" in request["path"]
+      and not request["path"].endswith(("/stream", "/messages", "/events"))
+    ]
+    self.assertEqual(
+      len(current_snapshot_reads), len(snapshot_reads), "打开详情复用在读快照请求"
+    )
+    self.assertEqual(
+      sum(request["path"].endswith("/events") for request in self.details_requests()),
+      1,
+      "打开详情独立读取真实事件历史",
+    )
     self.evaluate("window.__releaseDetails()")
     wait_until(
       lambda: (

@@ -179,7 +179,12 @@ with patch("shikigen.runtime.composition.create_lead_agent", new=agent):
     handles = self.process_handles()
     with httpx.Client(trust_env=False) as client:
       self.assertEqual(client.get(ready["base_url"] + "/health/ready").status_code, 200)
-      self.assertEqual(client.get(ready["base_url"] + "/api/threads").status_code, 200)
+      self.assertEqual(
+        client.get(
+          ready["base_url"] + "/api/threads", params={"limit": 20}
+        ).status_code,
+        200,
+      )
     # Popen.kill uses TerminateProcess on ONLY the Rust host, never taskkill /T.
     host.process.kill()
     host.process.wait(timeout=10)
@@ -236,7 +241,9 @@ with patch("shikigen.runtime.composition.create_lead_agent", new=deterministic_a
       while True:
         try:
           if (
-            client.get(f"http://127.0.0.1:{bound['port']}/api/threads").status_code
+            client.get(
+              f"http://127.0.0.1:{bound['port']}/api/threads", params={"limit": 20}
+            ).status_code
             == 200
           ):
             break

@@ -228,6 +228,99 @@ class WindowAcceptance(unittest.TestCase):
     self.assertEqual(len(windows), 1, windows)
     return windows[0]
 
+  def focus_native_window(self, host):
+    window = self.window(host)
+    win32gui.ShowWindow(window, win32con.SW_RESTORE)
+    self.call("Page.bringToFront")
+    if win32gui.GetForegroundWindow() == window:
+      return window
+    # Activate through an actual OS click; Windows may reject SetForegroundWindow.
+    # The target is our own native caption, never a background product button.
+    original_cursor = win32api.GetCursorPos()
+    is_originally_topmost = bool(
+      win32gui.GetWindowLong(window, win32con.GWL_EXSTYLE) & win32con.WS_EX_TOPMOST
+    )
+    placement_flags = (
+      win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE
+    )
+    focus_observation = {"target_window": window}
+    try:
+      win32gui.SetWindowPos(window, win32con.HWND_TOPMOST, 0, 0, 0, 0, placement_flags)
+      current_thread = win32api.GetCurrentThreadId()
+      foreground_window = win32gui.GetForegroundWindow()
+      input_threads = {
+        win32process.GetWindowThreadProcessId(window)[0],
+        win32process.GetWindowThreadProcessId(foreground_window)[0]
+        if foreground_window
+        else current_thread,
+      } - {current_thread}
+      attached_threads = []
+      try:
+        for input_thread in input_threads:
+          win32process.AttachThreadInput(current_thread, input_thread, True)
+          attached_threads.append(input_thread)
+        win32gui.BringWindowToTop(window)
+        win32gui.SetForegroundWindow(window)
+      except win32gui.error as activation_error:
+        focus_observation["activation_error"] = str(activation_error)
+      finally:
+        for input_thread in reversed(attached_threads):
+          win32process.AttachThreadInput(current_thread, input_thread, False)
+      if win32gui.GetForegroundWindow() == window:
+        return window
+      left, top, right, _bottom = win32gui.GetWindowRect(window)
+      _client_left, client_top = win32gui.ClientToScreen(window, (0, 0))
+      caption_x = left + min(100, (right - left) // 2)
+      caption_y = top + (client_top - top) // 2
+      self.assertEqual(
+        win32gui.SendMessage(
+          window,
+          win32con.WM_NCHITTEST,
+          0,
+          (caption_y & 0xFFFF) << 16 | caption_x & 0xFFFF,
+        ),
+        win32con.HTCAPTION,
+      )
+      win32api.SetCursorPos((caption_x, caption_y))
+      focus_observation.update(
+        caption_point=[caption_x, caption_y],
+        window_at_caption=win32gui.WindowFromPoint((caption_x, caption_y)),
+        actual_cursor=list(win32api.GetCursorPos()),
+        target_rect=list(win32gui.GetWindowRect(window)),
+      )
+      self.assertEqual(
+        win32gui.GetAncestor(focus_observation["window_at_caption"], 2),
+        window,
+        "the owned caption is covered; do not click another application",
+      )
+      win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+      win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+      # Keep the target raised and the pointer in place until Windows handles it.
+      wait_until(lambda: win32gui.GetForegroundWindow() == window, timeout=5)
+    finally:
+      foreground_window = win32gui.GetForegroundWindow()
+      focus_observation.update(
+        foreground_window=foreground_window,
+        foreground_owner=win32gui.GetAncestor(foreground_window, 3)
+        if foreground_window
+        else None,
+        foreground_class=win32gui.GetClassName(foreground_window)
+        if foreground_window
+        else None,
+        foreground_pid=win32process.GetWindowThreadProcessId(foreground_window)[1]
+        if foreground_window
+        else None,
+      )
+      if not is_originally_topmost:
+        win32gui.SetWindowPos(
+          window, win32con.HWND_NOTOPMOST, 0, 0, 0, 0, placement_flags
+        )
+      win32api.SetCursorPos(original_cursor)
+      (self.artifacts / "native-focus.json").write_text(
+        json.dumps(focus_observation, ensure_ascii=False, indent=2), encoding="utf-8"
+      )
+    return window
+
   def counts(self):
     return tuple(
       len(list((self.root / name).glob("*")))

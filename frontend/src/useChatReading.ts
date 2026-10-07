@@ -17,7 +17,7 @@ export function useChatReading(session:Session, positions:ChatReadingPositions, 
   const [view, setView] = useState<ReadingView>({following:true, hasNewContent:false, scrollTop:null});
   const current = useRef({session, factsReady, visible, acceptedSendId});
   current.current = {session, factsReady, visible, acceptedSendId};
-  const actions = useRef<{update:() => void; remember:() => void; latest:() => void; locate:(target:HTMLElement) => void} | null>(null);
+  const actions = useRef<{update:() => void; remember:() => void; scrollToLatest:() => void; locate:(target:HTMLElement) => void} | null>(null);
 
   useLayoutEffect(() => {
     const element = timeline.current;
@@ -90,7 +90,10 @@ export function useChatReading(session:Session, positions:ChatReadingPositions, 
       if (!owner(event.target) || event.altKey || event.ctrlKey || event.metaKey
         || event.target instanceof Element && event.target.closest('input,textarea,select,[contenteditable=true]')) return;
       if (['ArrowUp','PageUp','Home'].includes(event.key) || event.key === ' ' && event.shiftKey) intent(true);
-      else if (['ArrowDown','PageDown','End',' '].includes(event.key)) intent(false);
+      else if (event.key === 'End' && current.current.visible) {
+        event.preventDefault();
+        controller.scrollToLatest();
+      } else if (['ArrowDown','PageDown',' '].includes(event.key)) intent(false);
     }
     function touchStart(event:TouchEvent) { touchY = event.touches[0]?.clientY ?? 0; }
     function touchMove(event:TouchEvent) {
@@ -102,7 +105,7 @@ export function useChatReading(session:Session, positions:ChatReadingPositions, 
     const controller = {
       update,
       remember:() => { if (current.current.visible) positions.remember(threadId, measure(element)); },
-      latest:() => { if (current.current.visible) apply(positions.latest(threadId, measure(element))); },
+      scrollToLatest:() => { if (current.current.visible) apply(positions.followLatest(threadId, measure(element))); },
       locate:(target:HTMLElement) => {
         if (!current.current.visible || !element.contains(target)) return;
         element.scrollTop += target.getBoundingClientRect().top - element.getBoundingClientRect().top - element.clientTop;
@@ -142,6 +145,6 @@ export function useChatReading(session:Session, positions:ChatReadingPositions, 
   }, [session.id, positions]);
   useLayoutEffect(() => { actions.current?.update(); });
   return {timeline, following:view.following, hasNewContent:view.hasNewContent,
-    remember:() => actions.current?.remember(), latest:() => actions.current?.latest(),
+    remember:() => actions.current?.remember(), scrollToLatest:() => actions.current?.scrollToLatest(),
     locate:(target:HTMLElement) => actions.current?.locate(target)};
 }

@@ -1,7 +1,9 @@
 """第16票：真实 Tauri Blob 下载、公开事实、快照与中止记录。"""
 
+import hashlib
 import json
 import re
+import sqlite3
 
 import win32con
 import win32gui
@@ -151,6 +153,46 @@ class DownloadEventRecorder:
         self.acceptance.assertNotIn("error", response)
         self.acceptance.assertNotIn("exceptionDetails", response.get("result", {}))
         return response.get("result", {})
+
+
+class DefaultDownloadObserver:
+  """Record Page download events without changing policy or cancelling downloads."""
+
+  def __init__(self, acceptance):
+    self.acceptance = acceptance
+    self.download_events = []
+    self.download_guid = None
+
+  def call(self, method, **params):
+    self.acceptance.sequence += 1
+    request_id = self.acceptance.sequence
+    self.acceptance.ws.send(
+      json.dumps({"id": request_id, "method": method, "params": params})
+    )
+    while True:
+      response = json.loads(self.acceptance.ws.recv(timeout=10))
+      if response.get("method") in ("Page.downloadWillBegin", "Page.downloadProgress"):
+        self.download_events.append(response)
+        if response["method"] == "Page.downloadWillBegin":
+          self.acceptance.assertIsNone(self.download_guid, "unexpected second download")
+          self.download_guid = response["params"]["guid"]
+      if response.get("id") == request_id:
+        self.acceptance.assertNotIn("error", response)
+        self.acceptance.assertNotIn("exceptionDetails", response.get("result", {}))
+        return response.get("result", {})
+
+  def read_terminal_download(self):
+    self.acceptance.evaluate("0")
+    return next(
+      (
+        event["params"]
+        for event in reversed(self.download_events)
+        if event["method"] == "Page.downloadProgress"
+        and event["params"]["guid"] == self.download_guid
+        and event["params"]["state"] in ("completed", "canceled")
+      ),
+      None,
+    )
 
 
 class ConversationExportAcceptance(ExportEvidence, ToolRecordsAcceptance):
@@ -384,27 +426,34 @@ class FailureExportAcceptance(ExportEvidence, FailurePartialAcceptance):
 
 
 class NativeSaveCancelExportAcceptance(ExportEvidence, ToolRecordsAcceptance):
-  """默认保存 UI 的额外探针；特定 SaveAs 窗口假设尚未在当前环境成立。"""
+  """实际默认下载；旧 SaveAs 探针单独保留非默认的询问保存设置。"""
 
   artifact_root = REPO / ".scratch/frontend-completion/ticket-16/native"
 
   def setUp(self):
     super().setUp()
-    self.download_root = self.artifacts / "native-save-downloads"
+    # Keep native download paths short; evidence method names are intentionally
+    # descriptive and can consume most of Windows' destination path budget.
+    self.download_root = self.artifacts.parent / (
+      "downloads-" + self._testMethodName[:16]
+    )
     self.download_root.mkdir()
     # 仅本例全新隔离 profile，默认目录也在本例产物内，不使用用户 Downloads。
     preferences_root = self.root / "webview/EBWebView/Default"
     preferences_root.mkdir(parents=True)
+    download_preferences = {
+      "default_directory": str(self.download_root),
+      "directory_upgrade": True,
+    }
+    if (
+      self._testMethodName
+      == "test_actual_default_save_dialog_cancel_keeps_facts_and_draft"
+    ):
+      # Keep the historical forced-SaveAs probe separate. Wry hides the UI;
+      # forcing this non-default preference can leave downloads in progress.
+      download_preferences["prompt_for_download"] = True
     (preferences_root / "Preferences").write_text(
-      json.dumps(
-        {
-          "download": {
-            "default_directory": str(self.download_root),
-            "prompt_for_download": True,
-            "directory_upgrade": True,
-          }
-        }
-      ),
+      json.dumps({"download": download_preferences}),
       encoding="utf-8",
     )
 
@@ -421,15 +470,131 @@ class NativeSaveCancelExportAcceptance(ExportEvidence, ToolRecordsAcceptance):
       if "另存为" not in title and "save as" not in title.lower():
         return
       owner = win32gui.GetWindow(window, win32con.GW_OWNER)
+      root_owner = win32gui.GetAncestor(window, 3)  # GA_ROOTOWNER
       if (
         win32process.GetWindowThreadProcessId(window)[1] == host.pid
         or owner == main_window
+        or root_owner == main_window
       ):
         dialogs.append(window)
 
     win32gui.EnumWindows(collect_window, None)
     self.assertLessEqual(len(dialogs), 1)
     return dialogs[0] if dialogs else None
+
+  def test_default_download_retains_actual_complete_markdown_without_override(self):
+    host, backend_snapshot, thread = self.start_records()
+    self.refresh_records()
+    history = self.history(backend_snapshot, thread)
+    self.set_draft("尚未提交的秘密草稿")
+    self.focus_native_window(host)
+    observer = DefaultDownloadObserver(self)
+    self.call = observer.call
+    self.call("Page.enable")
+    export_position = self.evaluate("""(() => {
+      const button=document.querySelector('[aria-label=导出当前会话]');
+      const bounds=button.getBoundingClientRect();
+      return {x:bounds.x+bounds.width/2,y:bounds.y+bounds.height/2};
+    })()""")
+    for input_type in ("mousePressed", "mouseReleased"):
+      self.call(
+        "Input.dispatchMouseEvent",
+        type=input_type,
+        button="left",
+        clickCount=1,
+        **export_position,
+      )
+    downloaded_files = wait_until(lambda: list(self.download_root.glob("*.md")))
+    self.assertEqual(len(downloaded_files), 1)
+    actual_download = downloaded_files[0]
+    markdown = actual_download.read_text(encoding="utf-8", errors="strict")
+    self.assert_complete_records(markdown, history)
+    file_bytes = actual_download.read_bytes()
+    (self.artifacts / "observed-default-export.md").write_bytes(file_bytes)
+    try:
+      terminal_download = wait_until(observer.read_terminal_download, timeout=30)
+    finally:
+      (self.artifacts / "default-download-events.json").write_text(
+        json.dumps(observer.download_events, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+      )
+    self.assertEqual(terminal_download["state"], "completed", terminal_download)
+    self.assertEqual(terminal_download["receivedBytes"], len(file_bytes))
+    history_database = self.root / "webview/EBWebView/Default/History"
+    download_snapshot = {"history_database_exists": history_database.is_file()}
+    if history_database.is_file():
+      try:
+        with sqlite3.connect(history_database.as_uri() + "?mode=ro", uri=True) as db:
+          db.row_factory = sqlite3.Row
+          download_snapshot["downloads"] = [
+            dict(download_row)
+            for download_row in db.execute(
+              "SELECT target_path, current_path, state, received_bytes, total_bytes "
+              "FROM downloads"
+            )
+          ]
+      except sqlite3.Error as error:
+        download_snapshot["history_query_error"] = str(error)
+    (self.artifacts / "default-download-state.json").write_text(
+      json.dumps(download_snapshot, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    # Inspect actual UI owned by this acceptance host, including WebView child
+    # processes. A SaveAs-only probe missed other possible native download UI.
+    from native_platform_acceptance import NativePlatformAcceptance
+    from production_runner import read_owned_process_tree
+
+    owned_process_ids = {
+      process_snapshot["pid"] for process_snapshot in read_owned_process_tree(host.pid)
+    }
+    owned_windows = []
+
+    def collect_owned_window(window, _context):
+      if (
+        win32gui.IsWindowVisible(window)
+        and win32process.GetWindowThreadProcessId(window)[1] in owned_process_ids
+      ):
+        owned_windows.append(
+          {
+            "window": window,
+            "pid": win32process.GetWindowThreadProcessId(window)[1],
+            "class": win32gui.GetClassName(window),
+            "title": win32gui.GetWindowText(window),
+            "rect": win32gui.GetWindowRect(window),
+          }
+        )
+
+    win32gui.EnumWindows(collect_owned_window, None)
+    (self.artifacts / "default-download-windows.json").write_text(
+      json.dumps(owned_windows, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    for window_index, owned_window in enumerate(owned_windows):
+      NativePlatformAcceptance.read_native_controls(
+        self, owned_window["window"], f"default-download-{window_index}"
+      )
+    self.assertEqual(self.history(backend_snapshot, thread), history)
+    self.assertEqual(self.draft(), "尚未提交的秘密草稿")
+    self.record(
+      backend_snapshot=backend_snapshot,
+      thread=thread,
+      history=history,
+      source_file=str(actual_download),
+      file_sha256=hashlib.sha256(file_bytes).hexdigest(),
+      file_bytes=len(file_bytes),
+      scope=(
+        "actual default WebView download; no Browser.setDownloadBehavior; "
+        "not a UI cancel"
+      ),
+    )
+    self.screenshot()
+    self.quit(host)
+    self.assertEqual(host.wait(timeout=15), 0)
+    # WebView teardown is asynchronous. Reuse the owning fixture's cleanup
+    # before asserting retention; the old immediate host-exit check was too early.
+    self.stop_hosts()
+    self.assertTrue(
+      actual_download.is_file(), "default download disappeared after exit"
+    )
+    self.assertEqual(actual_download.read_bytes(), file_bytes)
 
   def test_actual_default_save_dialog_cancel_keeps_facts_and_draft(self):
     host, backend_snapshot, thread = self.start_records()
@@ -459,9 +624,44 @@ class NativeSaveCancelExportAcceptance(ExportEvidence, ToolRecordsAcceptance):
         clickCount=1,
         **export_position,
       )
-    dialog = wait_until(
-      lambda: self.find_owned_save_dialog(host, main_window), timeout=15
-    )
+    try:
+      dialog = wait_until(
+        lambda: self.find_owned_save_dialog(host, main_window), timeout=15
+      )
+    except AssertionError:
+      owned_windows = []
+
+      def collect_owned_window(window, _context):
+        if not win32gui.IsWindowVisible(window):
+          return
+        owner = win32gui.GetWindow(window, win32con.GW_OWNER)
+        root_owner = win32gui.GetAncestor(window, 3)
+        window_pid = win32process.GetWindowThreadProcessId(window)[1]
+        if window_pid == host.pid or owner == main_window or root_owner == main_window:
+          owned_windows.append(
+            {
+              "window": window,
+              "pid": window_pid,
+              "owner": owner,
+              "root_owner": root_owner,
+              "class": win32gui.GetClassName(window),
+              "title": win32gui.GetWindowText(window),
+            }
+          )
+
+      win32gui.EnumWindows(collect_owned_window, None)
+      self.record(
+        native_save_dialog_found=False,
+        owned_windows=owned_windows,
+        profile_preferences=profile_preferences["download"],
+        download_files=[path.name for path in self.download_root.iterdir()],
+        history=history,
+        thread=thread,
+        backend_snapshot=backend_snapshot,
+        limit="默认 SaveAs 探针未找到实际窗口，保留失败；不代表下载取消通过",
+      )
+      self.screenshot()
+      raise
     cancel_button = win32gui.GetDlgItem(dialog, win32con.IDCANCEL)
     self.assertTrue(cancel_button and win32gui.IsWindowEnabled(cancel_button))
     controls = []

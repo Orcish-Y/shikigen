@@ -12,9 +12,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import win32api
 import win32con
-import win32gui
 from websockets.sync.client import connect
-
 from window_acceptance import REPO, WindowAcceptance, wait_until
 
 
@@ -83,7 +81,8 @@ class PaginationAcceptance(WindowAcceptance):
       window.__paginationRequests = [];
       window.__paginationKeyEvents = [];
       document.addEventListener('keydown', event => {
-        if (!window.__capturePaginationKeys || !['End', 'PageDown'].includes(event.key)) return;
+        if (!window.__capturePaginationKeys
+          || !['End', 'PageDown'].includes(event.key)) return;
         const list = document.querySelector('[aria-label="会话列表内容"]');
         const item = {
           key: event.key, code: event.code, repeat: event.repeat,
@@ -94,7 +93,8 @@ class PaginationAcceptance(WindowAcceptance):
           activeElement: {tagName: document.activeElement.tagName,
             id: document.activeElement.id,
             ariaLabel: document.activeElement.getAttribute('aria-label')},
-          list: list && {busy: list.getAttribute('aria-busy'), scrollTop: list.scrollTop,
+          list: list && {busy: list.getAttribute('aria-busy'),
+            scrollTop: list.scrollTop,
             clientHeight: list.clientHeight, scrollHeight: list.scrollHeight}
         };
         window.__paginationKeyEvents.push(item);
@@ -109,7 +109,8 @@ class PaginationAcceptance(WindowAcceptance):
       window.fetch = async (input, init) => {
         const rawUrl = typeof input === 'string' ? input : input.url;
         const url = new URL(rawUrl, location.href);
-        const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
+        const method = init?.method
+          ?? (input instanceof Request ? input.method : 'GET');
         const item = {url: url.href, path: url.pathname, method, aborted: false};
         if (url.pathname.startsWith('/api/')) {
           window.__paginationRequests.push(item);
@@ -153,7 +154,8 @@ class PaginationAcceptance(WindowAcceptance):
       "lineHeight: style.lineHeight}; };"
       "return {innerWidth: window.innerWidth, innerHeight: window.innerHeight,"
       "devicePixelRatio: window.devicePixelRatio, row: describe(row),"
-      "skeleton: describe(skeleton), list: list && {busy: list.getAttribute('aria-busy'),"
+      "skeleton: describe(skeleton), list: list && {"
+      "busy: list.getAttribute('aria-busy'),"
       "scrollTop: list.scrollTop, clientHeight: list.clientHeight,"
       "scrollHeight: list.scrollHeight}}; })()"
     )
@@ -165,23 +167,23 @@ class PaginationAcceptance(WindowAcceptance):
     )
 
   def press_list_key(self, key, code, vk, host):
-    hwnd = self.window(host)
-    win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
-    win32gui.SetForegroundWindow(hwnd)
-    wait_until(lambda: win32gui.GetForegroundWindow() == hwnd, timeout=5)
+    self.focus_native_window(host)
     self.assertTrue(
       self.evaluate(
         "(() => { const list = document.querySelector('[aria-label=\"会话列表内容\"]');"
         "if (!list || !window.__paginationKeyEvents) return false;"
-        "list.focus(); return document.activeElement === list && document.hasFocus(); })()"
+        "list.focus(); return document.activeElement === list"
+        " && document.hasFocus(); })()"
       ),
       "conversation list could not receive keyboard focus in the foreground window",
     )
     before = len(self.evaluate("window.__paginationKeyEvents") or [])
     self.evaluate("window.__capturePaginationKeys = true")
     extended_key = win32con.KEYEVENTF_EXTENDEDKEY
-    win32api.keybd_event(vk, 0, extended_key, 0)
-    win32api.keybd_event(vk, 0, extended_key | win32con.KEYEVENTF_KEYUP, 0)
+    scan_code = win32api.MapVirtualKey(vk, 0)
+    self.assertGreater(scan_code, 0)
+    win32api.keybd_event(vk, scan_code, extended_key, 0)
+    win32api.keybd_event(vk, scan_code, extended_key | win32con.KEYEVENTF_KEYUP, 0)
     try:
       wait_until(
         lambda: len(self.evaluate("window.__paginationKeyEvents") or []) > before,
@@ -192,8 +194,10 @@ class PaginationAcceptance(WindowAcceptance):
     self.evaluate("window.__capturePaginationKeys = false")
     self.last_key_probe = self.evaluate(
       "(() => { const list = document.querySelector('[aria-label=\"会话列表内容\"]');"
-      "return {events: window.__paginationKeyEvents, documentHasFocus: document.hasFocus(),"
-      "activeElement: {tagName: document.activeElement.tagName, id: document.activeElement.id,"
+      "return {events: window.__paginationKeyEvents,"
+      "documentHasFocus: document.hasFocus(),"
+      "activeElement: {tagName: document.activeElement.tagName,"
+      "id: document.activeElement.id,"
       "ariaLabel: document.activeElement.getAttribute('aria-label')}, after: list && {"
       "busy: list.getAttribute('aria-busy'), scrollTop: list.scrollTop,"
       "clientHeight: list.clientHeight, scrollHeight: list.scrollHeight}}; })()"
@@ -302,7 +306,8 @@ class PaginationAcceptance(WindowAcceptance):
       wait_until(lambda: len(self.thread_ids() or []) == 20, timeout=15)
       wait_until(
         lambda: self.evaluate(
-          "document.querySelector('.session-list')?.getAttribute('aria-busy') !== 'true'"
+          "document.querySelector('.session-list')"
+          "?.getAttribute('aria-busy') !== 'true'"
         ),
         timeout=10,
       )
@@ -388,7 +393,8 @@ class PaginationAcceptance(WindowAcceptance):
           "(() => { window.__holdNextThreadList = true;"
           "const button = [...document.querySelectorAll('button')]"
           ".find(item => item.textContent.trim() === '重载列表');"
-          "if (!button || button.disabled) return false; button.click(); return true; })()"
+          "if (!button || button.disabled) return false;"
+          "button.click(); return true; })()"
         )
       )
       wait_until(lambda: self.evaluate("window.__heldThreadList === true"), timeout=10)
@@ -411,7 +417,8 @@ class PaginationAcceptance(WindowAcceptance):
       wait_until(
         lambda: (
           not self.evaluate(
-            "document.querySelector('.session-list')?.getAttribute('aria-busy') === 'true'"
+            "document.querySelector('.session-list')"
+            "?.getAttribute('aria-busy') === 'true'"
           )
         ),
         timeout=10,

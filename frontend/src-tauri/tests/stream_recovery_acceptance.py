@@ -19,6 +19,7 @@ class StreamRecoveryAcceptance(ReconstructionAcceptance):
     self.call(
       "Page.addScriptToEvaluateOnNewDocument",
       source="""
+      (() => {
       window.__requests = [];
       const original = window.fetch.bind(window);
       window.fetch = async (url, init) => {
@@ -59,6 +60,7 @@ class StreamRecoveryAcceptance(ReconstructionAcceptance):
         }});
         return new Response(body,{headers:response.headers});
       };
+      })();
       """,
     )
     self.call("Page.reload")

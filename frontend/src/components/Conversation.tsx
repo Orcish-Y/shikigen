@@ -173,7 +173,7 @@ export function Conversation({
     </div>
     {!reading.following && <div className="reading-controls">
       {reading.hasNewContent && <span role="status">有新内容</span>}
-      <button className="secondary-button" onClick={reading.latest}><ArrowDown size={15} />回到最新</button>
+      <button className="secondary-button" onClick={reading.scrollToLatest}><ArrowDown size={15} />回到最新</button>
     </div>}
     </div>
   );

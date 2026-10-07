@@ -75,7 +75,7 @@ export class ChatReadingPositions {
     if (geometry.height > 0 && geometry.anchors.length) this.capture(this.record(threadId), geometry);
   }
 
-  latest(threadId:string, geometry:TimelineGeometry):ReadingView {
+  followLatest(threadId:string, geometry:TimelineGeometry):ReadingView {
     const record = this.record(threadId);
     record.following = true;
     record.hasNewContent = false;

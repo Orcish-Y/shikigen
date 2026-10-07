@@ -40,7 +40,7 @@ test('上翻即停，即使离底部很近；真实内容变化只提示一次�
   assert.deepEqual(reading.reconcile('one', growing, next, true),
     {scrollTop:899, following:false, hasNewContent:true});
   assert.equal(reading.reconcile('one', growing, new Map(next), true).scrollTop, 899);
-  assert.equal(reading.latest('one', growing).scrollTop, 1200);
+  assert.equal(reading.followLatest('one', growing).scrollTop, 1200);
   assert.equal(reading.reconcile('one', growing, next, true).hasNewContent, false);
   reading.userScroll('one', frame(450), 'up');
   const layout = {...frame(450, [{id:'a', top:100}, {id:'b', top:600}, {id:'c', top:1100}]), total:1600};

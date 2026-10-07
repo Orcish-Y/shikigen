@@ -216,7 +216,9 @@ export class ConversationStore {
         ||processedIdentities.has(record.draft.identity))this.approvals.removeDraft(record.draft.identity);
     }
     if (run && terminalRun(run) || hasResolution) {
-      viewUpdate = {...viewUpdate, approvalDraft:null, ...(run && terminalRun(run) || previous?.write?.kind === 'approval' ? {write:null} : {})};
+      const writeState = Object.hasOwn(viewUpdate, 'write') ? viewUpdate.write : previous?.write;
+      // SSE 终态不能确认取消 POST；取消待确认仅由有效响应或后发 GET 快照结束。
+      viewUpdate = {...viewUpdate, approvalDraft:null, ...(writeState?.kind === 'approval' ? {write:null} : {})};
     }
     if(viewUpdate.approvalDraft)this.approvals.saveDraft(threadId,viewUpdate.approvalDraft);
     this.publishState({ ...this.inputState(), views: { ...this.state.views,

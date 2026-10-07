@@ -21,18 +21,12 @@ class ClientAcceptance(WindowAcceptance):
     # 运行摘要先呈现，资格核实随后完成；只点击实际可用按钮。
     wait_until(
       lambda: self.evaluate(
-        "[...document.querySelectorAll('button')]"
-        f".some(b => b.textContent.trim() === {json.dumps(label)} && !b.disabled)"
+        "(() => { const button = [...document.querySelectorAll('button')]"
+        f".find(b => b.textContent.trim() === {json.dumps(label)} && !b.disabled);"
+        "if (!button) return false;"
+        "button.click(); return true; })()"
       ),
       timeout=10,
-    )
-    self.assertTrue(
-      self.evaluate(
-        "(() => { const button = [...document.querySelectorAll('button')]"
-        f".find(b => b.textContent.trim() === {json.dumps(label)});"
-        "if (!button || button.disabled) return false;"
-        "button.click(); return true; })()"
-      )
     )
 
   def test_page_reads_persisted_messages_and_run_then_sends_only_on_click(self):
@@ -75,7 +69,7 @@ class ClientAcceptance(WindowAcceptance):
       raise
     self.click("运行详情")
     wait_until(lambda: "已完成" in self.body())
-    self.assertIn("Run ID", self.body())
+    self.assertIn("运行 ID", self.body())
     self.evaluate("document.querySelector('[aria-label=关闭]').click()")
     self.send("由页面显式发送")
     wait_until(lambda: "由页面显式发送" in self.body())
@@ -118,8 +112,16 @@ class ClientAcceptance(WindowAcceptance):
     wait_until(
       lambda: self.evaluate(
         "(() => { const button = [...document.querySelectorAll('.session')]"
-        f".find(b => b.title.includes({json.dumps(thread_id)}));"
+        f".find(b => b.dataset.conversationId === {json.dumps(thread_id)});"
         "if (!button) return false; button.click(); return true; })()"
+      )
+    )
+    wait_until(
+      lambda: (
+        self.evaluate(
+          "document.querySelector('.session[aria-current=true]')?.dataset.conversationId"
+        )
+        == thread_id
       )
     )
 
@@ -146,6 +148,7 @@ class ClientAcceptance(WindowAcceptance):
             const data = await read();
             window.__lateReady = true;
             await new Promise(resolve => window.__releaseLate = resolve);
+            window.__lateDelivered = true;
             return data;
           };
         }
@@ -253,10 +256,17 @@ class ClientAcceptance(WindowAcceptance):
     ).raise_for_status()
     retried = self.kill_and_retry_on_next_port(ready)
     self.select_thread(new_thread)
-    wait_until(lambda: "新启动选择的持久事实" in self.body())
+    wait_until(
+      lambda: (
+        "新启动选择的持久事实"
+        in self.evaluate("document.querySelector('.timeline').innerText")
+      )
+    )
     self.evaluate("window.__releaseLate()")
-    self.assertNotIn("旧请求迟到内容", self.body())
-    self.assertIn("新启动选择的持久事实", self.body())
+    wait_until(lambda: self.evaluate("window.__lateDelivered === true"))
+    timeline_text = self.evaluate("document.querySelector('.timeline').innerText")
+    self.assertNotIn("旧请求迟到内容", timeline_text)
+    self.assertIn("新启动选择的持久事实", timeline_text)
     self.assertTrue(
       all(r["method"] == "GET" for r in self.evaluate("window.__requests"))
     )
