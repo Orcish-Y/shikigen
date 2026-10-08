@@ -8,7 +8,6 @@ import {
   ClockCounterClockwise,
   DownloadSimple,
   SlidersHorizontal,
-  Terminal,
 } from "@phosphor-icons/react";
 import { Navigation, History } from "./components/Sidebar";
 import { Conversation, Composer, type ConversationActions } from "./components/Conversation";
@@ -35,6 +34,7 @@ import { CommandPanel } from './components/CommandPanel';
 import type { CommandAction } from './command-panel';
 import { useWorkspaceShortcuts } from './useWorkspaceShortcuts';
 import { detectShortcutPlatform } from './workspace-shortcuts';
+import { TitleBar } from './components/TitleBar';
 
 export default function App() {
   const backend = useBackendState();
@@ -51,6 +51,8 @@ export default function App() {
       stopped: "后端已停止",
     };
     return (
+      <div className="app">
+      <TitleBar connectionLabel={backend.error ? "无法读取后端状态" : labels[state?.state ?? "starting"]} />
       <main className="backend-screen" tabIndex={-1} aria-live="polite">
         <TrayNotice />
         <img src="/logo.svg" alt="" width="40" height="40" />
@@ -73,6 +75,7 @@ export default function App() {
         {backend.retryError && <p role="alert">{backend.retryError}</p>}
         {state?.startup_id && state.error && <BackendLogs key={state.startup_id} startupId={state.startup_id} />}
       </main>
+      </div>
     );
   }
 
@@ -255,26 +258,8 @@ function Workspace({ session, conversations }: {
         className={`app ${layout.isCollapsed ? "is-collapsed" : ""}`}
         data-navigation-breakpoint={layout.breakpoint}
       >
-        <header className="app-bar">
-          <div className="brand">
-            <img src="/logo.svg" alt="" />
-            <strong>shikigen</strong>
-            {!session && <span className="preview-label">界面预览</span>}
-          </div>
-          <span className="app-connection">
-            <span className="status-dot" />
-            {backendReady ? "后端已就绪" : "后端未连接"} · {conversations.observationLabel}
-          </span>
-          <button
-            className="text-button"
-            onClick={openCommands}
-            aria-label="打开命令面板"
-          >
-            <Terminal size={15} />
-            <span className="top-command-label">命令面板</span>
-            <kbd>{shortcut} K</kbd>
-          </button>
-        </header>
+        <TitleBar isPreview={!session}
+          connectionLabel={`${backendReady ? "后端已就绪" : "后端未连接"} · ${conversations.observationLabel}`} />
         <TrayNotice />
         <div className="workspace" ref={workspace}>
           {layout.isDesktop && navigation}

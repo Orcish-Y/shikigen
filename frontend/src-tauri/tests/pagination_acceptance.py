@@ -398,7 +398,18 @@ class PaginationAcceptance(WindowAcceptance):
         )
       )
       wait_until(lambda: self.evaluate("window.__heldThreadList === true"), timeout=10)
-      self.assertIn("正在刷新会话列表", self.body())
+      self.assertNotIn("正在刷新会话列表", self.body())
+      self.assertTrue(
+        self.evaluate(
+          "Boolean(document.querySelector('.list-scope button[aria-busy=true] .list-reload-spinner'))"
+        )
+      )
+      self.assertTrue(
+        self.evaluate(
+          "document.querySelector('.session-list')"
+          "?.getAttribute('aria-busy') === 'true'"
+        )
+      )
       self.assertEqual(len(self.thread_ids()), 41)
       self.assertEqual(
         self.evaluate("document.getElementById('message-draft').value"),
@@ -428,6 +439,9 @@ class PaginationAcceptance(WindowAcceptance):
       )
       self.assertEqual(len(self.thread_ids()), 41)
 
+      self.assertFalse(
+        self.evaluate("Boolean(document.querySelector('.list-reload-spinner'))")
+      )
       self.record(
         ready=ready,
         timestamp=timestamp,

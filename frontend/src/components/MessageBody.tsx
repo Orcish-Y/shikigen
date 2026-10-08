@@ -8,6 +8,7 @@ import { ContentBlock, CopyContent } from './ContentViewer';
 import { WorkspaceImage } from './WorkspaceImage';
 import type { WorkspaceResource } from '../backend-client';
 import { WorkspaceFileButton } from './WorkspaceFileOpen';
+import { readReasoningText, ReasoningPanel } from './ReasoningPanel';
 
 export type ContentView = { title: string; text: string; preview?: boolean; generating?:boolean;
   image?:{url:string; reference:string; messageIdentity:string; resource:WorkspaceResource};
@@ -119,6 +120,15 @@ export function MessageBody({role, content, identity, preview, generating, onVie
     if (typeof value === 'string') return role === 'assistant'
       ? <AgentText key={index} title="正文" text={value} identity={`${identity}:${index}`} preview={preview} generating={generating} onView={onView} />
       : <div key={index} className="plain-content">{value}</div>;
+    if (role === 'assistant' && value && typeof value === 'object' && !Array.isArray(value)) {
+      const source = value as Record<string, unknown>;
+      const reasoningText = readReasoningText(source);
+      if (reasoningText !== null) return <ReasoningPanel key={index} title="思考内容" text={reasoningText}
+        source={source} preview={preview} generating={generating} onView={onView}>
+        <AgentText title="思考内容" text={reasoningText} identity={`${identity}:${index}:reasoning`}
+          preview={preview} generating={generating} onView={onView} />
+      </ReasoningPanel>;
+    }
     if (value && typeof value === 'object' && !Array.isArray(value)
       && 'type' in value && value.type === 'text' && 'text' in value && typeof value.text === 'string') {
       return <div key={index}>{block(value.text, index)}

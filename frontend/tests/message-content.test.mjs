@@ -111,3 +111,54 @@ test('原始 HTML 文本化，GFM 表格与只读任务可见，脚注按消息�
   assert.ok(ids.length >= 2);
   for (const id of ids) assert.ok(!second.includes(`id="${id}"`));
 });
+
+test('思考块使用独立折叠面板并保留正文顺序、元数据和原文入口', () => {
+  const content = [{type:'thinking', thinking:'• **分析需求**：保留消息身份。', signature:'original-signature'},
+    {type:'text', text:'这是最终回答。'}, {type:'reasoning', reasoning:'**安全约束**：保持原始记录。', extras:{source:'provider'}}];
+  const original = structuredClone(content);
+  const html = render('assistant', content);
+  assert.equal(html.match(/class="reasoning-panel"/g).length, 2);
+  assert.match(html, /aria-expanded="true" aria-controls="[^"]+"/);
+  assert.match(html, /<strong>分析需求<\/strong>：/);
+  assert.match(html, /<strong>安全约束<\/strong>：/);
+  assert.ok(html.indexOf('<strong>分析需求') < html.indexOf('这是最终回答。'));
+  assert.ok(html.indexOf('这是最终回答。') < html.indexOf('<strong>安全约束'));
+  assert.match(html, /查看完整思考/);
+  assert.match(html, /复制思考内容/);
+  assert.match(html, /查看原始思考块/);
+  assert.match(html, /original-signature/);
+  assert.match(html, /&quot;source&quot;: &quot;provider&quot;/);
+  assert.deepEqual(content, original);
+  const controls = [...html.matchAll(/aria-controls="([^"]+)"/g)].map(match => match[1]);
+  assert.equal(new Set(controls).size, 2);
+  for (const id of controls) assert.ok(html.includes(`id="${id}"`));
+});
+
+test('思考摘要可读，未知／加密／错误结构仍显示完整 JSON，其他角色不解析思考', () => {
+  const summary = {type:'reasoning', summary:[{type:'summary_text', text:'第一阶段'}, {type:'summary_text', text:'第二阶段'}]};
+  const html = render('assistant', [summary]);
+  assert.match(html, /class="reasoning-panel"/);
+  assert.match(html, /<p[^>]*>第一阶段<\/p>/);
+  assert.match(html, /<p[^>]*>第二阶段<\/p>/);
+  for (const block of [{type:'reasoning', encrypted_content:'opaque'}, {type:'thinking', thinking:42},
+    {type:'reasoning', summary:[{type:'unknown', text:'保留未知摘要'}]}, {type:'unknown', reasoning:'不要猜'}]) {
+    const raw = render('assistant', [block]);
+    assert.doesNotMatch(raw, /class="reasoning-panel"/);
+    assert.match(raw, /内容块 JSON/);
+  }
+  for (const role of ['user', 'tool']) assert.doesNotMatch(render(role, [summary]), /class="reasoning-panel"/);
+});
+
+test('思考预览范围明确，空文本可读，HTML 与远程图片沿用正文安全策略', () => {
+  const html = render('assistant', [{type:'reasoning', reasoning:'<script>alert(1)</script>\n\n![远程](https://example.org/a.png)'}],
+    {preview:true, generating:true});
+  assert.match(html, /class="reasoning-status">生成中/);
+  assert.match(html, /复制当前思考片段/);
+  assert.doesNotMatch(html, /复制思考内容|复制完整内容/);
+  assert.match(html, /&lt;script&gt;/);
+  assert.match(html, /网页图片未自动加载/);
+  assert.doesNotMatch(html, /<script|<img/);
+  assert.match(render('assistant', [{type:'thinking', thinking:'  '}]), /未提供思考文本/);
+  assert.match(render('assistant', [{type:'reasoning', reasoning:'当前片段'}], {preview:true, generating:false}),
+    /class="reasoning-status">预览/);
+});

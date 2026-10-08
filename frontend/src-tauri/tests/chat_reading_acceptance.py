@@ -1,6 +1,7 @@
 """第 09 票：真实 Tauri、公开 HTTP/SSE、原生显隐/恢复及浏览器布局边界。"""
 
 import json
+import time
 import unittest
 
 import win32con
@@ -98,6 +99,49 @@ class ChatReadingAcceptance(MessageDraftAcceptance):
     )
     wait_until(lambda: self.at_latest())
 
+  def test_scrollbar_drag_and_hold_preserve_reading_position(self):
+    (self.root / "allow-reading-stream").touch()
+    host, ready, thread = self.start_empty()
+    self.send("滚动条拖动的长会话")
+    self.complete()
+    scrollbar = self.evaluate("""(() => {
+      const t=document.querySelector('.timeline'), r=t.getBoundingClientRect();
+      const thumb=Math.max(20, t.clientHeight*t.clientHeight/t.scrollHeight);
+      return {x:r.right-5, y:r.bottom-thumb/2, destination:r.top+r.height/2};
+    })()""")
+    self.call("Input.dispatchMouseEvent", type="mousePressed",
+      x=scrollbar["x"], y=scrollbar["y"], button="left", buttons=1, clickCount=1)
+    try:
+      # Native scrollbar dragging must outlive the old one-second input window.
+      time.sleep(1.2)
+      self.call("Input.dispatchMouseEvent", type="mouseMoved",
+        x=scrollbar["x"], y=scrollbar["destination"], button="left", buttons=1)
+      time.sleep(0.2)
+      dragged = self.geometry()
+      self.assertFalse(dragged["following"], dragged)
+      self.assertGreater(dragged["scrollTop"], 20)
+      self.assertLess(dragged["scrollTop"], dragged["total"]-dragged["height"]-20)
+      # Sample throughout the hold, rather than only checking the final frame.
+      samples = []
+      for _ in range(15):
+        time.sleep(0.1)
+        samples.append(self.geometry())
+        self.assertAlmostEqual(samples[-1]["scrollTop"], dragged["scrollTop"], delta=2)
+        self.assertFalse(samples[-1]["following"])
+    finally:
+      self.call("Input.dispatchMouseEvent", type="mouseReleased",
+        x=scrollbar["x"], y=scrollbar["destination"], button="left", buttons=0,
+        clickCount=1)
+    time.sleep(1.2)
+    self.assert_anchor(dragged)
+    self.record(ready=ready, thread=thread, dragged=dragged, samples=samples,
+      released=self.geometry())
+    self.screenshot()
+    self.click("回到底部")
+    wait_until(self.at_latest)
+    self.quit(host)
+    self.assertEqual(host.wait(timeout=15), 0)
+
   def test_switch_hide_host_reentry_and_restart_preserve_reading_intent(self):
     (self.root / "allow-reading-stream").touch()
     host, ready, thread = self.start_empty()
@@ -184,7 +228,7 @@ class ChatReadingAcceptance(MessageDraftAcceptance):
     )
     self.assert_anchor(reading)
     self.assertTrue(self.geometry()["newContent"])
-    self.click("回到最新")
+    self.click("回到底部")
     wait_until(self.at_latest)
     # 最新模式时代码区滚轮不能关闭主时间线跟随。
     rect = self.evaluate(

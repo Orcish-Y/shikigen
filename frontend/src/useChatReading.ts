@@ -25,7 +25,6 @@ export function useChatReading(session:Session, positions:ChatReadingPositions, 
     const threadId = session.id;
     let lastTop = element.scrollTop;
     let layout = measure(element);
-    let controlsVisible = Boolean(element.parentElement?.querySelector('.reading-controls'));
     let intentUntil = 0;
     let touchY = 0;
     let connected = true;
@@ -49,18 +48,16 @@ export function useChatReading(session:Session, positions:ChatReadingPositions, 
     function update() {
       if (!connected || !current.current.visible) return;
       const geometry = measure(element!);
-      const nextControls = Boolean(element!.parentElement?.querySelector('.reading-controls'));
-      // 上翻自己显示的操作行只缩小视口；保留这次手势及尚未递送的原生滚动。
-      const controlResize = nextControls !== controlsVisible
-        && sameTimelineLayout({...layout, height:geometry.height}, geometry);
-      controlsVisible = nextControls;
       // React 更新也可能先于原生 scroll：先采集真实移动，再恢复新布局中的偏移。
-      if (performance.now() < intentUntil && movedBeyondLayoutClamp(layout, geometry)) {
+      // 原生滚动条不保证递送 pointerdown，拖动也可能超过输入意图窗口。
+      // 程序写入的位置已在 apply 中同步到 layout；尺寸不变的剩余移动属于用户阅读。
+      if ((sameTimelineLayout(layout, geometry) || performance.now() < intentUntil)
+        && movedBeyondLayoutClamp(layout, geometry)) {
         positions.userScroll(threadId, sameTimelineLayout(layout, geometry) ? geometry : {...layout, scrollTop:geometry.scrollTop},
           geometry.scrollTop < lastTop ? 'up' : 'down');
         intentUntil = performance.now() + 1000;
       }
-      if (!sameTimelineLayout(layout, geometry) && !controlResize) intentUntil = 0;
+      if (!sameTimelineLayout(layout, geometry)) intentUntil = 0;
       apply(positions.reconcile(threadId, geometry, content(), current.current.factsReady, current.current.acceptedSendId));
     }
     function owner(target:EventTarget | null) {

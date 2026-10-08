@@ -11,6 +11,7 @@ import {
   Plus,
   MagnifyingGlass,
   DotsThree,
+  ArrowClockwise,
 } from "@phosphor-icons/react";
 import type { Session } from "../data/demo";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
@@ -78,7 +79,7 @@ export function Navigation({
   return (
     <aside className="navigation" aria-label="主导航">
       <div className="navigation-heading">
-        <span className="nav-label navigation-brand"><img src="/logo.svg" alt="" />shikigen</span>
+        <h2 className="nav-label navigation-title">核心工作台</h2>
         <button
           className="icon-button"
           onClick={onToggle}
@@ -89,7 +90,6 @@ export function Navigation({
         </button>
       </div>
       <nav aria-label="核心工作台">
-        <p className="nav-label navigation-group">核心工作台</p>
         {destinations.map(({ icon: Icon, label }, index) => (
           <button
             key={label}
@@ -160,6 +160,16 @@ export function History({
   isVisible?: boolean;
 }) {
   const list = useRef<HTMLElement>(null);
+  const [isReloading, setIsReloading] = useState(false);
+  const reloadList = async () => {
+    if (!pagination || isReloading) return;
+    setIsReloading(true);
+    try {
+      await pagination.onReload();
+    } finally {
+      setIsReloading(false);
+    }
+  };
   const wheelGesture = useRef(false);
   const wheelTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchY = useRef<number | null>(null);
@@ -224,8 +234,10 @@ export function History({
       </label>
       <div className="list-scope">
         <span>仅筛选已加载会话</span>
-        {pagination && <button className="text-button" onClick={() => void pagination.onReload()}
-          disabled={refreshing || loadingMore || retrySeconds > 0}>
+        {pagination && <button className="text-button" onClick={() => void reloadList()}
+          aria-busy={isReloading}
+          disabled={isReloading || refreshing || loadingMore || retrySeconds > 0}>
+          <ArrowClockwise size={14} aria-hidden="true" className={isReloading ? "list-reload-spinner" : undefined} />
           重载列表
         </button>}
       </div>
@@ -267,7 +279,6 @@ export function History({
         {refreshing && sessions.length === 0 && <div aria-label="正在加载会话列表" role="status">
           {Array.from({ length: 6 }, (_, index) => <div className="session-skeleton" key={index}><i /><i /></div>)}
         </div>}
-        {refreshing && sessions.length > 0 && <p className="list-feedback" role="status">正在刷新会话列表…</p>}
         {(["今天", "昨天", "更早", "日期待确认"] as const).map((group) => {
           const entries = filtered.filter((session) => session.group === group);
           return (
