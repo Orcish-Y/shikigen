@@ -4,7 +4,9 @@ import re
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationError
+
+from shikigen.contracts.tool_definitions import ToolLibraryConfig
 
 DEFAULT_CONFIG_PATH = Path("config.json")
 _ENV_VAR_PATTERN = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)")
@@ -112,6 +114,12 @@ class BackendConfig(BaseModel):
 class AppConfig(BaseModel):
   model_config = ConfigDict(extra="forbid")
 
+  _source_path: Path | None = PrivateAttr(default=None)
+
+  @property
+  def source_path(self) -> Path | None:
+    return self._source_path
+
   model: ModelConfig
   mcp: McpConfig
   workspace_root: str = Field(default=".", min_length=1)
@@ -119,9 +127,12 @@ class AppConfig(BaseModel):
   checkpointer: CheckpointerConfig = Field(default_factory=CheckpointerConfig)
   database: DatabaseConfig = Field(default_factory=DatabaseConfig)
   backend: BackendConfig = Field(default_factory=BackendConfig)
+  tool_library: ToolLibraryConfig = Field(default_factory=ToolLibraryConfig)
 
 
 def _resolve_env_vars(value: object, path: tuple[str | int, ...] = ()) -> object:
+  if path == ("tool_library",):
+    return value
   if isinstance(value, dict):
     return {
       key: _resolve_env_vars(item, (*path, str(key))) for key, item in value.items()
@@ -164,7 +175,9 @@ def load_app_config(path: str | Path | None = None) -> AppConfig:
   try:
     content = config_path.read_text(encoding="utf-8")
     raw_config = json.loads(content)
-    return AppConfig.model_validate(_resolve_env_vars(raw_config))
+    config = AppConfig.model_validate_json(json.dumps(_resolve_env_vars(raw_config)))
+    config._source_path = config_path.resolve()
+    return config
   except FileNotFoundError as exc:
     raise AppConfigError(f"Config file not found: {config_path}") from exc
   except json.JSONDecodeError as exc:

@@ -56,22 +56,29 @@ function ListError({ failure, onRetry, onReload }: {
   </div>;
 }
 
+export type WorkspacePage = 'chat' | 'tools' | 'mcp';
+
 export function Navigation({
   backendReady,
   observationLabel,
   onToggle,
   onCommands,
   isCollapsed,
+  page = 'chat',
+  onNavigate,
 }: {
   backendReady: boolean;
   observationLabel: string;
   isCollapsed: boolean;
   onToggle: () => void;
   onCommands: () => void;
+  page?: WorkspacePage;
+  onNavigate?: (page: WorkspacePage) => void;
 }) {
+  const compactToolsRail = page === 'tools' && isCollapsed;
   const destinations = [
-    { icon: ChatCircle, label: "会话与对话" },
-    { icon: Wrench, label: "工具与技能编排" },
+    { icon: ChatCircle, label: "会话与对话", page:'chat' as WorkspacePage },
+    ...(compactToolsRail ? [{icon:Wrench,label:'工具',page:'tools' as WorkspacePage}] : []),
     { icon: Database, label: "知识库与向量空间" },
     { icon: GitBranch, label: "提示词与评估" },
     { icon: Pulse, label: "运行日志与追踪" },
@@ -90,20 +97,31 @@ export function Navigation({
         </button>
       </div>
       <nav aria-label="核心工作台">
-        {destinations.map(({ icon: Icon, label }, index) => (
+        {destinations.map(({ icon: Icon, label, page: destination }) => (
           <button
             key={label}
-            className={`nav-item ${index === 0 ? "active" : ""}`}
-            disabled={index !== 0}
-            title={index ? `${label} · 暂未支持` : label}
-            aria-label={index ? `${label} · 暂未支持` : label}
-            aria-current={index === 0 ? "page" : undefined}
+            className={`nav-item ${destination === page ? "active" : ""}`}
+            disabled={!destination}
+            title={!destination ? `${label} · 暂未支持` : label}
+            aria-label={!destination ? `${label} · 暂未支持` : label}
+            aria-current={destination === page ? "page" : undefined}
+            onClick={destination ? () => onNavigate?.(destination) : undefined}
           >
             <Icon size={19} />
             <span className="nav-label">{label}</span>
-            {index > 0 && <span className="nav-label soon">待开放</span>}
+            {!destination && <span className="nav-label soon">待开放</span>}
           </button>
         ))}
+        <h2 className="nav-label navigation-title extension-heading">扩展</h2>
+        {([{page:'tools', label:'工具'}, {page:'mcp', label:'MCP 服务'}] as const).filter(item => !compactToolsRail || item.page !== 'tools').map(item =>
+          <button key={item.page} className={`nav-item ${page === item.page ? 'active' : ''}`}
+            title={item.label} aria-label={item.label} aria-current={page === item.page ? 'page' : undefined}
+            onClick={() => onNavigate?.(item.page)}>
+            <Wrench size={19}/><span className="nav-label">{item.label}</span>
+          </button>)}
+        <button className="nav-item" disabled title="技能 · 暂未开放" aria-label="技能 · 暂未开放">
+          <Wrench size={19}/><span className="nav-label">技能</span><span className="nav-label soon">暂未开放</span>
+        </button>
       </nav>
       <div className="navigation-footer">
         <div className="connection-card" title={`${backendReady ? '后端已就绪' : '后端尚未连接'} · ${observationLabel}`}>

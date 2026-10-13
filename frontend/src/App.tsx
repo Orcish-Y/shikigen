@@ -9,7 +9,8 @@ import {
   DownloadSimple,
   SlidersHorizontal,
 } from "@phosphor-icons/react";
-import { Navigation, History } from "./components/Sidebar";
+import { Navigation, History, type WorkspacePage } from "./components/Sidebar";
+import { ToolsWorkspace } from './components/tools/ToolsWorkspace';
 import { Conversation, Composer, type ConversationActions } from "./components/Conversation";
 import { Overlay } from "./components/Overlay";
 import { ContentViewer } from './components/ContentViewer';
@@ -95,6 +96,7 @@ function Workspace({ session, conversations }: {
   const backendReady = Boolean(session);
   const { sessions, active, activeId } = conversations;
   const [query, setQuery] = useState("");
+  const [page, setPage] = useState<WorkspacePage>('chat');
   const [mobilePanel, setMobilePanel] = useState<SidebarView | null>(null);
   const layout = useNavigationLayout(() => setMobilePanel(null));
   const historyReadingPosition = useRef(0);
@@ -172,14 +174,19 @@ function Workspace({ session, conversations }: {
   },[overlay,fileOpening.view.phase,conversations.setDetailsOpen]);
   const shortcut = detectShortcutPlatform(navigator.platform) === 'mac' ? "⌘" : "Ctrl";
 
+  function navigate(destination: WorkspacePage) {
+    setPage(destination); setMobilePanel(null); setOverlay(null); setCancelTarget(null); closeFileOpen();
+  }
+
   function toggleNavigation() {
     setOverlay(null); setCancelTarget(null); closeFileOpen();
+    if (page === 'tools') {setMobilePanel(current => current === 'navigation' ? null : 'navigation');return;}
     if (layout.isDesktop) layout.toggleDesktopNavigation();
     else setMobilePanel('navigation');
   }
   function openSidebar(view: SidebarView) {
     setOverlay(null); setCancelTarget(null); closeFileOpen();
-    if (!layout.isDesktop) setMobilePanel(layout.breakpoint === 'phone' ? 'history' : view);
+    if (!layout.isDesktop) setMobilePanel(page === 'chat' && layout.breakpoint === 'phone' ? 'history' : view);
   }
   function openCommands() {
     setMobilePanel(null); setCancelTarget(null); closeFileOpen(); setOverlay('commands');
@@ -188,12 +195,14 @@ function Workspace({ session, conversations }: {
     setMobilePanel(null); setCancelTarget(null); closeFileOpen(); setOverlay(view);
   }
   function findConversation() {
+    setPage('chat');
     setOverlay(null); setCancelTarget(null); closeFileOpen();
     if (layout.isDesktop) requestAnimationFrame(() => document.querySelector<HTMLInputElement>('.search input')?.focus());
     else openSidebar('history');
   }
   function createSession() {
     if (!conversations.canCreate) return;
+    setPage('chat');
     timeline.current?.rememberReadingPosition();
     void conversations.create();
     closeFileOpen(); setCancelTarget(null);
@@ -202,6 +211,7 @@ function Workspace({ session, conversations }: {
   }
   function selectConversation(conversationId: string) {
     if (!sessions.some(conversation => conversation.id === conversationId)) return;
+    setPage('chat');
     timeline.current?.rememberReadingPosition();
     if (conversationId !== activeId) conversations.select(conversationId);
     closeFileOpen(); setCancelTarget(null); setMobilePanel(null); setOverlay(null);
@@ -228,7 +238,7 @@ function Workspace({ session, conversations }: {
   }
   useWorkspaceShortcuts(fileOpening.view.phase !== 'idle' || cancelTarget ? 'other'
     : overlay === 'commands' ? 'commands' : overlay ? 'other'
-    : !layout.isDesktop && mobilePanel ? mobilePanel === 'navigation' ? 'navigation' : 'other' : 'none', action => {
+    : (!layout.isDesktop || page === 'tools') && mobilePanel ? mobilePanel === 'navigation' ? 'navigation' : 'other' : 'none', action => {
     switch (action) {
       case 'open-commands': openCommands(); break;
       case 'create-conversation': createSession(); break;
@@ -239,8 +249,9 @@ function Workspace({ session, conversations }: {
   });
 
   const navigation = <Navigation backendReady={backendReady}
+    page={page} onNavigate={navigate}
     observationLabel={conversations.observationLabel}
-    isCollapsed={layout.isCollapsed && mobilePanel !== 'navigation'}
+    isCollapsed={(layout.isCollapsed || page === 'tools') && mobilePanel !== 'navigation'}
     onToggle={mobilePanel ? () => setMobilePanel(null) : toggleNavigation} onCommands={openCommands}/>;
   const history = <History sessions={sessions} activeId={activeId} query={query} onQuery={setQuery}
     readingPosition={historyReadingPosition} isVisible={layout.isDesktop || mobilePanel === 'history'}
@@ -255,19 +266,28 @@ function Workspace({ session, conversations }: {
     <WorkspaceImageProvider session={session} threadId={activeId} isVisible={conversations.visible}>
     <IconContext.Provider value={{ weight: "regular", size: 18 }}>
       <div
-        className={`app ${layout.isCollapsed ? "is-collapsed" : ""}`}
+        className={`app ${layout.isCollapsed || page === 'tools' ? "is-collapsed" : ""} ${page === 'tools' ? 'tools-layout' : ''}`}
         data-navigation-breakpoint={layout.breakpoint}
       >
         <TitleBar isPreview={!session}
           connectionLabel={`${backendReady ? "后端已就绪" : "后端未连接"} · ${conversations.observationLabel}`} />
         <TrayNotice />
-        <div className="workspace" ref={workspace}>
+        <div className={`workspace ${page !== 'chat' ? 'extension-workspace' : ''}`} ref={workspace}>
           {layout.isDesktop && navigation}
           {layout.breakpoint === 'tablet' && <Navigation backendReady={backendReady}
+            page={page} onNavigate={navigate}
             observationLabel={conversations.observationLabel} isCollapsed
             onToggle={() => openSidebar('navigation')} onCommands={openCommands}/>}
-          {layout.isDesktop && history}
-          <main className="chat-workspace" tabIndex={-1}>
+          {page === 'chat' && layout.isDesktop && history}
+          {page !== 'chat' && <main className="tools-workspace" tabIndex={-1}>
+            {page !== 'tools' && <div className="chat-toolbar">
+              {!layout.isDesktop && <button className="icon-button" aria-label="打开主导航" onClick={() => openSidebar('navigation')}><SidebarSimple/></button>}
+              <h1>MCP 服务</h1>
+            </div>}
+            {page === 'tools' ? <ToolsWorkspace session={session} onView={openContent} onNavigation={() => openSidebar('navigation')}/>
+              : <div className="tools-page"><p>MCP 服务连接管理将在后续开放。</p><p>工具库连接与启动时的 MCP 配置独立保存。</p></div>}
+          </main>}
+          <main className="chat-workspace" tabIndex={-1} hidden={page !== 'chat'}>
             <div className="chat-toolbar">
               <button
                 className="icon-button mobile-navigation"
@@ -423,9 +443,9 @@ function Workspace({ session, conversations }: {
             />
           </main>
         </div>
-        {fileOpening.view.phase === 'idle' && !cancelTarget && !overlay && !layout.isDesktop && mobilePanel &&
+        {fileOpening.view.phase === 'idle' && !cancelTarget && !overlay && (!layout.isDesktop || page === 'tools') && mobilePanel &&
           <SidebarPanel view={mobilePanel} onSwitch={setMobilePanel} onClose={() => setMobilePanel(null)}
-            navigation={navigation} history={history}/>}
+            navigation={navigation} history={page === 'chat' ? history : null} chatHistory={page === 'chat'}/>}
         {fileOpening.view.phase !== 'idle' && <Overlay title="打开本地文件？" initialFocus="#cancel-file-open" onClose={closeFileOpen}>
           <FileOpenConfirmation view={fileOpening.view} onClose={closeFileOpen}
             onConfirm={() => {
@@ -448,7 +468,7 @@ function Workspace({ session, conversations }: {
         </Overlay>}
         {fileOpening.view.phase === 'idle' && overlay === "commands" && (
           <CommandPanel shortcut={shortcut} onExecute={executeCommand} onClose={() => setOverlay(null)}
-            context={{conversations:sessions, isDesktop:layout.isDesktop, isNavigationCollapsed:layout.isCollapsed,
+            context={{conversations:sessions, isDesktop:layout.isDesktop, isNavigationCollapsed:layout.isCollapsed || page === 'tools',
               createUnavailableReason:conversations.canCreate ? null : conversations.createAvailability,
               detailsUnavailableReason:conversations.detailsAvailable ? null : conversations.detailsAvailability}}/>
         )}

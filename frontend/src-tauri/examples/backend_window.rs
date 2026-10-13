@@ -31,6 +31,11 @@ fn main() {
     let root = PathBuf::from(std::env::args_os().nth(1).expect("isolated project path"));
     let release = root.join("allow-observation");
     let mut context = tauri::generate_context!();
+    // A separate dev origin lets acceptance use the current dist without replacing
+    // a developer's existing Vite server. This is an example-only test setting.
+    if let Ok(origin) = std::env::var("SHIKIGEN_ACCEPTANCE_DEV_ORIGIN") {
+        context.config_mut().build.dev_url = Some(origin.parse().expect("acceptance origin"));
+    }
     // Acceptance windows must never notify or block a user's real application.
     context.config_mut().identifier = "dev.shikigen.desktop.acceptance".into();
     if root.join("missing-tray-icon").exists() {

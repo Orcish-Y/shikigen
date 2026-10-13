@@ -20,6 +20,7 @@ from shikigen.runtime.run_events import RunEventIngestor
 from shikigen.runtime.run_execution import RunExecutionCoordinator
 from shikigen.runtime.runs import RunService, RunTransitions
 from shikigen.runtime.threads import ThreadService
+from shikigen.runtime.tool_library import ToolLibrary
 from shikigen.runtime.workspace_resources import WorkspaceResources
 from shikigen.tools import create_builtin_registry
 from shikigen.tools.mcp_loader import load_mcp_tools
@@ -38,6 +39,7 @@ class Runtime:
   threads: ThreadService
   runs: RunService
   resources: WorkspaceResources
+  tools: ToolLibrary
 
 
 def assemble_runtime(
@@ -57,7 +59,8 @@ def assemble_runtime(
     ingestor if ingestor is not None else RunEventIngestor(chat_store, executions)
   )
   coordinator = RunExecutionCoordinator(executions, transitions, ingestor)
-  lifecycle = ApplicationLifecycle(coordinator)
+  tools = ToolLibrary(config.source_path)
+  lifecycle = ApplicationLifecycle(coordinator, background_shutdown=tools.shutdown)
   return Runtime(
     config=config,
     agent=agent,
@@ -65,6 +68,7 @@ def assemble_runtime(
     chat_store=chat_store,
     executions=executions,
     lifecycle=lifecycle,
+    tools=tools,
     resources=resources
     if resources is not None
     else WorkspaceResources(config.workspace_root),

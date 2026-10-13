@@ -6,7 +6,7 @@ from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from shikigen.runtime import Runtime, open_runtime
 
-from app.routes import run, thread, workspace
+from app.routes import run, thread, tools, workspace
 from app.routes.queries import apply_query_response_headers
 
 
@@ -46,6 +46,7 @@ def create_app(*, runtime: Runtime | None = None) -> FastAPI:
   app.include_router(thread.router)
   app.include_router(run.router)
   app.include_router(workspace.router)
+  app.include_router(tools.router)
   return app
 
 

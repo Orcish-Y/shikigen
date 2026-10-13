@@ -1,5 +1,19 @@
 # 前端组件库接入
 
+第一个 HTTP 工具专项现在在真实工具页挂载 RJSF 管理表单和业务输入表单。
+`src/styles.css` 已启用 `@source "../node_modules/@rjsf/shadcn"`，继续使用
+现有 `--ui-*` 主题语义，不导入主题包的完整 CSS reset。
+`SchemaForm` 用本地 Input/Textarea 适配基础模板和多行控件，JSON Schema
+字段保留对象结构并反馈无效原文；业务表单关闭默认值填充和 format 强制校验。
+
+工具测试结果使用本地 AI Elements Tool 适配，来源与 Reasoning 同为固定提交
+[`6a9d5b1` 的 tool.tsx](https://github.com/vercel/ai-elements/blob/6a9d5b1822ffb10bba4bd97175f01edd7d8651cd/packages/elements/src/tool.tsx)，
+沿用本目录已有 Apache-2.0 授权文件。它直接接收项目执行状态和完整结果，
+使用 Phosphor 图标、本地 Collapsible，以及显式 JSON 格式化，确保
+null、false、0、空字符串和空容器可见且可完整复制；不新增 AI SDK transport。
+实际表单提交与结果行为由 `tests/tool-management-dom.test.mjs` 验证，
+桌面链路由 `src-tauri/tests/tool_library_acceptance.py` 使用临时配置和本地 HTTP 服务验收。
+
 本轮范围见 [任务导航](../.scratch/frontend-component-libraries/tickets.md)。组件位于呈现层，消息草稿、请求接受情况、运行事实和恢复仍由现有 ConversationStore、BackendClient 与运行投影负责。
 
 02–04 的组件接入已完成。最终 `gpt-6-luna / max` 验证为前端 295/295 通过、类型检查和构建通过，真实 Tauri 原生 22/23 通过、0 跳过。剩余一条候选窗口自动化检测超时；用户截图、实际桌面 BitBlt 与 leaf UIA 已确认候选显示，人工/实机证据和自动化失败分别保留。按用户要求停止追加拼音诊断，05 保留该测试设施缺口，完整命令与证据见[验证报告](../.scratch/frontend-component-libraries/verification/report.md)。

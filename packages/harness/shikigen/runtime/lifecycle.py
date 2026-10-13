@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from collections.abc import Coroutine
+from collections.abc import Awaitable, Callable, Coroutine
 from typing import Any
 
 from shikigen.runtime.run_execution import RunExecutionCoordinator
@@ -11,11 +11,16 @@ logger = logging.getLogger(__name__)
 
 
 class ApplicationLifecycle:
-  def __init__(self, executions: RunExecutionCoordinator) -> None:
+  def __init__(
+    self,
+    executions: RunExecutionCoordinator,
+    background_shutdown: Callable[[], Awaitable[None]] | None = None,
+  ) -> None:
     self._executions = executions
     self._operations: set[asyncio.Task] = set()
     self._closing = False
     self._shutdown_task: asyncio.Task[None] | None = None
+    self._background_shutdown = background_shutdown
 
   async def accept[T](self, operation: Coroutine[Any, Any, T]) -> T:
     """接收后的创建操作由应用生命周期持有；调用方断开不打断提交与启动。"""
@@ -43,6 +48,8 @@ class ApplicationLifecycle:
 
       async def close() -> None:
         await asyncio.gather(*tuple(self._operations), return_exceptions=True)
+        if self._background_shutdown is not None:
+          await self._background_shutdown()
         await self._executions.shutdown()
 
       self._shutdown_task = asyncio.create_task(close())

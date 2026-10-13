@@ -1,6 +1,8 @@
 import type { BackendSnapshot } from "./backend-state";
 import { RunProtocolError, validStatus, validateEvent, validateFrame, validateMessage, validateRun } from './run-protocol.ts';
 import type { ApprovalResponses } from './approval-decisions.ts';
+import type { HttpToolDefinition, ToolDraft, ToolRead, ToolTest } from './tool-library';
+import type { RJSFSchema } from '@rjsf/utils';
 
 export interface Thread {
   id: string;
@@ -159,6 +161,33 @@ export class BackendSession {
     if (!workspace || typeof workspace.workspace_id !== 'string' || !workspace.workspace_id
       || typeof workspace.root !== 'string' || !workspace.root) throw new Error('工作目录身份无效');
     return workspace;
+  }
+
+  getToolManagementSchema(signal?: AbortSignal) {
+    return this.json<{data:RJSFSchema}>('/api/tools/schema/http', {cache:'no-store'}, signal);
+  }
+  listTools(signal?: AbortSignal) {
+    return this.json<ToolRead<HttpToolDefinition[]>>('/api/tools', {cache:'no-store'}, signal);
+  }
+  getToolNameCandidate() {
+    return this.json<{data:string}>('/api/tools/name-candidate', {cache:'no-store'});
+  }
+  getTool(id: string, signal?: AbortSignal) {
+    return this.json<ToolRead<HttpToolDefinition>>(`/api/tools/${encodeURIComponent(id)}`, {cache:'no-store'}, signal);
+  }
+  saveTool(draft: ToolDraft, saved?: {id:string; version:string}) {
+    return this.json<ToolRead<HttpToolDefinition>>(saved ? `/api/tools/${encodeURIComponent(saved.id)}` : '/api/tools', {
+      method:saved ? 'PUT' : 'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(saved ? {definition:draft,version:saved.version} : draft),
+    });
+  }
+  startToolTest(id: string, inputs: Record<string, unknown>) {
+    return this.json<{data:ToolTest}>(`/api/tools/${encodeURIComponent(id)}/tests`, {
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({inputs}),
+    });
+  }
+  getToolTest(id: string, signal?: AbortSignal) {
+    return this.json<{data:ToolTest}>(`/api/tools/tests/${encodeURIComponent(id)}`, {cache:'no-store'}, signal);
   }
 
   async resolveResource(reference:string, signal?:AbortSignal):Promise<WorkspaceResource> {
