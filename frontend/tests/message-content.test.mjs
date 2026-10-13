@@ -118,7 +118,8 @@ test('思考块使用独立折叠面板并保留正文顺序、元数据和原�
   const original = structuredClone(content);
   const html = render('assistant', content);
   assert.equal(html.match(/class="reasoning-panel"/g).length, 2);
-  assert.match(html, /aria-expanded="true" aria-controls="[^"]+"/);
+  assert.match(html, /aria-expanded="true"/);
+  assert.match(html, /aria-controls="[^"]+"/);
   assert.match(html, /<strong>分析需求<\/strong>：/);
   assert.match(html, /<strong>安全约束<\/strong>：/);
   assert.ok(html.indexOf('<strong>分析需求') < html.indexOf('这是最终回答。'));

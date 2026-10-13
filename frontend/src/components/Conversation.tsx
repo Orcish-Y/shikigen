@@ -16,6 +16,8 @@ import { ChatReadingPositions } from '../chat-reading-position';
 import { useChatReading } from '../useChatReading';
 import { ApprovalCard } from './ApprovalCard';
 import type { ApprovalChoice, ApprovalDraft, ApprovalRecord } from '../approval-decisions';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 
 export interface ApprovalTimeline {
   records:ApprovalRecord[]; draft:ApprovalDraft | null; currentIdentity:string | null; acceptedIdentity:string | null; isPending:boolean;
@@ -239,10 +241,11 @@ export function Composer({
   return (
     <div className="composer-area">
       <div className="composer">
-        <textarea
+        <Textarea
           id="message-draft"
           ref={textarea}
           aria-label="消息草稿"
+          aria-describedby="message-draft-feedback"
           placeholder={hasConversation ? "向 shikigen 发送指令或提问…" : "请先新建或选择会话"}
           disabled={!hasConversation}
           rows={2}
@@ -258,20 +261,23 @@ export function Composer({
             <span className="status-dot" />
             {backendReady ? "后端已就绪" : "后端未连接"} · 可编辑草稿
           </span>
-          {runStatus === 'interrupted' ? <button className="primary-button" disabled={writePending} onClick={onApproval}>处理审批</button>
-            : runStatus === 'running' ? <button className="primary-button" disabled={!canCancel} onClick={onCancel}>{writePending ? '确认取消中…' : '取消运行'}</button>
-            : <button
+          {runStatus === 'interrupted' ? <Button type="button" size="sm" className="primary-button" disabled={writePending} onClick={onApproval}>处理审批</Button>
+            : runStatus === 'running' ? <Button type="button" size="sm" className="primary-button" disabled={!canCancel} onClick={onCancel}>{writePending ? '确认取消中…' : '取消运行'}</Button>
+            : <Button
+            type="button"
+            size="sm"
             className="primary-button"
             disabled={!canSend || !draft.trim()}
+            aria-busy={sending}
             onClick={onSend}
           >
             {sending ? "确认发送中…" : "发送"}
             <ArrowUp size={16} />
-          </button>}
+          </Button>}
         </div>
       </div>
       <div className="composer-footer">
-        <span role="status" aria-live="polite" aria-atomic="true">{sending ? '确认发送中，可继续编辑草稿'
+        <span id="message-draft-feedback" role="status" aria-live="polite" aria-atomic="true">{sending ? '确认发送中，可继续编辑草稿'
           : sendUnknown ? '发送结果待确认，请核对已提交消息；可编辑草稿'
           : storageIssue ? '草稿仅在本次应用中保留' : runStatus === 'running' || runStatus === 'interrupted'
           ? '可编辑草稿，运行结束后手动发送' : '草稿在本地保存，重启后保留'}</span>

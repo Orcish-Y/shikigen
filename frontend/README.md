@@ -2,6 +2,8 @@
 
 基于 Tauri 2、React、TypeScript、Vite 和 Tailwind CSS 4。设计规范见 [design.md](design.md)，文档入口见 [总导航](../docs/README.md)。
 
+基础控件的固定来源、依赖版本、主题映射与回归入口见 [组件库接入说明](component-libraries.md)。
+
 ```bash
 cd frontend
 pnpm install --frozen-lockfile

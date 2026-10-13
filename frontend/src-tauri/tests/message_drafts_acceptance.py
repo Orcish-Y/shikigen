@@ -69,6 +69,77 @@ class MessageDraftAcceptance(ReconstructionAcceptance):
     ).json()["data"]
     return [message for message in history if message["content"]["type"] == "human"]
 
+  def test_shift_enter_inserts_newline_before_single_original_enter_send(self):
+    host, backend_snapshot, thread = self.start_empty()
+    original = "  Shift Enter 原文"
+    self.set_draft(original)
+    self.evaluate(
+      "(() => { const input = document.getElementById('message-draft');"
+      "input.focus(); "
+      "input.setSelectionRange(input.value.length, input.value.length); })()"
+    )
+    # CDP trusted WebView input: Shift+Enter's default textarea newline must work,
+    # rather than merely accepting a synthetic DOM keydown event.
+    self.call(
+      "Input.dispatchKeyEvent",
+      type="keyDown",
+      key="Enter",
+      code="Enter",
+      windowsVirtualKeyCode=13,
+      modifiers=8,
+      text="\r",
+      unmodifiedText="\r",
+    )
+    self.call(
+      "Input.dispatchKeyEvent",
+      type="keyUp",
+      key="Enter",
+      code="Enter",
+      windowsVirtualKeyCode=13,
+      modifiers=8,
+    )
+    wait_until(lambda: self.draft() == original + "\n")
+    self.assertEqual(self.evaluate("window.__sends.length"), 0)
+    self.assertTrue(
+      self.evaluate(
+        "document.activeElement === document.getElementById('message-draft')"
+      )
+    )
+    self.call(
+      "Input.dispatchKeyEvent",
+      type="keyDown",
+      key="Enter",
+      code="Enter",
+      windowsVirtualKeyCode=13,
+    )
+    self.call(
+      "Input.dispatchKeyEvent",
+      type="keyUp",
+      key="Enter",
+      code="Enter",
+      windowsVirtualKeyCode=13,
+    )
+    wait_until(lambda: len(self.users(backend_snapshot, thread)) == 1)
+    wait_until(lambda: "已完成" in self.body())
+    self.assertEqual(self.evaluate("window.__sends.length"), 1)
+    self.assertEqual(self.evaluate("window.__sends[0].body.message"), original + "\n")
+    self.assertEqual(
+      self.users(backend_snapshot, thread)[0]["content"]["content"], original + "\n"
+    )
+    self.record(
+      ready=backend_snapshot,
+      users=self.users(backend_snapshot, thread),
+      requests=self.evaluate("window.__sends"),
+      draft=self.draft(),
+      keyboard=(
+        "CDP trusted WebView Shift+Enter / Enter; "
+        "OS IME uses separate native acceptance"
+      ),
+    )
+    self.screenshot()
+    self.quit(host)
+    self.assertEqual(host.wait(timeout=15), 0)
+
   def test_original_enter_composition_and_draft_survive_native_restart(self):
     host, ready, thread = self.start_empty()
     self.evaluate("document.getElementById('message-draft').focus()")

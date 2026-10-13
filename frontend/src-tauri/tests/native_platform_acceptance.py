@@ -25,7 +25,7 @@ class NativePlatformAcceptance(NativeWorkflowAcceptance):
         "-ExecutionPolicy",
         "Bypass",  # This child only; no machine/user policy is changed.
         "-File",
-        str(REPO / ".scratch/frontend-completion/ticket-23/read-native-ui.ps1"),
+        str(REPO / "frontend/src-tauri/tests/read-native-ui.ps1"),
         "-WindowHandle",
         str(window),
       ],
@@ -92,6 +92,25 @@ class NativePlatformAcceptance(NativeWorkflowAcceptance):
         and (not is_candidate or self.read_window_cloak(window) == 0)
       ):
         system_windows.append(window)
+      elif (
+        is_candidate
+        and class_name == "ApplicationFrameWindow"
+        and win32gui.IsWindowVisible(window)
+        and self.read_window_cloak(window) == 0
+      ):
+        # Explorer can own the frame while TextInputHost owns its candidate UI.
+        # Return that exact child for UIA; the frame's provider can be empty.
+        def collect_input_child(input_window, _context):
+          if (
+            win32gui.IsWindowVisible(input_window)
+            and win32gui.GetClassName(input_window) == "Windows.UI.Core.CoreWindow"
+            and win32process.GetWindowThreadProcessId(input_window)[1]
+            in getattr(self, "text_input_process_ids", set())
+          ):
+            system_windows.append(input_window)
+          return True
+
+        win32gui.EnumChildWindows(window, collect_input_child, None)
 
     win32gui.EnumWindows(collect_window, None)
     return system_windows
@@ -292,6 +311,7 @@ class NativePlatformAcceptance(NativeWorkflowAcceptance):
       ],
       timeout=10,
     )
+    candidate_window_associations = []
     for candidate_index, candidate_window in enumerate(candidate_windows):
       self.assertEqual(win32gui.GetForegroundWindow(), window)
       self.assertTrue(
@@ -311,14 +331,22 @@ class NativePlatformAcceptance(NativeWorkflowAcceptance):
       (self.artifacts / f"{candidate_label}-controls.json").write_text(
         json.dumps(candidate_controls, ensure_ascii=False, indent=2), encoding="utf-8"
       )
+      candidate_frame_window = win32gui.GetAncestor(candidate_window, 2)  # GA_ROOT
+      candidate_window_associations.append(
+        {
+          "candidate_hwnd": candidate_window,
+          "capture_frame_hwnd": candidate_frame_window,
+        }
+      )
       self.capture_window_frame(
-        candidate_window, candidate_label, is_desktop_capture=True
+        candidate_frame_window, candidate_label, is_desktop_capture=True
       )
     (self.artifacts / "ime-before-enter.json").write_text(
       json.dumps(
         {
           "events": composition_events,
           "candidate_windows": candidate_windows,
+          "candidate_window_associations": candidate_window_associations,
           "draft": self.draft(),
         },
         ensure_ascii=False,
@@ -339,6 +367,7 @@ class NativePlatformAcceptance(NativeWorkflowAcceptance):
       startup_snapshot=startup_snapshot,
       thread_id=thread_id,
       candidate_windows=candidate_windows,
+      candidate_window_associations=candidate_window_associations,
       candidate_association=(
         "newly visible during this nihao composition; "
         "target Tauri window still owns OS foreground before capture"

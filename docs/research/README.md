@@ -7,6 +7,7 @@
 | 持久化与运行边界 | [persistence-and-runtime.md](persistence-and-runtime.md) | checkpoint、消息事实、run 协调、审批恢复、SSE 重连由谁负责 |
 | 子 Agent 与多会话 | [subagents-and-sessions.md](subagents-and-sessions.md) | agent-as-tool、独立 child 身份、控制工具、后台执行和跨重启恢复 |
 | MCP 配置与启动 | [mcp.md](mcp.md) | 配置校验、工具发现、启动延迟、稳定工具快照和失败隔离 |
+| 沙箱与工具执行隔离 | [sandbox-and-execution-isolation.md](sandbox-and-execution-isolation.md) | 控制面与执行面分离、Docker/OS 沙箱、多租户边界与命令爆炸半径控制 |
 
 以下是开发指导与机制依据，保留原文：
 

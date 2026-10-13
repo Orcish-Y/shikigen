@@ -1,5 +1,32 @@
 @import "tailwindcss";
 
+/* shadcn semantic tokens are separate from legacy --accent/--secondary/--muted. */
+@theme inline {
+  --color-background: var(--ui-background);
+  --color-foreground: var(--ui-foreground);
+  --color-card: var(--ui-background);
+  --color-card-foreground: var(--ui-foreground);
+  --color-popover: var(--ui-background);
+  --color-popover-foreground: var(--ui-foreground);
+  --color-primary: var(--ui-primary);
+  --color-primary-foreground: var(--ui-primary-foreground);
+  --color-secondary: var(--ui-secondary);
+  --color-secondary-foreground: var(--ui-secondary-foreground);
+  --color-muted: var(--ui-muted);
+  --color-muted-foreground: var(--ui-muted-foreground);
+  --color-accent: var(--ui-accent);
+  --color-accent-foreground: var(--ui-accent-foreground);
+  --color-destructive: var(--ui-destructive);
+  --color-destructive-foreground: var(--ui-destructive-foreground);
+  --color-border: var(--ui-border);
+  --color-input: var(--ui-border);
+  --color-ring: var(--ui-ring);
+  --radius-sm: 4px;
+  --radius-md: var(--radius);
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+}
+
 :root {
   font-family: "Geist", "PingFang SC", "Microsoft YaHei", sans-serif;
   color: #0f172a;
@@ -14,6 +41,20 @@
   --accent: #4f46e5;
   --accent-soft: #eef2ff;
   --radius: 6px;
+  --ui-background: var(--canvas);
+  --ui-foreground: #0f172a;
+  --ui-primary: var(--accent);
+  --ui-primary-foreground: #fff;
+  --ui-secondary: var(--sidebar);
+  --ui-secondary-foreground: var(--secondary);
+  --ui-muted: var(--sidebar);
+  --ui-muted-foreground: var(--muted);
+  --ui-accent: var(--hover);
+  --ui-accent-foreground: #0f172a;
+  --ui-destructive: #b91c1c;
+  --ui-destructive-foreground: #fff;
+  --ui-border: var(--border);
+  --ui-ring: var(--accent);
 }
 * {
   box-sizing: border-box;
@@ -50,7 +91,7 @@ summary:focus-visible,
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
-button:not(:disabled):hover {
+button:not(:disabled):where(:not([data-slot="button"])):hover {
   background: var(--hover);
 }
 button svg {
@@ -836,6 +877,8 @@ pre {
   padding: 0 4px;
   line-height: 24px;
   font-size: 14px;
+  /* The Composer owns auto-height; do not add upstream field-sizing-content. */
+  field-sizing: fixed;
 }
 textarea::placeholder {
   color: var(--muted);
