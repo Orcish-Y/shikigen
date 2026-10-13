@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ClockCounterClockwise, Globe, Play, SidebarSimple, FloppyDisk } from '@phosphor-icons/react';
 import type { RJSFSchema } from '@rjsf/utils';
 import { BackendRequestError, type BackendSession } from '../../backend-client';
@@ -9,7 +9,7 @@ import { ToolInputForm } from './ToolInputForm';
 import { ToolTestResult } from './ToolTestResult';
 import { ToolLibrarySidebar } from './ToolLibrarySidebar';
 import { ToolSummaryCard } from './ToolSummaryCard';
-import { editTool, emptyToolDraft, type HttpToolDefinition, type ToolDraft, type ToolTest } from '../../tool-library';
+import { editTool, emptyToolDraft, suggestToolName, type HttpToolDefinition, type ToolDraft, type ToolTest } from '../../tool-library';
 
 const message = (error:unknown) => error instanceof Error ? error.message : String(error);
 interface Editor {tool:HttpToolDefinition | null; initial:ToolDraft; version:string; revision:number}
@@ -29,6 +29,7 @@ export function ToolsWorkspace({ session, onView, onNavigation }: {
 }) {
   const [schema, setSchema] = useState<RJSFSchema | null>(null);
   const [tools, setTools] = useState<HttpToolDefinition[] | null>(null);
+  const [reservedNames, setReservedNames] = useState<string[]>([]);
   const [editor, setEditor] = useState<Editor | null>(null);
   const [dirty, setDirty] = useState(false);
   const [verified, setVerified] = useState(false);
@@ -40,13 +41,13 @@ export function ToolsWorkspace({ session, onView, onNavigation }: {
   const [pendingSave, setPendingSave] = useState<PendingSave | null>(null);
   const selection = useRef(0);
   useEffect(() => {
-    setSchema(null); setTools(null); setEditor(null); setTest(null); setVerified(false); setPendingSave(null);
+    setSchema(null); setTools(null); setReservedNames([]); setEditor(null); setTest(null); setVerified(false); setPendingSave(null);
     setDirty(false);setNotice(null);setInputs({});
     if (!session) {setBusy(null); return;}
     const controller = new AbortController();
     setBusy('loading'); setError(null);
     Promise.all([session.getToolManagementSchema(controller.signal), session.listTools(controller.signal)])
-      .then(([management, library]) => {setSchema(management.data); setTools(library.data); setVerified(true);})
+      .then(([management, library]) => {setSchema(management.data); setTools(library.data); setReservedNames(library.reserved_names ?? []); setVerified(true);})
       .catch(failure => {if (!controller.signal.aborted) setError(`工具库读取失败：${message(failure)}`);})
       .finally(() => {if (!controller.signal.aborted) setBusy(null);});
     return () => {controller.abort(); selection.current++;};
@@ -73,6 +74,7 @@ export function ToolsWorkspace({ session, onView, onNavigation }: {
       const result = await session.listTools();
       if (request !== selection.current) return;
       setTools(result.data);
+      setReservedNames(result.reserved_names ?? []);
       if (editor?.tool && result.version !== editor.version) {
         setVerified(false);setNotice('工具库已有变化，请重新选择工具读取最新配置。');
       } else setVerified(true);
@@ -119,6 +121,7 @@ export function ToolsWorkspace({ session, onView, onNavigation }: {
       const loaded = await session.listTools();
       if (request !== selection.current) return;
       setTools(loaded.data);
+      setReservedNames(loaded.reserved_names ?? []);
       const matches = loaded.data.filter(tool => (!pendingSave.toolId || tool.id === pendingSave.toolId)
         && Object.entries(pendingSave.draft).every(([key,value]) => JSON.stringify(tool[key as keyof HttpToolDefinition]) === JSON.stringify(value)));
       if (matches.length !== 1) {setError('保存结果仍待确认，未找到唯一匹配的已保存定义。请核对列表后再次查询；先前请求仍可能迟到生效。'); return;}
@@ -142,17 +145,17 @@ export function ToolsWorkspace({ session, onView, onNavigation }: {
       if (request === selection.current) setTest(started.data);
     } catch (failure) {if (request === selection.current) {setError(`无法开始测试：${message(failure)}`); setBusy(null); setVerified(false);}}
   }
-  async function create() {
+  const suggestName = useCallback((displayName: string) => suggestToolName(displayName,
+    [...reservedNames, ...(tools ?? []).map(tool => tool.name)]), [reservedNames, tools]);
+  const validateName = useCallback(async (name: string, signal: AbortSignal) => {
+    if (!session) throw new Error('后端尚未连接');
+    return (await session.validateToolName(name, editor?.tool?.id, signal)).data;
+  }, [session, editor?.tool?.id]);
+  function create() {
     if (!session) return;
     const request = ++selection.current;
-    setBusy('loading');setError(null);
-    try {
-      const candidate = await session.getToolNameCandidate();
-      if (request !== selection.current) return;
-      setEditor({tool:null,initial:{...structuredClone(emptyToolDraft),name:candidate.data},version:'',revision:request});
-      setDirty(false);setTest(null);setNotice(null);
-    } catch (failure) {if (request === selection.current) setError(`调用名称读取失败：${message(failure)}`);}
-    finally {if (request === selection.current) setBusy(null);}
+    setEditor({tool:null,initial:{...structuredClone(emptyToolDraft),name:suggestName('')},version:'',revision:request});
+    setDirty(false);setTest(null);setNotice(null);setError(null);
   }
   async function retryTest() {
     if (!session || !test) return;
@@ -190,6 +193,7 @@ export function ToolsWorkspace({ session, onView, onNavigation }: {
           <ToolSummaryCard tool={editor.tool} initial={editor.initial} dirty={dirty}/>
           <div className="tool-editor-layout">
             {schema && <ToolDefinitionForm key={editor.revision} schema={schema} initial={{...editor.initial}} formId="tool-definition" externalSubmit
+              suggestName={editor.tool ? undefined : suggestName} validateName={validateName}
               disabled={Boolean(busy) || Boolean(pendingSave)} onSave={save} onEdited={() => {setDirty(true);setNotice(null);}}/>}
             <div className="tool-test-column">
               <section className="tool-panel" aria-label="快速测试调试" id="tool-test-panel"><header className="tool-panel-heading"><Play size={16}/><h2>快速测试调试</h2><span>{busy === 'testing' ? '测试中' : '真实 HTTP 请求'}</span></header>

@@ -21,11 +21,11 @@ async def parameters_schema():
   schema["required"] = [
     field
     for field in schema["required"]
-    if field not in ("id", "created_at", "updated_at", "name")
+    if field not in ("id", "created_at", "updated_at")
   ]
   titles = {
     "display_name": "页面名称",
-    "name": "调用名称（留空自动生成）",
+    "name": "调用名称",
     "description": "说明",
     "kind": "工具类型",
     "method": "请求方法",
@@ -48,10 +48,13 @@ async def parameters_schema():
   return {"data": schema}
 
 
-@router.get("/name-candidate")
-async def name_candidate(request: Request, display_name: str = ""):
+@router.get("/validate-name")
+async def validate_name(
+  request: Request, response: Response, name: str, tool_id: str | None = None
+):
+  response.headers["Cache-Control"] = "no-store"
   try:
-    return {"data": await request.app.state.runtime.tools.suggest_name(display_name)}
+    return {"data": await request.app.state.runtime.tools.validate_name(name, tool_id)}
   except ToolLibraryError as error:
     fail(error)
 
@@ -61,7 +64,11 @@ async def list_tools(request: Request, response: Response):
   response.headers["Cache-Control"] = "no-store"
   try:
     tools, version = await request.app.state.runtime.tools.list_tools()
-    return {"data": tools, "version": version}
+    return {
+      "data": tools,
+      "version": version,
+      "reserved_names": request.app.state.runtime.tools.reserved_names,
+    }
   except ToolLibraryError as error:
     fail(error)
 

@@ -1,7 +1,7 @@
 import type { BackendSnapshot } from "./backend-state";
 import { RunProtocolError, validStatus, validateEvent, validateFrame, validateMessage, validateRun } from './run-protocol.ts';
 import type { ApprovalResponses } from './approval-decisions.ts';
-import type { HttpToolDefinition, ToolDraft, ToolRead, ToolTest } from './tool-library';
+import type { HttpToolDefinition, ToolDraft, ToolLibraryRead, ToolNameValidation, ToolRead, ToolTest } from './tool-library';
 import type { RJSFSchema } from '@rjsf/utils';
 
 export interface Thread {
@@ -167,10 +167,12 @@ export class BackendSession {
     return this.json<{data:RJSFSchema}>('/api/tools/schema/http', {cache:'no-store'}, signal);
   }
   listTools(signal?: AbortSignal) {
-    return this.json<ToolRead<HttpToolDefinition[]>>('/api/tools', {cache:'no-store'}, signal);
+    return this.json<ToolLibraryRead>('/api/tools', {cache:'no-store'}, signal);
   }
-  getToolNameCandidate() {
-    return this.json<{data:string}>('/api/tools/name-candidate', {cache:'no-store'});
+  validateToolName(name: string, toolId?: string, signal?: AbortSignal) {
+    const query = new URLSearchParams({name});
+    if (toolId) query.set('tool_id', toolId);
+    return this.json<{data:ToolNameValidation}>(`/api/tools/validate-name?${query}`, {cache:'no-store'}, signal);
   }
   getTool(id: string, signal?: AbortSignal) {
     return this.json<ToolRead<HttpToolDefinition>>(`/api/tools/${encodeURIComponent(id)}`, {cache:'no-store'}, signal);

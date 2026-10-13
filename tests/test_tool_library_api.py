@@ -69,6 +69,7 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
       json={
         "kind": "http",
         "display_name": "第一个工具",
+        "name": "first_tool",
         "description": "$LITERAL",
         "url": "http://127.0.0.1/example",
       },
@@ -109,7 +110,8 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
     for _, fields in variants:
       with self.subTest(kind=fields["kind"]):
         created = await self.client.post(
-          "/api/tools", json={"display_name": "工具", **fields}
+          "/api/tools",
+          json={"display_name": "工具", "name": f"tool_{fields['kind']}", **fields},
         )
         self.assertEqual(created.status_code, 201, created.text)
         tool = created.json()["data"]
@@ -119,9 +121,9 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
         reread = await self.client.get(f"/api/tools/{tool['id']}")
         self.assertEqual(reread.json()["data"], tool)
     self.assertEqual(len({tool["name"] for tool in saved}), 3)
-    self.assertFalse(any("http" in tool["name"] for tool in saved))
-    candidate = await self.client.get("/api/tools/name-candidate")
-    self.assertNotIn(candidate.json()["data"], {tool["name"] for tool in saved})
+    self.assertEqual(
+      [tool["name"] for tool in saved], ["tool_http", "tool_python", "tool_mcp"]
+    )
     self.assertEqual((await self.client.get("/api/tools")).json()["data"], saved)
 
     config = load_app_config(self.path)
@@ -180,7 +182,7 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
     ):
       with self.subTest(fields=fields):
         response = await self.client.post(
-          "/api/tools", json={"display_name": "无效定义", **fields}
+          "/api/tools", json={"display_name": "无效定义", "name": "invalid", **fields}
         )
         self.assertEqual(response.status_code, 422, response.text)
         self.assertEqual(response.json()["detail"]["code"], "definition_invalid")
@@ -192,6 +194,7 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
       json={
         "kind": "python",
         "display_name": "固定类型",
+        "name": "fixed_kind",
         "code_path": "tools/example.py",
       },
     )
@@ -222,7 +225,12 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
     ):
       with self.subTest(kind=fields["kind"]):
         created = await self.client.post(
-          "/api/tools", json={"display_name": "尚未接入执行", **fields}
+          "/api/tools",
+          json={
+            "display_name": "尚未接入执行",
+            "name": f"tool_{fields['kind']}",
+            **fields,
+          },
         )
         self.assertEqual(created.status_code, 201, created.text)
         response = await self.client.post(
@@ -254,6 +262,7 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
         "/api/tools",
         json={
           "display_name": "真实 GET",
+          "name": "real_get",
           "url": f"http://127.0.0.1:{server.server_port}/",
         },
       )
@@ -284,9 +293,11 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
   async def test_duplicate_display_names_and_call_name_conflicts(
     self,
   ):
-    payload = {"display_name": "add", "url": "http://localhost/"}
+    payload = {"display_name": "add", "name": "custom_add", "url": "http://localhost/"}
     first = await self.client.post("/api/tools", json=payload)
-    second = await self.client.post("/api/tools", json=payload)
+    second = await self.client.post(
+      "/api/tools", json={**payload, "name": "custom_add_2"}
+    )
     self.assertEqual(first.status_code, 201)
     self.assertEqual(second.status_code, 201)
     self.assertNotEqual(first.json()["data"]["name"], "add")
@@ -322,6 +333,100 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
       },
     )
     self.assertEqual(stale.status_code, 409)
+
+  async def test_name_validation_and_save_share_format_rules(self):
+    before = self.path.read_bytes()
+    for name in (
+      "",
+      "1tool",
+      "中文",
+      "has space",
+      "has-dash",
+      "a/b",
+      "valid\n",
+      "x" * 65,
+    ):
+      with self.subTest(name=name):
+        checked = await self.client.get(
+          "/api/tools/validate-name", params={"name": name}
+        )
+        self.assertEqual(checked.status_code, 200, checked.text)
+        self.assertEqual(checked.headers["cache-control"], "no-store")
+        self.assertFalse(checked.json()["data"]["valid"])
+        self.assertEqual(checked.json()["data"]["code"], "name_invalid")
+        rejected = await self.client.post(
+          "/api/tools",
+          json={"display_name": "名称校验", "name": name, "url": "http://localhost/"},
+        )
+        self.assertEqual(rejected.status_code, 422, rejected.text)
+        self.assertEqual(rejected.json()["detail"]["code"], "name_invalid")
+    for name in ("_tool", "Tool_123", "x" * 64):
+      checked = await self.client.get("/api/tools/validate-name", params={"name": name})
+      self.assertEqual(
+        checked.json()["data"], {"valid": True, "code": None, "message": None}
+      )
+    self.assertEqual(self.path.read_bytes(), before)
+    for name_fields in ({}, {"name": None}, {"name": []}):
+      rejected = await self.client.post(
+        "/api/tools",
+        json={"display_name": "名称必填", "url": "http://localhost/", **name_fields},
+      )
+      self.assertEqual(rejected.status_code, 422, rejected.text)
+      self.assertEqual(rejected.json()["detail"]["code"], "name_invalid")
+    schema = (await self.client.get("/api/tools/schema/http")).json()["data"]
+    self.assertIn("name", schema["required"])
+
+  async def test_name_validation_excludes_self_and_checks_reserved_and_disabled_tools(
+    self,
+  ):
+    saved = (
+      await self.client.post(
+        "/api/tools",
+        json={
+          "kind": "python",
+          "display_name": "禁用工具",
+          "name": "occupied",
+          "code_path": "tools/example.py",
+          "enabled": False,
+        },
+      )
+    ).json()["data"]
+    before = self.path.read_bytes()
+    listed = (await self.client.get("/api/tools")).json()
+    self.assertIn("add", listed["reserved_names"])
+    self.assertIn("task", listed["reserved_names"])
+    for name in ("occupied", "add", "task"):
+      checked = await self.client.get("/api/tools/validate-name", params={"name": name})
+      self.assertEqual(checked.json()["data"]["code"], "name_conflict")
+      self.assertFalse(checked.json()["data"]["valid"])
+    self_check = await self.client.get(
+      "/api/tools/validate-name", params={"name": saved["name"], "tool_id": saved["id"]}
+    )
+    self.assertTrue(self_check.json()["data"]["valid"])
+    missing = await self.client.get(
+      "/api/tools/validate-name", params={"name": "occupied", "tool_id": "missing"}
+    )
+    self.assertEqual(missing.status_code, 404)
+    self.assertEqual(self.path.read_bytes(), before)
+
+  async def test_successful_name_check_does_not_reserve_name_or_bypass_save_check(self):
+    checked = await self.client.get(
+      "/api/tools/validate-name", params={"name": "new_tool"}
+    )
+    self.assertTrue(checked.json()["data"]["valid"])
+    payload = {"display_name": "工具", "name": "new_tool", "url": "http://localhost/"}
+    first = await self.client.post("/api/tools", json=payload)
+    self.assertEqual(first.status_code, 201)
+    before = self.path.read_bytes()
+    second = await self.client.post("/api/tools", json=payload)
+    self.assertEqual(second.status_code, 409)
+    self.assertEqual(second.json()["detail"]["code"], "name_conflict")
+    self.assertEqual(self.path.read_bytes(), before)
+    self.path.write_text("{broken", encoding="utf-8")
+    checked = await self.client.get(
+      "/api/tools/validate-name", params={"name": "another"}
+    )
+    self.assertEqual(checked.status_code, 503)
 
   def http_service(self):
     requests = []
@@ -376,6 +481,7 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
       "/api/tools",
       json={
         "display_name": "HTTP 行为",
+        "name": f"http_{len((await self.client.get('/api/tools')).json()['data'])}",
         "url": url,
         **options,
       },
@@ -428,6 +534,7 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
         "/api/tools",
         json={
           "display_name": "禁用仍可手动测试",
+          "name": "disabled_test",
           "url": base,
           "enabled": False,
         },
@@ -457,6 +564,7 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
         "/api/tools",
         json={
           "display_name": "有效配置",
+          "name": "valid_config",
           "url": base,
         },
       )
@@ -477,7 +585,8 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
     ):
       before = self.path.read_bytes()
       response = await self.client.post(
-        "/api/tools", json={"display_name": "错误", "url": base, **override}
+        "/api/tools",
+        json={"display_name": "错误", "name": "invalid", "url": base, **override},
       )
       self.assertEqual(response.status_code, 422, response.text)
       self.assertEqual(self.path.read_bytes(), before)
@@ -499,12 +608,14 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
     before = self.path.read_bytes()
     with patch("os.replace", side_effect=PermissionError("fixture file is open")):
       failed = await self.client.post(
-        "/api/tools", json={"display_name": "失败", "url": "http://localhost/"}
+        "/api/tools",
+        json={"display_name": "失败", "name": "failure", "url": "http://localhost/"},
       )
     self.assertEqual(failed.status_code, 503)
     self.assertEqual(self.path.read_bytes(), before)
     saved = await self.client.post(
-      "/api/tools", json={"display_name": "成功", "url": "http://localhost/"}
+      "/api/tools",
+      json={"display_name": "成功", "name": "success", "url": "http://localhost/"},
     )
     self.assertEqual(saved.status_code, 201)
     self.assertEqual(
@@ -524,6 +635,7 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
         "/api/tools",
         json={
           "display_name": "提交后外部变化",
+          "name": "external_change",
           "url": "http://localhost/",
         },
       )

@@ -8,6 +8,10 @@ from jsonschema import Draft7Validator
 from jsonschema.exceptions import SchemaError
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
 
+ToolName = Annotated[
+  str, Field(min_length=1, max_length=64, pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
+]
+
 
 def empty_input_schema() -> dict[str, JsonValue]:
   return {"type": "object", "properties": {}, "additionalProperties": False}
@@ -19,7 +23,7 @@ class ToolDefinition(BaseModel):
   id: str
   kind: str
   display_name: str = Field(min_length=1)
-  name: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
+  name: ToolName
   description: str = ""
   input_schema: dict[str, JsonValue] = Field(default_factory=empty_input_schema)
   output_schema: dict[str, JsonValue] | None = None

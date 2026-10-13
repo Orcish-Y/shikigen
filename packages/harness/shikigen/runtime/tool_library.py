@@ -4,7 +4,6 @@ import asyncio
 import hashlib
 import json
 import os
-import re
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
@@ -12,11 +11,16 @@ from uuid import uuid4
 
 from pydantic import TypeAdapter, ValidationError
 
-from shikigen.contracts.tool_definitions import AnyToolDefinition, ToolLibraryConfig
+from shikigen.contracts.tool_definitions import (
+  AnyToolDefinition,
+  ToolLibraryConfig,
+  ToolName,
+)
 from shikigen.tools.library_execution import ToolExecutor
 from shikigen.tools.tool_registry import create_builtin_registry
 
 definition_adapter = TypeAdapter(AnyToolDefinition)
+name_adapter = TypeAdapter(ToolName)
 
 
 class ToolLibraryError(ValueError):
@@ -70,22 +74,34 @@ class ToolLibrary:
         return tool, version
     raise ToolLibraryError("not_found", "Tool does not exist", 404)
 
-  def _name_candidate(self, display_name: str, occupied: set[str]) -> str:
-    stem = re.sub(r"[^A-Za-z0-9_]+", "_", display_name).strip("_")
-    stem = stem[:50] or "tool"
-    if stem[0].isdigit():
-      stem = "tool_" + stem
-    name, suffix = stem, 2
-    while name in occupied:
-      name = f"{stem}_{suffix}"
-      suffix += 1
-    return name
+  @property
+  def reserved_names(self) -> tuple[str, ...]:
+    return tuple(sorted(self._reserved_names))
 
-  async def suggest_name(self, display_name: str = ""):
+  def _check_name(self, name: object, occupied: set[str]) -> str:
+    try:
+      validated = name_adapter.validate_python(name, strict=True)
+    except ValidationError:
+      raise ToolLibraryError(
+        "name_invalid",
+        "调用名称须为 1–64 个英文字母、数字或下划线，且以字母或下划线开头",
+      ) from None
+    if validated in occupied:
+      raise ToolLibraryError("name_conflict", "调用名称已被其他工具或内置工具占用", 409)
+    return validated
+
+  async def validate_name(self, name: str, tool_id: str | None = None):
     tools, _ = await self.list_tools()
-    return self._name_candidate(
-      display_name, self._reserved_names | {tool.name for tool in tools}
-    )
+    if tool_id is not None and not any(tool.id == tool_id for tool in tools):
+      raise ToolLibraryError("not_found", "Tool does not exist", 404)
+    occupied = self._reserved_names | {
+      tool.name for tool in tools if tool.id != tool_id
+    }
+    try:
+      self._check_name(name, occupied)
+    except ToolLibraryError as error:
+      return {"valid": False, "code": error.code, "message": str(error)}
+    return {"valid": True, "code": None, "message": None}
 
   async def execute_tool(self, tool_id: str, inputs: dict, *, manual_test=False):
     async def load():
@@ -156,15 +172,9 @@ class ToolLibrary:
       occupied = self._reserved_names | {
         tool.name for tool in library.tools if tool.id != tool_id
       }
-      name = payload.get("name")
       if not isinstance(payload.get("display_name"), str):
         raise ToolLibraryError("definition_invalid", "Page name must be a string")
-      if name is not None and not isinstance(name, str):
-        raise ToolLibraryError("definition_invalid", "Call name must be a string")
-      if name is None:
-        name = self._name_candidate(payload["display_name"], occupied)
-      if name in occupied:
-        raise ToolLibraryError("name_conflict", "Tool call name is already in use", 409)
+      name = self._check_name(payload.get("name"), occupied)
       now = datetime.now(UTC)
       definition = {
         **payload,
