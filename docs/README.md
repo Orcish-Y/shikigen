@@ -1,6 +1,6 @@
 # 文档导航
 
-更新于 2026-10-07。后续 agent 先读 [开发交接与当前状态](development-handoff.md)：首版前端 23 张票据已完成；后端近期重构、验证范围和三项待调查问题在此汇总。临时目录已迁移到 [本次归档](archive/2026-10-07/README.md)。
+更新于 2026-10-13。后续 agent 先读 [开发交接与当前状态](development-handoff.md)：首版前端 23 张票据已完成；后端近期重构、验证范围和三项待调查问题在此汇总。临时目录已迁移到 [本次归档](archive/2026-10-07/README.md)。工具模块的已确认规划见下表。
 
 开发时从这里找材料。当前项目行为以 [项目开发参考](project.md)、最终接口契约及代码/测试为准；外部调查保留原调查日期，历史建议不自动成为当前待办。
 
@@ -16,6 +16,7 @@
 | 首版实施与验收 | [23 票实施索引](wayfinder/frontend-completion/implementation/index.md)、[原生验收汇总](wayfinder/frontend-completion/native-acceptance-summary.md) | 2026-10-07 已验收；分批结果及未覆盖硬件范围分别记录 |
 | 近期开发与遗留问题 | [开发交接](development-handoff.md)、[待调查问题](issues/README.md)、[开发归档](archive/2026-10-07/README.md) | 消息事务、分页、响应头、端口回退和网络模块；保留实际回归错误 |
 | 外部 Agent 架构对照 | [研究索引](research/README.md) | 持久化/执行边界、子 Agent/多会话、MCP 三个主题摘要 |
+| 工具库与适配器规划 | [工具模块决策地图](wayfinder/tools-workflow/map.md)、[页面与生命周期决议](wayfinder/tools-workflow/tickets/004-management-ui-lifecycle.resolution.md)、[现状调查](wayfinder/tools-workflow/baseline.md) | 2026-10-13 五项决策全部确认：MCP、Python、HTTP 工具录入、管理、测试及未来复用契约；尚未实现应用代码 |
 | 框架 API 速查 | [LangGraph 标识](research/langgraph-identifiers.md)、[状态存储](research/runtime-context-and-storage-strategy.md) | 开发参考，保留原文 |
 | 决策依据 | [Windows 决策地图](wayfinder/windows-backend-lifecycle/map.md) | 保留已关闭票据和最终 resolution；长讨论已归档 |
 | 学习与走读 | [learning-records/](../learning-records/)、[DeerFlow 架构导读](../doc/1.txt)、[run_agent 走读](../doc/带你一行行走读%20run_agent%28%29.md) | 教学材料保留，不混入当前实施待办 |

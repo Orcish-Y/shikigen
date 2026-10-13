@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+
+<html class="h-full bg-slate-100 font-sans antialiased text-slate-800" lang="zh-CN">
+
+<head>
+  <meta charset="utf-8" />
+  <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+  <title>shikigen - 工具与技能管理 (Tools &amp; Skills Registry)</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script data-purpose="tailwind-config">
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              200: '#c7d2fe',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+            }
+          },
+          fontFamily: {
+            mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
+            sans: ['-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif']
+          }
+        }
+      }
+    }
+  </script>
+  <style data-purpose="custom-scrollbars">
+    /* Subtle scrollbar styling */
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+  </style>
+</head>
+
+<body class="h-full flex flex-col overflow-hidden select-none bg-slate-100">
+  <!-- BEGIN: DesktopTopBar -->
+  <header
+    class="h-10 bg-white border-b border-slate-200/90 flex items-center justify-between px-3.5 shrink-0 z-30 select-none">
+    <!-- Window Traffic Lights & Logo -->
+    <div class="flex items-center space-x-3">
+      <!-- macOS Window Controls -->
+      <div class="flex items-center space-x-1.5 mr-1.5" data-purpose="window-controls">
+        <span class="w-3 h-3 rounded-full bg-[#ff5f56] border border-[#e0443e] inline-block shadow-sm"></span>
+        <span class="w-3 h-3 rounded-full bg-[#ffbd2e] border border-[#dea123] inline-block shadow-sm"></span>
+        <span class="w-3 h-3 rounded-full bg-[#27c93f] border border-[#1aab29] inline-block shadow-sm"></span>
+      </div>
+      <!-- Logo + Version -->
+      <div class="flex items-center space-x-2 pl-1">
+        <img alt="shikigen logo" class="w-4 h-4 object-contain"
+          src="https://lh3.googleusercontent.com/aida/AEtjO1UQxw_95j0OiR3R0Eh4nJqbPEgV0_53SWKZfOqJmZ-YrfoIG2jCUz6wX1OmN5avqgdVYeKxji49UhSIGCnjfw5EKEwx-QBENmrEzaaDBip0HDHtYeLEcw-V_ouy1DOHpA5wMnF77WmCcM_LoLkWVoo1CjK9QVW2IP0yDGbpENXBD4g3T-BI7MM6BDxrPIvvrnxpgZs94T6m8JybOCY5icHwOwHDYXokGYKhUjjwebUZetBIcX1rQfEN1LE" />
+        <span class="font-bold text-sm tracking-tight text-slate-800">shikigen</span>
+        <span
+          class="text-[11px] font-mono text-slate-400 bg-slate-100 border border-slate-200/80 px-1.5 py-0.2 rounded font-medium">v0.9.4</span>
+      </div>
+    </div>
+    <!-- Center Runtime Status Pill -->
+    <div class="flex items-center">
+      <div
+        class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs bg-emerald-50 border border-emerald-200/80 text-emerald-700 font-medium space-x-1.5 shadow-xs">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+        <span>本地运行时连接 (Online)</span>
+        <span class="font-mono text-emerald-600 text-[11px] font-semibold pl-0.5">24ms</span>
+      </div>
+    </div>
+    <!-- Right Quick Search & User Profile -->
+    <div class="flex items-center space-x-2.5">
+      <button
+        class="flex items-center space-x-1.5 text-xs text-slate-500 bg-slate-100/90 hover:bg-slate-200/70 border border-slate-200 px-2.5 py-1 rounded-md transition-colors shadow-2xs"
+        type="button">
+        <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+          <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round"
+            stroke-width="2"></path>
+        </svg>
+        <span class="text-slate-600 font-normal">Search</span>
+        <kbd
+          class="font-mono text-[10px] bg-white text-slate-500 px-1 py-0.2 rounded border border-slate-300 shadow-xs">⌘K</kbd>
+      </button>
+      <div
+        class="w-7 h-7 rounded-full bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-700 font-semibold text-xs cursor-pointer shadow-xs">
+        <svg class="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+          <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" stroke-linecap="round"
+            stroke-linejoin="round" stroke-width="2"></path>
+        </svg>
+      </div>
+    </div>
+  </header>
+  <!-- END: DesktopTopBar -->
+  <!-- Container for App Work Area -->
+  <div class="flex-1 flex overflow-hidden">
+    <!-- BEGIN: LeftPrimaryNavRail -->
+    <aside
+      class="w-16 bg-slate-50/90 border-r border-slate-200 flex flex-col items-center py-3.5 shrink-0 justify-between select-none"
+      data-purpose="primary-sidebar-rail">
+      <!-- Upper Navigation Icons -->
+      <nav aria-label="Main Navigation" class="flex flex-col items-center space-y-3 w-full">
+        <!-- Chat / Session Icon -->
+        <button
+          class="w-10 h-10 rounded-xl flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-200/60 transition-all"
+          title="会话工作台">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+            <path
+              d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+              stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
+          </svg>
+        </button>
+        <!-- Tools & Workflow (ACTIVE) -->
+        <button
+          class="w-10 h-10 rounded-xl flex items-center justify-center bg-indigo-600 text-white shadow-sm shadow-indigo-200 ring-2 ring-indigo-600/20 transition-all"
+          title="工具与技能注册表">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+            <path
+              d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z"
+              stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+          </svg>
+        </button>
+        <!-- Knowledge Base -->
+        <button
+          class="w-10 h-10 rounded-xl flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-200/60 transition-all"
+          title="知识库与向量召回">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+            <path d="M4 7v10c0 2 1.5 3 3.5 3h9c2 0 3.5-1 3.5-3V7c0-2-1.5-3-3.5-3h-9C5.5 4 4 5 4 7zm0 4h16M4 14h16"
+              stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
+          </svg>
+        </button>
+        <!-- Prompt / Eval Studio -->
+        <button
+          class="w-10 h-10 rounded-xl flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-200/60 transition-all"
+          title="提示词与评测">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+            <path
+              d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+              stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
+          </svg>
+        </button>
+        <!-- Logs & Trace -->
+        <button
+          class="w-10 h-10 rounded-xl flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-200/60 transition-all"
+          title="执行审计与 Trace">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+            <path
+              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
+          </svg>
+        </button>
+      </nav>
+      <!-- Bottom System Icons -->
+      <div class="flex flex-col items-center space-y-3.5 w-full">
+        <button
+          class="w-10 h-10 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-all"
+          title="系统设置">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+            <path
+              d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+              stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
+            <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round"
+              stroke-width="1.8"></path>
+          </svg>
+        </button>
+        <div class="w-8 border-t border-slate-200"></div>
+        <!-- Local IPC Status Pill -->
+        <div
+          class="w-3.5 h-3.5 rounded-full border-2 border-white bg-emerald-500 shadow-xs cursor-pointer ring-1 ring-emerald-200"
+          title="Rust Tauri 本地守护就绪"></div>
+      </div>
+    </aside>
+    <!-- END: LeftPrimaryNavRail -->
+    <!-- BEGIN: SecondaryToolsListSidebar -->
+    <aside class="w-64 bg-slate-50/70 border-r border-slate-200 flex flex-col shrink-0 overflow-hidden"
+      data-purpose="secondary-sidebar">
+      <!-- Header -->
+      <div class="p-3 border-b border-slate-200/80">
+        <div class="flex items-center justify-between mb-2.5">
+          <h2 class="text-xs font-bold text-slate-800 uppercase tracking-wider">工具与技能</h2>
+          <button
+            class="inline-flex items-center px-2 py-1 text-xs font-semibold rounded bg-indigo-600 text-white hover:bg-indigo-700 transition shadow-2xs"
+            type="button">
+            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+              <path d="M12 4v16m8-8H4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path>
+            </svg>
+            接入工具
+          </button>
+        </div>
+        <!-- Filter Search Bar -->
+        <div class="relative">
+          <input
+            class="w-full text-xs bg-white text-slate-700 placeholder-slate-400 pl-7 pr-2.5 py-1.5 rounded-md border border-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 transition shadow-2xs"
+            placeholder="过滤已注册工具 (⌘F)..." type="text" />
+          <svg class="w-3.5 h-3.5 text-slate-400 absolute left-2 top-2" fill="none" stroke="currentColor"
+            viewbox="0 0 24 24">
+            <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round"
+              stroke-width="2"></path>
+          </svg>
+        </div>
+        <!-- Category Tags Pill -->
+        <div class="flex items-center space-x-1 mt-2.5 overflow-x-auto no-scrollbar text-[11px] pb-0.5">
+          <span class="px-2 py-0.5 rounded font-medium bg-slate-200/90 text-slate-800 cursor-pointer">全部 (18)</span>
+          <span class="px-1.5 py-0.5 rounded font-medium text-slate-500 hover:bg-slate-200/50 cursor-pointer">内置
+            (6)</span>
+          <span class="px-1.5 py-0.5 rounded font-medium text-slate-500 hover:bg-slate-200/50 cursor-pointer">MCP
+            (8)</span>
+          <span class="px-1.5 py-0.5 rounded font-medium text-slate-500 hover:bg-slate-200/50 cursor-pointer">脚本
+            (4)</span>
+        </div>
+      </div>
+      <!-- Tools Item List -->
+      <div class="flex-1 overflow-y-auto p-2 space-y-1" data-purpose="tool-items">
+        <!-- Active Selected Tool: bash -->
+        <div
+          class="p-2.5 rounded-lg bg-white border border-indigo-200 shadow-xs cursor-pointer ring-1 ring-indigo-500/10">
+          <div class="flex items-center justify-between mb-1">
+            <div class="flex items-center space-x-1.5">
+              <span class="font-mono text-xs font-semibold text-indigo-700">bash</span>
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            </div>
+            <span
+              class="text-[10px] font-mono text-amber-700 bg-amber-50 border border-amber-200/80 px-1 rounded font-medium">HITL
+              审批</span>
+          </div>
+          <p class="text-[11px] text-slate-500 line-clamp-1 leading-snug">Shell 终端命令行执行环境 (沙箱隔离)</p>
+          <div class="flex items-center justify-between mt-1.5 text-[10px] text-slate-400">
+            <span>core.system</span>
+            <span class="text-emerald-600 font-medium">已启用</span>
+          </div>
+        </div>
+        <!-- Item 2: write_file -->
+        <div
+          class="p-2.5 rounded-lg hover:bg-white/80 border border-transparent hover:border-slate-200 transition cursor-pointer">
+          <div class="flex items-center justify-between mb-1">
+            <div class="flex items-center space-x-1.5">
+              <span class="font-mono text-xs font-semibold text-slate-700">write_file</span>
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            </div>
+            <span
+              class="text-[10px] font-mono text-amber-700 bg-amber-50 border border-amber-200/80 px-1 rounded font-medium">HITL</span>
+          </div>
+          <p class="text-[11px] text-slate-500 line-clamp-1 leading-snug">原子化写操作与文件覆写保护</p>
+          <div class="flex items-center justify-between mt-1.5 text-[10px] text-slate-400">
+            <span>core.fs</span>
+            <span class="text-emerald-600 font-medium">已启用</span>
+          </div>
+        </div>
+        <!-- Item 3: read_file -->
+        <div
+          class="p-2.5 rounded-lg hover:bg-white/80 border border-transparent hover:border-slate-200 transition cursor-pointer">
+          <div class="flex items-center justify-between mb-1">
+            <div class="flex items-center space-x-1.5">
+              <span class="font-mono text-xs font-semibold text-slate-700">read_file</span>
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            </div>
+            <span class="text-[10px] text-slate-400">只读</span>
+          </div>
+          <p class="text-[11px] text-slate-500 line-clamp-1 leading-snug">获取指定路径文本或二进制指纹</p>
+          <div class="flex items-center justify-between mt-1.5 text-[10px] text-slate-400">
+            <span>core.fs</span>
+            <span class="text-emerald-600 font-medium">已启用</span>
+          </div>
+        </div>
+        <!-- Item 4: web_search -->
+        <div
+          class="p-2.5 rounded-lg hover:bg-white/80 border border-transparent hover:border-slate-200 transition cursor-pointer">
+          <div class="flex items-center justify-between mb-1">
+            <div class="flex items-center space-x-1.5">
+              <span class="font-mono text-xs font-semibold text-slate-700">web_search</span>
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            </div>
+            <span
+              class="text-[10px] text-indigo-600 bg-indigo-50 px-1 rounded border border-indigo-100">DuckDuckGo</span>
+          </div>
+          <p class="text-[11px] text-slate-500 line-clamp-1 leading-snug">实时互联网信息检索与摘要提取</p>
+          <div class="flex items-center justify-between mt-1.5 text-[10px] text-slate-400">
+            <span>network.search</span>
+            <span class="text-emerald-600 font-medium">已启用</span>
+          </div>
+        </div>
+        <!-- Item 5: github-mcp-server -->
+        <div
+          class="p-2.5 rounded-lg hover:bg-white/80 border border-transparent hover:border-slate-200 transition cursor-pointer">
+          <div class="flex items-center justify-between mb-1">
+            <div class="flex items-center space-x-1.5">
+              <span class="font-mono text-xs font-semibold text-slate-700">github-mcp</span>
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            </div>
+            <span class="text-[10px] font-mono text-indigo-600 bg-indigo-50 border border-indigo-100 px-1 rounded">MCP ·
+              12</span>
+          </div>
+          <p class="text-[11px] text-slate-500 line-clamp-1 leading-snug">GitHub PR, Issues &amp; Repository 上下文通信</p>
+          <div class="flex items-center justify-between mt-1.5 text-[10px] text-slate-400">
+            <span>mcp.github</span>
+            <span class="text-emerald-600 font-medium">已启用</span>
+          </div>
+        </div>
+        <!-- Item 6: postgres-query -->
+        <div
+          class="p-2.5 rounded-lg hover:bg-white/80 border border-transparent hover:border-slate-200 transition cursor-pointer">
+          <div class="flex items-center justify-between mb-1">
+            <div class="flex items-center space-x-1.5">
+              <span class="font-mono text-xs font-semibold text-slate-700">postgres-query</span>
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            </div>
+            <span class="text-[10px] text-slate-400">只读代理</span>
+          </div>
+          <p class="text-[11px] text-slate-500 line-clamp-1 leading-snug">分析业务库元数据与安全只读 SQL 执行</p>
+          <div class="flex items-center justify-between mt-1.5 text-[10px] text-slate-400">
+            <span>mcp.postgres</span>
+            <span class="text-emerald-600 font-medium">已启用</span>
+          </div>
+        </div>
+      </div>
+      <!-- Bottom Mini Status Box -->
+      <div class="p-2.5 border-t border-slate-200/80 bg-white/50 text-[11px] text-slate-500">
+        <div class="flex items-center space-x-1.5">
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span class="font-medium text-slate-700">MCP 协议守护进程</span>
+        </div>
+        <p class="text-[10px] text-slate-400 mt-0.5">2 个独立 STDIO 服务在线响应中</p>
+      </div>
+    </aside>
+    <!-- END: SecondaryToolsListSidebar -->
+    <!-- BEGIN: MainContentArea -->
+    <main class="flex-1 flex flex-col bg-slate-50/40 overflow-y-auto" data-purpose="tool-detail-view">
+      <!-- Breadcrumbs and Action Toolbar -->
+      <div class="h-12 border-b border-slate-200/90 bg-white px-6 flex items-center justify-between shrink-0">
+        <div class="flex items-center space-x-2 text-xs">
+          <span class="text-slate-400">工具与技能</span>
+          <span class="text-slate-300">/</span>
+          <span class="text-slate-400">内置核心工具 (core.system)</span>
+          <span class="text-slate-300">/</span>
+          <span class="font-semibold text-slate-800 font-mono">bash (Shell 执行器)</span>
+        </div>
+        <!-- Action Buttons -->
+        <div class="flex items-center space-x-2.5">
+          <button
+            class="px-2.5 py-1 text-xs font-medium rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-800 transition shadow-2xs"
+            type="button">
+            测试运行
+          </button>
+          <button
+            class="px-2.5 py-1 text-xs font-medium rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-red-600 transition shadow-2xs"
+            type="button">
+            禁用此工具
+          </button>
+          <button
+            class="px-2.5 py-1 text-xs font-medium rounded-md bg-indigo-600 text-white hover:bg-indigo-700 transition shadow-xs flex items-center space-x-1"
+            type="button">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+              <path
+                d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+                stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+            </svg>
+            <span>权限与审批设置 (HITL)</span>
+          </button>
+        </div>
+      </div>
+      <!-- Detail Body Wrapper -->
+      <div class="p-6 space-y-6 max-w-7xl w-full mx-auto">
+        <!-- Top Tool Meta Card -->
+        <!-- BEGIN: ToolMetaCard -->
+        <section class="bg-white border border-slate-200 rounded-xl p-5 shadow-xs" data-purpose="tool-header-card">
+          <div class="flex items-start justify-between">
+            <div class="flex items-start space-x-4">
+              <!-- Tool Icon Box -->
+              <div
+                class="w-12 h-12 rounded-xl bg-slate-900 text-emerald-400 flex items-center justify-center font-mono font-bold text-lg shadow-xs shrink-0 border border-slate-800">
+                &gt;_
+              </div>
+              <div>
+                <div class="flex items-center space-x-3">
+                  <h1 class="text-lg font-bold text-slate-900 font-mono tracking-tight">bash</h1>
+                  <span
+                    class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                    namespace: core.system
+                  </span>
+                  <span
+                    class="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-mono text-slate-500 bg-slate-50 border border-slate-200">
+                    v1.2.0
+                  </span>
+                  <span
+                    class="inline-flex items-center text-xs text-emerald-700 bg-emerald-50 border border-emerald-200/70 px-2 py-0.5 rounded font-medium">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5"></span>
+                    运行环境就绪 (Rust Sandbox)
+                  </span>
+                </div>
+                <p class="text-sm text-slate-600 mt-2 leading-relaxed">
+                  允许 Agent 在沙箱或本地宿主终端中执行 Shell 脚本指令。受到严格的 Human-In-The-Loop (HITL) 权限模型管控与防逃逸过滤。
+                </p>
+                <!-- Badges -->
+                <div class="flex items-center space-x-2 mt-3 text-xs">
+                  <span
+                    class="px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-medium border border-slate-200">系统指令执行</span>
+                  <span
+                    class="px-2 py-0.5 rounded bg-amber-50 text-amber-700 font-medium border border-amber-200/80">需人工确认
+                    (Require HITL)</span>
+                  <span
+                    class="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 font-medium border border-indigo-200/80">异步流式输出
+                    (Streaming)</span>
+                  <span
+                    class="px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-medium border border-slate-200">超时限制:
+                    30000ms</span>
+                </div>
+              </div>
+            </div>
+            <!-- Author & Stats info -->
+            <div class="text-right text-xs text-slate-400 space-y-1">
+              <div>开发者: <span class="font-medium text-slate-700">shikigen runtime</span></div>
+              <div>调用总量: <span class="font-mono font-semibold text-slate-800">1,429 次</span></div>
+              <div>阻断拦截: <span class="font-mono font-semibold text-rose-600">8 次</span></div>
+            </div>
+          </div>
+        </section>
+        <!-- END: ToolMetaCard -->
+        <!-- 2-Column Grid for Technical Details & Interactive Playground -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <!-- LEFT COLUMN: Schema Definition & Guardrails (7 Cols) -->
+          <div class="lg:col-span-7 space-y-6">
+            <!-- Payload JSON Schema Viewer -->
+            <div class="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
+              <div class="px-4 py-3 border-b border-slate-200 bg-slate-50/60 flex items-center justify-between">
+                <div class="flex items-center space-x-2">
+                  <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+                    <path d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" stroke-linecap="round" stroke-linejoin="round"
+                      stroke-width="2"></path>
+                  </svg>
+                  <span class="text-xs font-bold text-slate-700 uppercase tracking-wider">参数 Schema (JSON Schema
+                    Payload)</span>
+                </div>
+                <span class="text-[11px] font-mono text-slate-400">OpenAPI 3.1 兼容</span>
+              </div>
+              <div class="p-4 bg-slate-900 text-slate-200 overflow-x-auto text-xs font-mono leading-relaxed">
+                <pre class="text-slate-300"><code>{
+  <span class="text-indigo-400">"type"</span>: <span class="text-emerald-400">"object"</span>,
+  <span class="text-indigo-400">"properties"</span>: {
+    <span class="text-indigo-400">"command"</span>: {
+      <span class="text-indigo-400">"type"</span>: <span class="text-emerald-400">"string"</span>,
+      <span class="text-indigo-400">"description"</span>: <span class="text-amber-200">"需在子 Shell 进程中执行的完整命令行字符串"</span>
+    },
+    <span class="text-indigo-400">"working_dir"</span>: {
+      <span class="text-indigo-400">"type"</span>: <span class="text-emerald-400">"string"</span>,
+      <span class="text-indigo-400">"description"</span>: <span class="text-amber-200">"执行上下文工作目录，默认为当前工程根路径"</span>,
+      <span class="text-indigo-400">"default"</span>: <span class="text-emerald-400">"./"</span>
+    },
+    <span class="text-indigo-400">"timeout_ms"</span>: {
+      <span class="text-indigo-400">"type"</span>: <span class="text-emerald-400">"integer"</span>,
+      <span class="text-indigo-400">"description"</span>: <span class="text-amber-200">"最大允许等待执行毫秒数，防止长期死锁"</span>,
+      <span class="text-indigo-400">"default"</span>: <span class="text-purple-300">30000</span>
+    }
+  },
+  <span class="text-indigo-400">"required"</span>: [<span class="text-emerald-400">"command"</span>]
+}</code></pre>
+              </div>
+            </div>
+            <!-- Guardrails & Security Policies -->
+            <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
+              <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center space-x-2">
+                  <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+                    <path
+                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                      stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+                  </svg>
+                  <h2 class="text-xs font-bold text-slate-800 uppercase tracking-wider">安全规则与黑名单拦截 (Guardrails)</h2>
+                </div>
+                <span
+                  class="text-[11px] text-emerald-600 font-semibold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/80">3
+                  条规则生效中</span>
+              </div>
+              <div class="space-y-2.5 text-xs">
+                <!-- Rule 1 -->
+                <div class="p-2.5 rounded-lg bg-slate-50 border border-slate-200/80 flex items-start justify-between">
+                  <div>
+                    <div class="font-mono text-slate-800 font-semibold">BLOCK_DANGEROUS_DELETION</div>
+                    <div class="text-slate-500 text-[11px] mt-0.5">正则匹配阻止任意匹配 <code
+                        class="bg-slate-200 px-1 py-0.2 rounded font-mono text-rose-600">rm -rf /</code>, <code
+                        class="bg-slate-200 px-1 py-0.2 rounded font-mono text-rose-600">mkfs.*</code> 的破坏性操作</div>
+                  </div>
+                  <span
+                    class="text-[11px] font-mono text-rose-700 font-bold bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded shrink-0">直接阻断</span>
+                </div>
+                <!-- Rule 2 -->
+                <div class="p-2.5 rounded-lg bg-slate-50 border border-slate-200/80 flex items-start justify-between">
+                  <div>
+                    <div class="font-mono text-slate-800 font-semibold">ENV_SECRET_FILTER</div>
+                    <div class="text-slate-500 text-[11px] mt-0.5">拦截对 <code
+                        class="bg-slate-200 px-1 py-0.2 rounded font-mono">.env*</code>, <code
+                        class="bg-slate-200 px-1 py-0.2 rounded font-mono">id_rsa</code>, 密钥凭据目录的打印输出</div>
+                  </div>
+                  <span
+                    class="text-[11px] font-mono text-amber-700 font-bold bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded shrink-0">脱敏屏蔽</span>
+                </div>
+                <!-- Rule 3 -->
+                <div class="p-2.5 rounded-lg bg-slate-50 border border-slate-200/80 flex items-start justify-between">
+                  <div>
+                    <div class="font-mono text-slate-800 font-semibold">HITL_CONFIRMATION_ALWAYS</div>
+                    <div class="text-slate-500 text-[11px] mt-0.5">执行带有网络写操作或系统包安装时，必须在桌面端弹出交互弹窗人工确认</div>
+                  </div>
+                  <span
+                    class="text-[11px] font-mono text-indigo-700 font-bold bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded shrink-0">阻断等候</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- RIGHT COLUMN: Interactive Test Sandbox & Call Audit Log (5 Cols) -->
+          <div class="lg:col-span-5 space-y-6">
+            <!-- Quick Sandbox Invocation -->
+            <div class="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
+              <div class="px-4 py-3 border-b border-slate-200 bg-slate-50/60 flex items-center justify-between">
+                <div class="flex items-center space-x-2">
+                  <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+                    <path
+                      d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
+                      stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+                    <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round"
+                      stroke-width="2"></path>
+                  </svg>
+                  <span class="text-xs font-bold text-slate-700 uppercase tracking-wider">快速测试调试 (Test Tool
+                    Invocation)</span>
+                </div>
+                <span class="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-mono">Sandbox
+                  Active</span>
+              </div>
+              <div class="p-4 space-y-3">
+                <div>
+                  <label class="block text-xs font-semibold text-slate-700 mb-1">测试参数 (Payload: command)</label>
+                  <div class="relative">
+                    <input
+                      class="w-full text-xs font-mono bg-slate-50 border border-slate-300 rounded-md px-3 py-2 text-slate-800 focus:bg-white focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 transition"
+                      type="text" value="cargo check --workspace --message-format=short" />
+                  </div>
+                </div>
+                <div class="flex items-center justify-between pt-1">
+                  <div class="flex items-center space-x-2 text-[11px] text-slate-500">
+                    <input checked="" class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                      id="mock-hitl" type="checkbox" />
+                    <label for="mock-hitl">模拟自动跳过 HITL 授权</label>
+                  </div>
+                  <button
+                    class="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-xs font-semibold shadow-2xs transition"
+                    type="button">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+                      <path d="M14 5l7 7m0 0l-7 7m7-7H3" stroke-linecap="round" stroke-linejoin="round"
+                        stroke-width="2.5"></path>
+                    </svg>
+                    <span>执行测试</span>
+                  </button>
+                </div>
+                <!-- Console Stream Output Preview -->
+                <div class="mt-3">
+                  <div class="text-[11px] text-slate-400 font-medium mb-1.5 flex items-center justify-between">
+                    <span>终端输出 (Stdout / Stderr)</span>
+                    <span class="font-mono text-emerald-600 text-[10px]">exit code: 0 · 耗时 440ms</span>
+                  </div>
+                  <div
+                    class="bg-slate-900 rounded-lg p-3 text-xs font-mono text-slate-300 space-y-1 overflow-x-auto shadow-inner">
+                    <div class="text-slate-500">$ cargo check --workspace --message-format=short</div>
+                    <div class="text-emerald-400 font-medium">Finished dev [unoptimized + debuginfo] target(s) in 0.44s
+                    </div>
+                    <div class="text-slate-400">[0 warnings, 0 errors]</div>
+                    <div class="text-slate-600 text-[11px] pt-1">--- Process exited cleanly ---</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- Recent Invocations Audit Mini Table -->
+            <div class="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
+              <div class="px-4 py-3 border-b border-slate-200 bg-slate-50/60 flex items-center justify-between">
+                <div class="flex items-center space-x-2">
+                  <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+                    <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round"
+                      stroke-width="2"></path>
+                  </svg>
+                  <span class="text-xs font-bold text-slate-700 uppercase tracking-wider">近 24 小时调用历史</span>
+                </div>
+                <a class="text-[11px] text-indigo-600 hover:text-indigo-800 font-medium" href="#">查看完整审计</a>
+              </div>
+              <div class="divide-y divide-slate-100 text-xs">
+                <!-- Log Entry 1 -->
+                <div class="p-3 hover:bg-slate-50/70 transition">
+                  <div class="flex items-center justify-between">
+                    <span class="font-mono text-slate-800 font-semibold truncate max-w-[200px]">cargo check
+                      --workspace</span>
+                    <span
+                      class="text-[10px] font-mono text-emerald-600 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">成功
+                      320ms</span>
+                  </div>
+                  <div class="flex items-center justify-between text-[11px] text-slate-400 mt-1">
+                    <span>调用方: Claude 3.7 Sonnet</span>
+                    <span>10:24 AM · 已获 HITL 批准</span>
+                  </div>
+                </div>
+                <!-- Log Entry 2 -->
+                <div class="p-3 hover:bg-slate-50/70 transition">
+                  <div class="flex items-center justify-between">
+                    <span class="font-mono text-slate-800 font-semibold truncate max-w-[200px]">git status
+                      --porcelain</span>
+                    <span
+                      class="text-[10px] font-mono text-emerald-600 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">成功
+                      48ms</span>
+                  </div>
+                  <div class="flex items-center justify-between text-[11px] text-slate-400 mt-1">
+                    <span>调用方: Claude 3.7 Sonnet</span>
+                    <span>09:51 AM · 自动免签</span>
+                  </div>
+                </div>
+                <!-- Log Entry 3 -->
+                <div class="p-3 hover:bg-slate-50/70 transition">
+                  <div class="flex items-center justify-between">
+                    <span class="font-mono text-slate-800 font-semibold truncate max-w-[200px]">rm -rf
+                      target/debug</span>
+                    <span
+                      class="text-[10px] font-mono text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">用户拒绝</span>
+                  </div>
+                  <div class="flex items-center justify-between text-[11px] text-slate-400 mt-1">
+                    <span>调用方: DeepSeek R1</span>
+                    <span>昨天 16:30 · 人工否决</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+    <!-- END: MainContentArea -->
+  </div>
+</body>
+
+</html>

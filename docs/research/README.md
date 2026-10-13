@@ -15,4 +15,8 @@
 - [状态存储：State / Runtime Context / Messages / Middleware / Store / 外部缓存](runtime-context-and-storage-strategy.md)
 - [Windows 托管与数据独占机制](windows-backend-lifecycle-mechanisms.md)
 
+## 新增调查
+
+- [工具配置字段与适配器调查](tool-configuration-fields.md)（2026-10-12）：对照 LangChain、Dify、AutoGen、Claude Code 与 MCP/OpenAPI，区分共有定义、连接配置、自动发现与导入字段；包括 MCP、Python、HTTP 和 OpenAPI 导入的首版建议。首版产品取舍见已定稿的[工具模块决策地图](../wayfinder/tools-workflow/map.md)，调查报告及规划完成不代表应用已实现。
+
 [返回文档导航](../README.md)
