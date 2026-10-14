@@ -54,6 +54,140 @@ class ToolLibraryAcceptance(WindowAcceptance):
     self.evaluate(f"document.getElementById({json.dumps(field)}).select()")
     self.fill(field, value)
 
+  def test_prototype_layout_type_tabs_and_hide_disabled(self):
+    host = self.launch()
+    self.connect()
+    base = self.state("ready")["base_url"]
+    definitions = [
+      dict(
+        kind="http",
+        name="weather_query",
+        display_name="天气查询",
+        description="获取指定城市的天气信息",
+        url="http://localhost/weather",
+      ),
+      dict(
+        kind="http",
+        name="inventory_query",
+        display_name="库存查询",
+        description="查询商品库存与可用数量",
+        url="http://localhost/inventory",
+      ),
+      dict(
+        kind="http",
+        name="legacy_request",
+        display_name="旧版接口",
+        description="保留配置，暂停使用",
+        url="http://localhost/legacy",
+        enabled=False,
+      ),
+      dict(
+        kind="python",
+        name="calculate_total",
+        display_name="金额计算",
+        description="汇总项目金额",
+        code_path="tools/calculate.py",
+      ),
+      dict(
+        kind="mcp",
+        name="repository_search",
+        display_name="仓库搜索",
+        description="检索代码仓库中的内容",
+        server_id="repository",
+        remote_name="search",
+      ),
+      dict(
+        kind="mcp",
+        name="database_query",
+        display_name="数据库查询",
+        description="连接恢复后可重新启用",
+        server_id="database",
+        remote_name="query",
+        enabled=False,
+      ),
+    ]
+    for definition in definitions:
+      created = self.client.post(base + "/api/tools", json=definition)
+      self.assertEqual(created.status_code, 201, created.text)
+    wait_until(lambda: "新建会话开始对话" in self.body())
+    self.evaluate("document.querySelector('[aria-label=工具]').click()")
+    wait_until(
+      lambda: (
+        self.evaluate("document.querySelectorAll('.tool-library-list li').length") == 6
+      )
+    )
+    self.assertIn("全部 (6)", self.body())
+    self.assertIn("4 / 6 项已启用", self.body())
+    self.evaluate("document.querySelector('.tool-library-list button').click()")
+    wait_until(
+      lambda: self.evaluate("Boolean(document.getElementById('tool-config_url'))")
+    )
+    self.assertEqual(
+      self.evaluate(
+        "document.querySelectorAll('.tool-primary-rail nav button').length"
+      ),
+      5,
+    )
+    for width, height in ((1440, 900), (1280, 800), (1024, 768), (390, 844)):
+      self.call(
+        "Emulation.setDeviceMetricsOverride",
+        width=width,
+        height=height,
+        deviceScaleFactor=1,
+        mobile=False,
+      )
+      wait_until(lambda width=width: self.evaluate("window.innerWidth") == width)
+      self.assertFalse(
+        self.evaluate("document.documentElement.scrollWidth > window.innerWidth")
+      )
+      layout = self.evaluate("""(() => {
+        const rect=selector => document.querySelector(selector).getBoundingClientRect();
+        const columns=document.querySelector('.tool-editor-layout').children;
+        return {sidebar:rect('.tool-library-sidebar').width,
+          toolbar:rect('.tool-detail-toolbar').height,
+          left:columns[0].getBoundingClientRect().width,
+          right:columns[1].getBoundingClientRect().width,
+          toggleVisible:rect('.tool-disabled-filter').bottom
+            <= rect('.tool-library-heading').bottom,
+          toolbarRight:rect('.tool-toolbar-actions').right};
+      })()""")
+      self.assertTrue(layout["toggleVisible"])
+      self.assertLessEqual(layout["toolbarRight"], width)
+      if width >= 1280:
+        self.assertAlmostEqual(layout["sidebar"], 256, delta=1)
+        self.assertAlmostEqual(layout["toolbar"], 48, delta=1)
+        self.assertAlmostEqual(layout["left"] / layout["right"], 7 / 5, delta=0.02)
+      else:
+        self.assertAlmostEqual(layout["left"], layout["right"], delta=1)
+      screenshot = self.call("Page.captureScreenshot", format="png")["data"]
+      (self.artifacts / f"prototype-{width}x{height}.png").write_bytes(
+        base64.b64decode(screenshot)
+      )
+    self.call("Emulation.clearDeviceMetricsOverride")
+    self.evaluate("document.querySelector('.tool-disabled-filter input').click()")
+    wait_until(
+      lambda: (
+        self.evaluate("document.querySelectorAll('.tool-library-list li').length") == 4
+      )
+    )
+    self.assertIn("全部 (4)", self.body())
+    self.evaluate("document.querySelectorAll('.tool-library-tabs button')[3].click()")
+    self.assertEqual(
+      self.evaluate("document.querySelectorAll('.tool-library-list li').length"), 1
+    )
+    self.assertIn("repository / search", self.body())
+    self.evaluate("document.querySelector('.tool-disabled-filter input').click()")
+    self.assertEqual(
+      self.evaluate("document.querySelectorAll('.tool-library-list li').length"), 2
+    )
+    self.assertEqual(
+      self.evaluate("document.getElementById('tool-config_url').value"),
+      "http://localhost/weather",
+    )
+    self.record(definitions=definitions, layout=layout)
+    self.quit(host)
+    self.assertEqual(host.wait(timeout=10), 0)
+
   def test_confirmed_create_with_lost_detail_response_retries_only_read(self):
     host = self.launch()
     self.connect()
@@ -176,17 +310,21 @@ class ToolLibraryAcceptance(WindowAcceptance):
     tool_id = saved["id"]
     self.assertTrue(saved["url"].endswith("/changed"))
     self.evaluate("document.querySelector('[aria-label=工具]').click()")
-    wait_until(lambda: "未测试" in self.body())
+    wait_until(
+      lambda: self.evaluate(
+        "Boolean(document.querySelector('.tool-library-list button:not([disabled])'))"
+      )
+    )
     self.evaluate("document.querySelector('.tool-library-list button').click()")
     wait_until(
       lambda: self.evaluate("Boolean(document.getElementById('tool-config_enabled'))")
     )
     self.replace("tool-config_display_name", "改名后工具")
     self.replace("tool-config_name", "renamed_lifecycle")
-    self.evaluate("""(() => {
-      const field=document.getElementById('tool-config_enabled');
-      field.value='false';field.dispatchEvent(new Event('change',{bubbles:true}));
-    })()""")
+    self.click("禁用此工具")
+    self.assertEqual(
+      self.evaluate("document.getElementById('tool-config_enabled').value"), "false"
+    )
     self.click("保存工具")
     wait_until(lambda: "工具已保存" in self.body())
     saved = self.client.get(base + "/api/tools").json()["data"][0]
@@ -315,7 +453,7 @@ class ToolLibraryAcceptance(WindowAcceptance):
       "POST", self.evaluate("document.querySelector('.tool-summary-tags').innerText")
     )
     self.assertIn(
-      "POST", self.evaluate("document.querySelector('.tool-list-footer').innerText")
+      "POST", self.evaluate("document.querySelector('.tool-type-tag').innerText")
     )
     self.click("JSON 参数")
     self.assertEqual(
@@ -441,10 +579,17 @@ class ToolLibraryAcceptance(WindowAcceptance):
     self.evaluate("document.querySelector('[aria-label=工具]').click()")
     wait_until(lambda: "工具库为空" in self.body())
     self.assertFalse(self.evaluate("Boolean(document.querySelector('.history'))"))
-    self.assertTrue(
+    self.assertFalse(
       self.evaluate(
-        "document.querySelector('[aria-label=\"技能 · 暂未开放\"]').disabled"
+        "Boolean(document.querySelector('.tool-primary-rail "
+        '[aria-label="技能 · 暂未开放"]\'))'
       )
+    )
+    self.assertEqual(
+      self.evaluate(
+        "document.querySelectorAll('.tool-library-tabs [role=tab]').length"
+      ),
+      4,
     )
     self.click("接入工具")
     wait_until(
@@ -537,10 +682,15 @@ class ToolLibraryAcceptance(WindowAcceptance):
         "Boolean(document.querySelector('.workspace > .navigation'))"
       )
     )
-    self.evaluate(
-      "document.querySelector('.workspace > .navigation "
-      ".navigation-heading button').click()"
-    )
+    for event_type in ("keyDown", "keyUp"):
+      self.call(
+        "Input.dispatchKeyEvent",
+        type=event_type,
+        key="b",
+        code="KeyB",
+        windowsVirtualKeyCode=66,
+        modifiers=2,
+      )
     wait_until(
       lambda: self.evaluate(
         "Boolean(document.querySelector('dialog[open].sidebar-dialog'))"

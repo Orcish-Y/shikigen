@@ -257,7 +257,7 @@ test('更新 204 后详情读取失败保留已保存状态，重读后完成离
     return response({data:url.endsWith('/api/tools') ? [tool] : tool,version});
   });
   render(React.createElement(ToolsWorkspace,{session,onView:() => {}}));
-  await user.click(await screen.findByRole('button',{name:/更新工具.*updated_tool/}));
+  await user.click(await screen.findByRole('button',{name:/updated_tool.*更新工具/}));
   await user.type(screen.getByLabelText(/请求地址/),'changed');
   await user.click(screen.getByRole('button',{name:'返回工具列表'}));
   await user.click(screen.getByRole('button',{name:'保存并离开'}));
@@ -268,7 +268,7 @@ test('更新 204 后详情读取失败保留已保存状态，重读后完成离
   assert.equal(screen.queryByText(/保存结果待确认/),null);
   await user.click(within(dialog).getByRole('button',{name:'重新读取工具详情'}));
   await waitFor(() => assert.equal(screen.queryByLabelText(/请求地址/),null));
-  await user.click(screen.getByRole('button',{name:/更新工具.*updated_tool/}));
+  await user.click(screen.getByRole('button',{name:/updated_tool.*更新工具/}));
   await waitFor(() => assert.equal(screen.getByLabelText(/请求地址/).value,'http://localhost/changed'));
   await user.type(screen.getByLabelText(/请求地址/),'-second');
   await user.click(screen.getByRole('button',{name:'保存工具'}));
@@ -331,9 +331,9 @@ test('离开保存成功后才切换工具，未保存内容不会进入浏览�
     return response({data:url.endsWith('/api/tools') ? [currentA,b] : url.endsWith('/a') ? currentA : b,version});
   });
   render(React.createElement(ToolsWorkspace,{session,onView:() => {}}));
-  await user.click(await screen.findByRole('button',{name:/工具甲.*tool_a/}));
+  await user.click(await screen.findByRole('button',{name:/tool_a.*工具甲/}));
   await user.type(screen.getByLabelText(/页面名称/),'修改');
-  await user.click(screen.getByRole('button',{name:/工具乙.*tool_b/}));
+  await user.click(screen.getByRole('button',{name:/tool_b.*工具乙/}));
   await user.click(screen.getByRole('button',{name:'保存并离开'}));
   assert.equal(update.version,'read-version');
   assert.equal(screen.getByLabelText(/页面名称/).value,'工具甲修改');
@@ -359,7 +359,7 @@ test('工具删除要求确认和读取版本，失败保留编辑，成功移�
     return response({data:url.endsWith('/api/tools') ? [tool] : tool,version:'read-version'});
   });
   render(React.createElement(ToolsWorkspace,{session,onView:() => {}}));
-  await user.click(await screen.findByRole('button',{name:/待删工具.*delete_tool/}));
+  await user.click(await screen.findByRole('button',{name:/delete_tool.*待删工具/}));
   await user.click(screen.getByRole('button',{name:'删除工具'}));
   assert.equal(deletes.length,0);
   assert.ok(screen.getByText(/未来引用此 ID.*工具不存在/));
@@ -370,7 +370,7 @@ test('工具删除要求确认和读取版本，失败保留编辑，成功移�
   await screen.findByText('工具已删除');
   assert.deepEqual(deletes,[{version:'read-version'},{version:'read-version'}]);
   assert.equal(screen.queryByLabelText(/页面名称/),null);
-  assert.equal(screen.queryByRole('button',{name:/待删工具.*delete_tool/}),null);
+  assert.equal(screen.queryByRole('button',{name:/delete_tool.*待删工具/}),null);
   assert.equal(screen.getByRole('button',{name:'创建 HTTP 工具'}).disabled,false);
 });
 
@@ -389,7 +389,7 @@ test('保存相同草稿保留有效测试，修改保存后列表和详情标�
     return response({data:url.endsWith('/api/tools') ? [tool] : tool,version});
   });
   render(React.createElement(ToolsWorkspace,{session,onView:() => {}}));
-  await user.click(await screen.findByRole('button',{name:/测试记录工具.*tested_tool/}));
+  await user.click(await screen.findByRole('button',{name:/tested_tool.*测试记录工具/}));
   await user.click(screen.getByRole('button',{name:'测试当前草稿'}));
   await screen.findAllByText('测试成功');
   await user.click(screen.getByRole('button',{name:'保存工具'}));
@@ -401,7 +401,7 @@ test('保存相同草稿保留有效测试，修改保存后列表和详情标�
   const sidebar=screen.getByRole('complementary',{name:'工具库'});
   assert.ok(within(sidebar).getByText('修改前的测试结果'));
   await user.click(screen.getByRole('button',{name:'返回工具列表'}));
-  await user.click(within(sidebar).getByRole('button',{name:/测试记录工具.*tested_tool/}));
+  await user.click(within(sidebar).getByRole('button',{name:/tested_tool.*测试记录工具/}));
   await waitFor(() => assert.ok(within(screen.getByRole('region',{name:'快速测试调试'})).getByText('修改前的测试结果')));
 });
 
@@ -533,28 +533,78 @@ test('工具侧栏在编辑时保留，并按真实工具名称和启用状态�
   assert.equal(within(sidebar).queryByRole('button',{name:/天气查询/}),null);
   assert.ok(within(sidebar).getByRole('button',{name:/库存查询/}));
   await user.clear(within(sidebar).getByRole('searchbox',{name:'搜索工具'}));
-  await user.click(within(sidebar).getByRole('button',{name:/已禁用.*1/}));
-  assert.equal(within(sidebar).queryByRole('button',{name:/天气查询/}),null);
+  await user.click(within(sidebar).getByRole('switch',{name:'隐藏禁用工具'}));
+  assert.ok(within(sidebar).getByRole('button',{name:/天气查询/}));
+  assert.equal(within(sidebar).queryByRole('button',{name:/库存查询/}),null);
+  assert.equal(screen.getByLabelText(/页面名称/).value,'天气查询');
+  await user.click(within(sidebar).getByRole('switch',{name:'隐藏禁用工具'}));
   assert.ok(within(sidebar).getByRole('button',{name:/库存查询/}));
   assert.equal(screen.queryByText(/HITL|Rust Sandbox|1,429|近 24 小时调用历史/),null);
 });
 
-test('工具列表按类型筛选，展示实际来源与未测试，不把启用视为在线', async () => {
+test('工具类型 tab 支持数量、键盘切换，并与搜索和隐藏禁用工具组合', async () => {
   const user=userEvent.setup({document:browser.window.document,delay:null});
   const http={...initial,kind:'http',method:'GET',description:'读取天气',id:'http',display_name:'HTTP 查询',name:'http_query',url:'http://localhost/weather',created_at:'2026-10-14T00:00:00Z',updated_at:'2026-10-14T00:00:00Z'};
-  const python={...http,id:'python',kind:'python',display_name:'Python 计算',name:'python_calc',code_path:'tools/calc.py'};
+  const python={...http,id:'python',kind:'python',display_name:'Python 计算',name:'python_calc',code_path:'tools/calc.py',enabled:false};
   const mcp={...http,id:'mcp',kind:'mcp',display_name:'MCP 搜索',name:'mcp_search',server_id:'local-server',remote_name:'search'};
   const session=toolSession(async url => response(url.endsWith('/schema/http') ? {data:schema} : {data:[http,python,mcp],version:'version'}));
   render(React.createElement(ToolsWorkspace,{session,onView:() => {}}));
   const sidebar=await screen.findByRole('complementary',{name:'工具库'});
   await within(sidebar).findByRole('button',{name:/HTTP 查询/});
-  assert.equal(within(sidebar).getAllByText('未测试').length,3);
-  await user.selectOptions(screen.getByLabelText('工具类型筛选'),'python');
+  assert.equal(screen.getByRole('tab',{name:'全部 (3)'}).getAttribute('aria-selected'),'true');
+  await user.click(screen.getByRole('tab',{name:'Python (1)'}));
   assert.ok(within(sidebar).getByRole('button',{name:/Python 计算.*tools\/calc.py/}));
   assert.equal(within(sidebar).queryByRole('button',{name:/HTTP 查询/}),null);
-  await user.selectOptions(screen.getByLabelText('工具类型筛选'),'mcp');
+  await user.keyboard('{ArrowRight}');
+  assert.equal(screen.getByRole('tab',{name:'MCP (1)'}),document.activeElement);
   assert.ok(within(sidebar).getByRole('button',{name:/MCP 搜索.*local-server \/ search/}));
   assert.equal(within(sidebar).queryByText(/在线/),null);
+  await user.keyboard('{Home}');
+  assert.equal(screen.getByRole('tab',{name:'全部 (3)'}),document.activeElement);
+  await user.click(screen.getByRole('switch',{name:'隐藏禁用工具'}));
+  assert.equal(screen.getByRole('tab',{name:'全部 (2)'}).getAttribute('aria-selected'),'true');
+  assert.ok(screen.getByRole('tab',{name:'Python (0)'}));
+  assert.equal(within(sidebar).queryByRole('button',{name:/Python 计算/}),null);
+  await user.type(screen.getByRole('searchbox',{name:'搜索工具'}),'mcp_search');
+  assert.ok(within(sidebar).getByRole('button',{name:/MCP 搜索/}));
+  assert.equal(within(sidebar).queryByRole('button',{name:/HTTP 查询/}),null);
+  await user.click(screen.getByRole('tab',{name:'HTTP (1)'}));
+  assert.ok(within(sidebar).getByText('没有匹配的工具。已隐藏禁用工具。'));
+  await user.clear(screen.getByRole('searchbox',{name:'搜索工具'}));
+  assert.ok(within(sidebar).getByRole('button',{name:/HTTP 查询/}));
+});
+
+test('操作栏启用开关同步配置草稿，保存后隐藏禁用工具且保留详情', async () => {
+  const user=userEvent.setup({document:browser.window.document,delay:null});
+  let tool={...initial,kind:'http',method:'GET',id:'toggle-id',display_name:'启用切换',name:'toggle_tool',description:'',url:'http://localhost/',created_at:'2026-10-14T00:00:00Z',updated_at:'2026-10-14T00:00:00Z'};
+  const writes=[];
+  const session=toolSession(async (url,init) => {
+    if (url.endsWith('/schema/http')) return response({data:schema});
+    if (url.includes('/validate-name?')) return response({data:{valid:true}});
+    if (init?.method === 'PUT') {
+      const payload=JSON.parse(init.body);writes.push(payload);tool={...tool,...payload.definition};
+      return new Response(null,{status:204});
+    }
+    return response({data:url.endsWith('/api/tools') ? [tool] : tool,version:writes.length ? 'new-version' : 'version'});
+  });
+  render(React.createElement(ToolsWorkspace,{session,onView:() => {}}));
+  const sidebar=screen.getByRole('complementary',{name:'工具库'});
+  await user.click(await within(sidebar).findByRole('button',{name:/启用切换/}));
+  await user.click(screen.getByRole('switch',{name:'隐藏禁用工具'}));
+  await user.click(screen.getByRole('button',{name:'禁用此工具'}));
+  assert.equal(screen.getByLabelText(/^启用/).value,'false');
+  assert.equal(writes.length,0);
+  assert.ok(within(sidebar).getByRole('button',{name:/启用切换/}));
+  await user.type(screen.getByLabelText(/页面名称/),'改名');
+  assert.equal(screen.getByLabelText(/^启用/).value,'false');
+  await user.click(screen.getByRole('button',{name:'保存工具'}));
+  await screen.findByText('工具已保存');
+  assert.equal(writes.length,1);assert.equal(writes[0].definition.enabled,false);
+  assert.equal(tool.display_name,'启用切换改名');
+  assert.equal(within(sidebar).queryByRole('button',{name:/启用切换/}),null);
+  assert.equal(screen.getByLabelText(/页面名称/).value,'启用切换改名');
+  await user.click(screen.getByRole('button',{name:'启用此工具'}));
+  assert.equal(screen.getByLabelText(/^启用/).value,'true');
 });
 
 test('新建工具在前端建议名称并避开列表和内置名称，手动修改后不再跟随页面名称', async () => {

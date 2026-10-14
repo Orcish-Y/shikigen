@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
-import { ArrowLeft, ClockCounterClockwise, Globe, Play, SidebarSimple, FloppyDisk, Trash } from '@phosphor-icons/react';
+import { ArrowLeft, ClockCounterClockwise, Globe, Play, SidebarSimple, FloppyDisk, Trash, ToggleLeft, ToggleRight } from '@phosphor-icons/react';
 import type { RJSFSchema } from '@rjsf/utils';
 import { BackendRequestError, type BackendSession } from '../../backend-client';
 import type { ContentView } from '../MessageBody';
@@ -257,6 +257,10 @@ export function ToolsWorkspace({ session, onView, onNavigation, ref }: {
   }
   const canTest = Boolean(editor && validDraft && !busy && verified && !pendingSave && !savedToolAwaitingRead);
   const staleTest=Boolean(test?.result && editor && testDefinition !== toolDraftFingerprint(editor.draft));
+  function editDraft(draft:ToolDraft) {
+    setEditor(current => current ? {...current,draft} : current);
+    setDirty(Boolean(editor && toolDraftFingerprint(draft) !== toolDraftFingerprint(editor.initial)));setNotice(null);
+  }
   return <div className="tool-registry">
     <ToolLibrarySidebar tools={tools} recent={recent} selectedId={editor?.tool?.id} busy={Boolean(busy)} verified={verified}
       connected={Boolean(session)} canCreate={Boolean(session && schema && verified && !busy && !pendingSave && !savedToolAwaitingRead)}
@@ -265,12 +269,16 @@ export function ToolsWorkspace({ session, onView, onNavigation, ref }: {
       <div className="tool-detail-toolbar" role="toolbar" aria-label="工具操作">
         {onNavigation && <button className="icon-button tool-navigation-toggle" aria-label="打开主导航" onClick={onNavigation}><SidebarSimple/></button>}
         <div className="tool-breadcrumb"><button aria-label="返回工具列表" disabled={Boolean(busy) || Boolean(pendingSave)}
-          onClick={() => requestLeave(closeEditor)}>工具库</button><span>/</span><span>HTTP 工具</span>
+          onClick={() => requestLeave(closeEditor)}>工具与技能</button>{editor && <><span>/</span><span>HTTP</span></>}
           {editor && <><span>/</span><strong>{editor.tool?.display_name || '新建工具'}</strong></>}</div>
         {editor && <div className="tool-toolbar-actions"><Button size="sm" variant="outline" disabled={!canTest}
           onClick={() => document.getElementById('tool-test-panel')?.scrollIntoView({behavior:'smooth',block:'start'})}><Play size={14}/>测试运行</Button>
-          <Button size="sm" type="submit" form="tool-definition" disabled={!schema || Boolean(busy) || Boolean(pendingSave) || Boolean(savedToolAwaitingRead)}><FloppyDisk size={14}/>保存工具</Button></div>}
-        {editor?.tool && <Button size="sm" variant="outline" aria-label="删除工具" disabled={Boolean(busy) || Boolean(pendingSave) || Boolean(savedToolAwaitingRead)} onClick={() => {setError(null);setConfirmDelete(true);}}><Trash size={14}/></Button>}
+          <Button size="sm" variant="outline" disabled={Boolean(busy) || Boolean(pendingSave) || Boolean(savedToolAwaitingRead)}
+            onClick={() => editDraft({...editor.draft,enabled:!editor.draft.enabled})}>
+            {editor.draft.enabled ? <ToggleRight size={14}/> : <ToggleLeft size={14}/>}{editor.draft.enabled ? '禁用此工具' : '启用此工具'}</Button>
+          <Button size="sm" type="submit" form="tool-definition" disabled={!schema || Boolean(busy) || Boolean(pendingSave) || Boolean(savedToolAwaitingRead)}><FloppyDisk size={14}/>保存工具</Button>
+          {editor.tool && <Button size="sm" variant="outline" aria-label="删除工具" disabled={Boolean(busy) || Boolean(pendingSave) || Boolean(savedToolAwaitingRead)} onClick={() => {setError(null);setConfirmDelete(true);}}><Trash size={14}/></Button>}
+        </div>}
       </div>
       <div className="tool-detail-body">
         <div className="tool-page-notices" aria-label="工具页面提示">
@@ -285,10 +293,9 @@ export function ToolsWorkspace({ session, onView, onNavigation, ref }: {
           <ToolSummaryCard tool={editor.tool} initial={editor.draft} version={editor.version} dirty={dirty}/>
           <div className="tool-editor-layout">
             {schema && <ToolDefinitionForm key={editor.revision} schema={schema} initial={{...editor.initial}} formId="tool-definition" externalSubmit
-              suggestName={editor.tool ? undefined : suggestName} validateName={validateName}
+              suggestName={editor.tool ? undefined : suggestName} validateName={validateName} enabled={editor.draft.enabled}
               disabled={Boolean(busy) || Boolean(pendingSave) || Boolean(savedToolAwaitingRead)} onSave={save} onInvalid={diagnostic => setError(`保存前校验失败：${diagnostic}。请继续编辑并修正。`)} onEdited={value => {
-                setEditor(current => current ? {...current,draft:value as ToolDraft} : current);
-                setDirty(toolDraftFingerprint(value as ToolDraft) !== toolDraftFingerprint(editor.initial));setNotice(null);
+                editDraft(value as ToolDraft);
               }}/>}
             <div className="tool-test-column">
               <section className="tool-panel" aria-label="快速测试调试" id="tool-test-panel"><header className="tool-panel-heading"><Play size={16}/><h2>快速测试调试</h2><span>{busy === 'testing' ? '测试中' : '真实 HTTP 请求'}</span></header>

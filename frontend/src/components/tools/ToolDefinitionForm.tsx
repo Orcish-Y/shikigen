@@ -21,8 +21,8 @@ function DefinitionSections({properties}: ObjectFieldTemplateProps) {
   </div>;
 }
 
-export function ToolDefinitionForm({schema, initial, disabled = false, onSave, onEdited, onInvalid, formId, externalSubmit = false, suggestName, validateName}: {
-  schema: RJSFSchema; initial: Record<string, unknown>; disabled?: boolean;
+export function ToolDefinitionForm({schema, initial, enabled, disabled = false, onSave, onEdited, onInvalid, formId, externalSubmit = false, suggestName, validateName}: {
+  schema: RJSFSchema; initial: Record<string, unknown>; enabled?:boolean; disabled?: boolean;
   onSave: (value: Record<string, unknown>) => void; onEdited?: (value:Record<string,unknown>) => void;
   onInvalid?:(message:string) => void;
   formId?:string; externalSubmit?:boolean;
@@ -51,7 +51,7 @@ export function ToolDefinitionForm({schema, initial, disabled = false, onSave, o
     fields={{InputSchema:InputSchemaEditor}}
     templates={{ObjectFieldTemplate:DefinitionSections}}
     extraErrors={nameError ? {name:{__errors:[nameError]}} : undefined} extraErrorsBlockSubmit
-    formData={value} disabled={disabled} uiSchema={{
+    formData={enabled === undefined ? value : {...value,enabled}} disabled={disabled} uiSchema={{
       'ui:submitButtonOptions':{norender:externalSubmit},
       'ui:order':['display_name','name','description','kind','method','url','headers','parameters','timeout_seconds','enabled','input_schema','output_schema'],
       kind:{'ui:widget':'hidden'}, description:{'ui:widget':'textarea'},
