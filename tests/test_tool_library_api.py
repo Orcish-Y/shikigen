@@ -8,6 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Thread
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlsplit
 
 import httpx
 from shikigen.app_config import load_app_config
@@ -476,6 +477,126 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
     self.addCleanup(server.shutdown)
     return f"http://127.0.0.1:{server.server_port}", requests
 
+  def echo_service(self):
+    requests = []
+
+    class Handler(BaseHTTPRequestHandler):
+      def handle_request(self):
+        body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+        observed = {
+          "method": self.command,
+          "path": self.path,
+          "headers": dict(self.headers),
+          "body": body.decode(),
+        }
+        requests.append(observed)
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        if self.command != "HEAD":
+          self.wfile.write(json.dumps(observed).encode())
+
+      do_GET = do_POST = do_PUT = do_PATCH = do_DELETE = do_HEAD = do_OPTIONS = (
+        handle_request
+      )
+
+      def log_message(self, format, *args):
+        pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    Thread(target=server.serve_forever, daemon=True).start()
+    self.addCleanup(server.server_close)
+    self.addCleanup(server.shutdown)
+    return f"http://127.0.0.1:{server.server_port}", requests
+
+  async def test_http_mapping_sends_real_methods_locations_and_json_types(self):
+    base, requests = self.echo_service()
+    schema = {
+      "type": "object",
+      "additionalProperties": False,
+      "required": ["path"],
+      "properties": {
+        "path": {
+          "type": "object",
+          "required": ["id"],
+          "properties": {"id": {"type": "string"}},
+        },
+        "query": {
+          "type": "object",
+          "properties": {
+            "id": {"type": "integer"},
+            "tags": {"type": "array", "items": {"type": "string"}},
+            "csv": {"type": "array", "items": {"type": "integer"}},
+            "flag": {"type": "boolean"},
+            "empty": {"type": "string"},
+          },
+        },
+        "headers": {"type": "object", "properties": {"flag": {"type": "boolean"}}},
+        "body": {
+          "type": ["object", "null"],
+          "properties": {"nested": {"type": "array"}},
+        },
+      },
+    }
+    parameters = [
+      {"location": location, "input_name": name, "name": target, **options}
+      for location, name, target, options in (
+        ("path", "id", "item", {}),
+        ("query", "id", "id", {}),
+        ("query", "tags", "tags", {}),
+        ("query", "csv", "csv", {"explode": False}),
+        ("query", "flag", "flag", {}),
+        ("query", "empty", "empty", {}),
+        ("headers", "flag", "X-Flag", {}),
+      )
+    ]
+    inputs = {
+      "path": {"id": "a/b &"},
+      "query": {"id": 0, "tags": ["a", "b"], "csv": [1, 2], "flag": False, "empty": ""},
+      "headers": {"flag": False},
+      "body": {"nested": [None, False, 0, "", [], {}]},
+    }
+    for method in ("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"):
+      with self.subTest(method=method):
+        created = await self.client.post(
+          "/api/tools",
+          json={
+            "display_name": "带参请求",
+            "name": f"mapped_{method}",
+            "url": base + "/items/{item}?fixed=1",
+            "method": method,
+            "headers": {"X-Fixed": "fixed"},
+            "parameters": parameters,
+            "input_schema": schema,
+          },
+        )
+        self.assertEqual(created.status_code, 201, created.text)
+        result = (
+          await self.client.post(
+            f"/api/tools/{created.json()['data']['id']}/execute",
+            json={"inputs": inputs},
+          )
+        ).json()["data"]
+        self.assertEqual(result["status"], "success", result)
+        actual = requests[-1]
+        self.assertEqual(actual["method"], method)
+        self.assertEqual(urlsplit(actual["path"]).path, "/items/a%2Fb%20%26")
+        self.assertEqual(
+          parse_qs(urlsplit(actual["path"]).query, keep_blank_values=True),
+          {
+            "fixed": ["1"],
+            "id": ["0"],
+            "tags": ["a", "b"],
+            "csv": ["1,2"],
+            "flag": ["false"],
+            "empty": [""],
+          },
+        )
+        self.assertEqual(actual["headers"]["X-Fixed"], "fixed")
+        self.assertEqual(actual["headers"]["X-Flag"], "false")
+        self.assertEqual(actual["headers"]["Content-Type"], "application/json")
+        self.assertEqual(json.loads(actual["body"]), inputs["body"])
+
   async def execute_http(self, url, **options):
     saved = await self.client.post(
       "/api/tools",
@@ -493,6 +614,277 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
         json={"inputs": {}},
       )
     ).json()["data"]
+
+  async def test_http_definition_rejects_inconsistent_or_unsupported_requests(self):
+    base, requests = self.echo_service()
+    scalar = {"type": "string"}
+    group = {"type": "object", "required": ["id"], "properties": {"id": scalar}}
+    schema = {"type": "object", "required": ["path"], "properties": {"path": group}}
+    mapping = {"location": "path", "input_name": "id", "name": "id"}
+    valid = {
+      "display_name": "配置校验",
+      "name": "validation",
+      "url": base + "/{id}",
+      "input_schema": schema,
+      "parameters": [mapping],
+    }
+    for override in (
+      {"method": "TRACE"},
+      {"parameters": []},
+      {"url": base + "/{other}"},
+      {"url": "http://{id}.example.test/"},
+      {"url": base + "/?q={id}"},
+      {"url": base + "/{id"},
+      {"parameters": [mapping, mapping]},
+      {"parameters": [{**mapping, "style": "form"}]},
+      {"parameters": [{**mapping, "location": "cookie"}]},
+      {"input_schema": {**schema, "required": []}},
+      {"input_schema": {**schema, "properties": {"path": {**group, "required": []}}}},
+      {
+        "input_schema": {
+          **schema,
+          "properties": {
+            "path": {**group, "properties": {"id": {"type": "array", "items": scalar}}}
+          },
+        }
+      },
+      {"input_schema": {"type": "object", "properties": {"cookie": group}}},
+      {"headers": {"Bad Header": "x"}},
+      {"headers": {"X-Test": "a\r\nb"}},
+      {"headers": {"X-Test": "中文"}},
+      {"headers": {"Content-Length": "10"}},
+    ):
+      with self.subTest(override=override):
+        before = self.path.read_bytes()
+        rejected = await self.client.post("/api/tools", json={**valid, **override})
+        self.assertEqual(rejected.status_code, 422, rejected.text)
+        self.assertEqual(rejected.json()["detail"]["code"], "definition_invalid")
+        self.assertEqual(self.path.read_bytes(), before)
+    self.assertEqual(requests, [])
+
+  async def test_path_dot_segments_remain_parameters_instead_of_changing_target(self):
+    base, requests = self.echo_service()
+    created = await self.client.post(
+      "/api/tools",
+      json={
+        "display_name": "路径点段",
+        "name": "dot_segments",
+        "url": base + "/items/{id}/details",
+        "input_schema": {
+          "type": "object",
+          "required": ["path"],
+          "properties": {
+            "path": {
+              "type": "object",
+              "required": ["id"],
+              "properties": {"id": {"type": "string"}},
+            }
+          },
+        },
+        "parameters": [{"location": "path", "input_name": "id", "name": "id"}],
+      },
+    )
+    self.assertEqual(created.status_code, 201, created.text)
+    for value, path in ((".", "/items/%2E/details"), ("..", "/items/%2E%2E/details")):
+      result = (
+        await self.client.post(
+          f"/api/tools/{created.json()['data']['id']}/execute",
+          json={"inputs": {"path": {"id": value}}},
+        )
+      ).json()["data"]
+      self.assertEqual(result["status"], "success", result)
+      self.assertEqual(requests[-1]["path"], path)
+
+  async def test_http_optional_null_falsy_and_constraints_are_not_coerced(self):
+    base, requests = self.echo_service()
+    schema = {
+      "type": "object",
+      "additionalProperties": False,
+      "properties": {
+        "query": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": ["string", "null"],
+              "default": "injected",
+              "maxLength": 3,
+            },
+            "count": {"type": "integer", "minimum": 0, "maximum": 2},
+            "enum": {"type": "string", "enum": ["yes", "no"]},
+            "tags": {
+              "type": "array",
+              "maxItems": 2,
+              "uniqueItems": True,
+              "items": {"type": "integer"},
+            },
+          },
+        },
+        "headers": {
+          "type": "object",
+          "properties": {"value": {"type": ["string", "null"]}},
+        },
+        "body": {
+          "type": ["object", "null"],
+          "required": ["nested"],
+          "properties": {
+            "nested": {"type": "array", "minItems": 1, "items": {"type": "boolean"}},
+            "mail": {"type": "string", "format": "email"},
+          },
+        },
+      },
+    }
+    parameters = [
+      {"location": group, "input_name": name, "name": name}
+      for group, names in (
+        ("query", ("value", "count", "enum", "tags")),
+        ("headers", ("value",)),
+      )
+      for name in names
+    ]
+    created = await self.client.post(
+      "/api/tools",
+      json={
+        "display_name": "精确输入",
+        "name": "exact_inputs",
+        "url": base,
+        "method": "POST",
+        "input_schema": schema,
+        "parameters": parameters,
+      },
+    )
+    self.assertEqual(created.status_code, 201, created.text)
+    endpoint = f"/api/tools/{created.json()['data']['id']}/execute"
+    for inputs in (
+      {},
+      {"body": None},
+      {"body": {"nested": [False], "mail": "not-an-email"}},
+      {"query": {"value": "", "count": 0, "tags": []}},
+    ):
+      result = (await self.client.post(endpoint, json={"inputs": inputs})).json()[
+        "data"
+      ]
+      self.assertEqual(result["status"], "success", result)
+    self.assertEqual(requests[0]["body"], "")
+    self.assertNotIn("Content-Type", requests[0]["headers"])
+    self.assertEqual(requests[0]["path"], "/")
+    self.assertEqual(requests[1]["body"], "null")
+    self.assertEqual(
+      json.loads(requests[2]["body"]), {"nested": [False], "mail": "not-an-email"}
+    )
+    self.assertEqual(
+      parse_qs(urlsplit(requests[3]["path"]).query, keep_blank_values=True),
+      {"value": [""], "count": ["0"]},
+    )
+    before = len(requests)
+    for inputs in (
+      {"query": {"value": None}},
+      {"headers": {"value": None}},
+      {"query": {"value": "long"}},
+      {"query": {"count": "1"}},
+      {"query": {"count": True}},
+      {"query": {"count": 3}},
+      {"query": {"enum": "other"}},
+      {"query": {"tags": [1, 1]}},
+      {"query": {"tags": [1, 2, 3]}},
+      {"body": {}},
+      {"body": {"nested": []}},
+      {"body": {"nested": ["false"]}},
+      {"query": {"unknown": 1}},
+      {"headers": {"value": "a\r\nb"}},
+    ):
+      with self.subTest(inputs=inputs):
+        result = (await self.client.post(endpoint, json={"inputs": inputs})).json()[
+          "data"
+        ]
+        self.assertEqual(result["error"]["code"], "input_validation", result)
+    self.assertEqual(len(requests), before)
+
+  async def test_schema_dialects_references_and_unsupported_constraints_are_explicit(
+    self,
+  ):
+    base, requests = self.echo_service()
+    for index, dialect in enumerate(
+      (
+        "http://json-schema.org/draft-07/schema#",
+        "https://json-schema.org/draft/2020-12/schema",
+      )
+    ):
+      schema = {
+        "$schema": dialect,
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "object",
+            "required": ["value"],
+            "properties": {"value": {"$ref": "#/$defs/value"}},
+          }
+        },
+        "$defs": {
+          "value": {
+            "type": "string",
+            "pattern": "^[a-z]+$",
+            "minLength": 2,
+            "format": "email",
+          }
+        },
+      }
+      created = await self.client.post(
+        "/api/tools",
+        json={
+          "display_name": "方言与引用",
+          "name": f"dialect_{index}",
+          "url": base,
+          "method": "POST",
+          "input_schema": schema,
+          "output_schema": {"type": "integer"},
+        },
+      )
+      self.assertEqual(created.status_code, 201, created.text)
+      endpoint = f"/api/tools/{created.json()['data']['id']}/execute"
+      result = (
+        await self.client.post(endpoint, json={"inputs": {"body": {"value": "okay"}}})
+      ).json()["data"]
+      self.assertEqual(result["status"], "success", result)
+      self.assertIsInstance(
+        result["data"], dict
+      )  # Output schema is documentation only.
+      before = len(requests)
+      invalid = (
+        await self.client.post(endpoint, json={"inputs": {"body": {"value": "X"}}})
+      ).json()["data"]
+      self.assertEqual(invalid["error"]["code"], "input_validation")
+      self.assertEqual(len(requests), before)
+    for node in (
+      {"type": "string", "nullable": True},
+      {"type": "string", "madeUpConstraint": 1},
+      {"anyOf": [{"type": "string"}, {"type": "integer"}]},
+      {"$ref": "#/missing"},
+      {"$ref": "https://example.test/schema"},
+      {"type": "array", "items": [{"type": "string"}]},
+      {"$ref": "#/properties/body"},
+      {"type": "string", "pattern": "["},
+    ):
+      with self.subTest(node=node):
+        rejected = await self.client.post(
+          "/api/tools",
+          json={
+            "display_name": "不支持结构",
+            "name": "unsupported_schema",
+            "url": base,
+            "input_schema": {"type": "object", "properties": {"body": node}},
+          },
+        )
+        self.assertEqual(rejected.status_code, 422, rejected.text)
+    rejected = await self.client.post(
+      "/api/tools",
+      json={
+        "display_name": "未知方言",
+        "name": "unknown_dialect",
+        "url": base,
+        "input_schema": {"$schema": "https://example.test/dialect", "type": "object"},
+      },
+    )
+    self.assertEqual(rejected.status_code, 422)
 
   async def test_http_errors_keep_response_and_redirects_are_not_followed(self):
     base, requests = self.http_service()

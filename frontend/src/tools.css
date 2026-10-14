@@ -69,17 +69,37 @@
 .tool-panel-body { padding: 16px; }
 .tool-config-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px 12px; padding: 16px; }
 .tool-config-field { min-width: 0; }
-.tool-field-description, .tool-field-url, .tool-field-enabled { grid-column: 1 / -1; }
+.tool-field-description, .tool-field-url, .tool-field-enabled, .tool-field-headers, .tool-field-parameters { grid-column: 1 / -1; }
 .tool-field-kind { display: none; }
 .tool-config-field label { font-size: 12px; font-weight: 500; }
 .tool-config-field input { height: 34px; font-size: 12px; padding-left: 10px; padding-right: 10px; }
 .tool-config-field textarea { min-height: 68px; height: 68px; font-size: 12px; padding: 8px 10px; }
-.tool-schema-fields { display: grid; gap: 16px; padding: 16px; background: #0f172a; }
-.schema-editor { display: grid; gap: 8px; }
-.tool-schema-fields label { color: #cbd5e1; font-size: 11px; }
+.tool-schema-fields { display: grid; gap: 16px; padding: 16px; }
+.schema-editor { display: grid; gap: 8px; min-width: 0; }
+.input-schema-editor, .tool-schema-fields > div { min-width: 0; }
+.tool-schema-fields label { font-size: 11px; }
 .tool-schema-fields textarea { font: 12px/1.7 'JetBrains Mono', monospace; border-color: #334155; background: #0f172a; color: #e2e8f0; min-height: 120px; padding: 10px; }
 .tool-schema-fields textarea[aria-invalid='true'] { border-color: #f87171; }
-.tool-schema-fields [role='alert'] { color: #fca5a5; font-size: 11px; }
+.tool-schema-fields [role='alert'], .tool-input-editor [role='alert'] { color: var(--ui-destructive); font-size: 11px; overflow-wrap: anywhere; }
+.tool-select { min-width: 0; width: 100%; height: 34px; border: 1px solid var(--border); background: var(--canvas); border-radius: 6px; padding: 4px 8px; font-size: 12px; color: var(--ui-foreground); }
+.tool-editor-modes { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.tool-editor-modes [aria-pressed='true'] { background: #eef2ff; border-color: #a5b4fc; color: #4338ca; }
+.tool-parameter-table-wrap { max-width: 100%; overflow-x: auto; border: 1px solid var(--border); border-radius: 6px; }
+.tool-parameter-table { width: 100%; min-width: 420px; border-collapse: collapse; font-size: 11px; }
+.tool-parameter-table caption { text-align: left; padding: 8px; color: var(--muted); }
+.tool-parameter-table th, .tool-parameter-table td { padding: 6px; text-align: left; border-top: 1px solid var(--border); font-weight: 400; }
+.tool-parameter-table thead th { background: var(--sidebar); color: var(--secondary); }
+.tool-parameter-table th code { overflow-wrap: anywhere; }
+.tool-parameter-table input { min-width: 80px; font-size: 11px; }
+.tool-parameter-table input[type='checkbox'] { min-width: 0; }
+.tool-parameter-table .tool-select { min-width: 82px; font-size: 11px; }
+.tool-parameter-table button { font-size: 11px; }
+.tool-add-parameter { display: grid; grid-template-columns: 85px minmax(0,1fr) auto; gap: 6px; margin: 12px 0; }
+.tool-group-required { display: inline-flex; align-items: center; gap: 4px; margin: 10px 12px 0 0; }
+.input-schema-editor > .tool-muted { margin-top: 8px; }
+.tool-config-field .schema-editor textarea { min-height: 110px; height: auto; font: 11px/1.7 'JetBrains Mono', monospace; }
+.tool-input-form > textarea { min-height: 160px; margin-top: 6px; font: 12px/1.7 'JetBrains Mono', monospace; }
+.tool-input-form > label { font-size: 12px; }
 .tool-muted { font-size: 12px; color: var(--muted); line-height: 1.7; margin-bottom: 12px; }
 .tool-empty-input p { font-size: 11px; color: var(--secondary); margin-bottom: 6px; }
 .tool-empty-input pre { padding: 8px 12px; background: var(--sidebar); border: 1px solid var(--border); border-radius: 6px; font-size: 12px; }

@@ -14,13 +14,115 @@ globalThis.requestAnimationFrame = browser.window.requestAnimationFrame;
 globalThis.cancelAnimationFrame = clearTimeout;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const React = await import('react');
-const {render, cleanup, screen, waitFor, within, act} = await import('@testing-library/react');
+const {render, cleanup, screen, waitFor, within, act, fireEvent} = await import('@testing-library/react');
 const {default:userEvent} = await import('@testing-library/user-event');
 const {ToolDefinitionForm} = await import('../src/components/tools/ToolDefinitionForm.tsx');
+const {ToolInputForm} = await import('../src/components/tools/ToolInputForm.tsx');
 const {ToolTestResult} = await import('../src/components/tools/ToolTestResult.tsx');
 const {ToolsWorkspace} = await import('../src/components/tools/ToolsWorkspace.tsx');
 const {BackendSession} = await import('../src/backend-client.ts');
 afterEach(cleanup);
+
+test('真实 rjsf 测试表单不注入业务值，JSON 与表单切换保留实际 inputs 和无效原文', async () => {
+  const user = userEvent.setup({document:browser.window.document,delay:null});
+  const submitted = [];
+  const inputSchema = {type:'object',properties:{body:{type:'object',required:['flag'],properties:{
+    flag:{type:'boolean'}, value:{type:'string',default:'injected'}, choice:{type:'string',enum:['first','second']},
+    items:{type:'array',minItems:2,items:{type:'string'}}, email:{type:'string',format:'email'},
+  }}}};
+  const form = render(React.createElement(ToolInputForm,{schema:inputSchema,disabled:false,onTest:value => submitted.push(value)}));
+  await user.click(screen.getByRole('button',{name:'JSON 参数'}));
+  const editor = screen.getByLabelText('测试参数 JSON');
+  assert.deepEqual(JSON.parse(editor.value), {});
+  const inputs = {body:{flag:false,value:'',choice:'second',items:[],email:'not-an-email',nested:[null,0,{},[]]},extra:7};
+  fireEvent.change(editor,{target:{value:JSON.stringify(inputs)}});
+  await user.click(screen.getByRole('button',{name:'参数表单'}));
+  await user.click(screen.getByRole('button',{name:'JSON 参数'}));
+  assert.deepEqual(JSON.parse(screen.getByLabelText('测试参数 JSON').value),inputs);
+  await user.click(screen.getByRole('button',{name:'测试已保存工具'}));
+  assert.deepEqual(submitted,[inputs]);
+  fireEvent.change(screen.getByLabelText('测试参数 JSON'),{target:{value:'{"body":'}});
+  assert.match(screen.getByRole('alert').textContent,/JSON/);
+  assert.equal(screen.getByRole('button',{name:'测试已保存工具'}).disabled,true);
+  form.rerender(React.createElement(ToolInputForm,{schema:{type:'object',properties:{}},disabled:false,onTest:value => submitted.push(value)}));
+  assert.equal(screen.getByLabelText('测试参数 JSON').value,'{"body":');
+  fireEvent.change(screen.getByLabelText('测试参数 JSON'),{target:{value:JSON.stringify(inputs)}});
+  await user.click(screen.getByRole('button',{name:'测试已保存工具'}));
+  assert.deepEqual(submitted.at(-1),inputs);
+});
+
+test('两种方言的真实 rjsf 保持未回答布尔和枚举，format 不增加阻断且提交真实类型', async () => {
+  const user=userEvent.setup({document:browser.window.document,delay:null});
+  for (const dialect of ['http://json-schema.org/draft-07/schema#','https://json-schema.org/draft/2020-12/schema']) {
+    const submitted=[];
+    const schema={$schema:dialect,type:'object',required:['body'],properties:{body:{type:'object',required:['flag','count','mail','date'],properties:{
+      flag:{type:'boolean',title:'明确布尔'}, count:{type:'integer',title:'数量',minimum:0},
+      mail:{type:'string',title:'邮箱注解',format:'email'}, date:{type:'string',title:'日期注解',format:'date'},
+      choice:{type:'string',title:'枚举',enum:['first','second']},
+      defaulted:{type:'string',default:'generated'}, list:{type:'array',minItems:2,items:{type:'integer'}},
+    }}}};
+    const form=render(React.createElement(ToolInputForm,{schema,disabled:false,onTest:value => submitted.push(value)}));
+    assert.equal(screen.getByLabelText(/明确布尔/).value,'');
+    assert.equal(screen.getByLabelText(/枚举/).value,'');
+    await user.click(screen.getByRole('button',{name:'测试已保存工具'}));
+    assert.equal(submitted.length,0);
+    await user.click(screen.getByRole('button',{name:'JSON 参数'}));
+    assert.deepEqual(JSON.parse(screen.getByLabelText('测试参数 JSON').value),{});
+    await user.click(screen.getByRole('button',{name:'参数表单'}));
+    await user.selectOptions(screen.getByLabelText(/明确布尔/),'false');
+    await user.type(screen.getByLabelText(/数量/),'0');
+    assert.equal(screen.getByLabelText(/邮箱注解/).type,'text');
+    assert.equal(screen.getByLabelText(/日期注解/).type,'text');
+    await user.type(screen.getByLabelText(/邮箱注解/),'not-an-email');
+    await user.type(screen.getByLabelText(/日期注解/),'not-a-date');
+    await user.click(screen.getByRole('button',{name:'测试已保存工具'}));
+    assert.deepEqual(JSON.parse(JSON.stringify(submitted)),[{body:{flag:false,count:0,mail:'not-an-email',date:'not-a-date'}}]);
+    form.unmount();
+  }
+});
+
+test('schema 更新或输入不匹配枚举时保留原参数，使用 JSON 诊断而不让控件修正值', async () => {
+  const user=userEvent.setup({document:browser.window.document,delay:null});
+  const schema={type:'object',properties:{query:{type:'object',properties:{choice:{type:'string',enum:['before']}}}}};
+  const form=render(React.createElement(ToolInputForm,{schema,disabled:false,onTest:() => {}}));
+  await user.click(screen.getByRole('button',{name:'JSON 参数'}));
+  fireEvent.change(screen.getByLabelText('测试参数 JSON'),{target:{value:'{"query":{"choice":"before","extra":0}}'}});
+  await user.click(screen.getByRole('button',{name:'参数表单'}));
+  form.rerender(React.createElement(ToolInputForm,{schema:{...schema,properties:{query:{type:'object',properties:{choice:{type:'string',enum:['after']}}}}},disabled:false,onTest:() => {}}));
+  await user.click(screen.getByRole('button',{name:'JSON 参数'}));
+  assert.deepEqual(JSON.parse(screen.getByLabelText('测试参数 JSON').value),{query:{choice:'before',extra:0}});
+  assert.ok(screen.getByText(/原输入.*JSON/));
+  form.rerender(React.createElement(ToolInputForm,{schema:{type:'object',properties:{}},disabled:false,onTest:() => {}}));
+  await user.click(screen.getByRole('button',{name:'参数表单'}));
+  assert.deepEqual(JSON.parse(screen.getByLabelText('实际测试参数').textContent),{query:{choice:'before',extra:0}});
+});
+
+test('JSON 超范围数字保留原文并拒绝测试，日期时间等 format 控件不转换字符串', async () => {
+  const user=userEvent.setup({document:browser.window.document,delay:null});
+  const submitted=[];
+  const schema={type:'object',properties:{body:{type:'object',properties:{
+    dateTime:{type:'string',format:'date-time'}, time:{type:'string',format:'time'},
+    dataUrl:{type:'string',format:'data-url'}, hostname:{type:'string',format:'hostname'},
+    number:{type:['number','null']},
+  }}}};
+  const numeric=render(React.createElement(ToolInputForm,{schema,disabled:false,onTest:value => submitted.push(value)}));
+  fireEvent.change(screen.getByLabelText('测试参数 JSON'),{target:{value:'{"body":{"number":1e999}}'}});
+  assert.equal(screen.getByRole('button',{name:'测试已保存工具'}).disabled,true);
+  assert.equal(screen.getByLabelText('测试参数 JSON').value,'{"body":{"number":1e999}}');
+  assert.match(screen.getByRole('alert').textContent,/数字|number/);
+  assert.equal(submitted.length,0);
+  numeric.unmount();
+  const formSchema={...schema,properties:{body:{...schema.properties.body,properties:{...schema.properties.body.properties,number:{type:'number'}}}}};
+  render(React.createElement(ToolInputForm,{schema:formSchema,disabled:false,onTest:value => submitted.push(value)}));
+  fireEvent.change(screen.getByLabelText('number'),{target:{value:'1e999'}});
+  assert.equal(screen.getByRole('button',{name:'测试已保存工具'}).disabled,true);
+  assert.match(screen.getByRole('alert').textContent,/数字|数值/);
+  assert.equal(screen.getByRole('button',{name:'JSON 参数'}).disabled,true);
+  await user.clear(screen.getByLabelText('number'));
+  for (const label of ['dateTime','time','dataUrl','hostname']) await user.type(screen.getByLabelText(label),'not-a-format');
+  await user.click(screen.getByRole('button',{name:'测试已保存工具'}));
+  assert.deepEqual(JSON.parse(JSON.stringify(submitted)),[{body:{dateTime:'not-a-format',time:'not-a-format',dataUrl:'not-a-format',hostname:'not-a-format'}}]);
+});
 
 const schema = {type:'object', required:['display_name','name','url'], properties:{
   display_name:{type:'string', title:'页面名称', minLength:1},
@@ -33,6 +135,32 @@ const schema = {type:'object', required:['display_name','name','url'], propertie
 }};
 const initial = {display_name:'',name:'tool',url:'',enabled:true,timeout_seconds:30,
   input_schema:{type:'object',properties:{},additionalProperties:false},output_schema:null};
+
+test('参数表格修改单字段保留约束和说明，高级 JSON 错误保留原文并阻止保存', async () => {
+  const user = userEvent.setup({document:browser.window.document,delay:null});
+  const submitted=[];
+  const inputSchema={type:'object',additionalProperties:false,description:'root',properties:{query:{type:'object',description:'group',properties:{
+    limit:{type:'integer',minimum:0,maximum:100,description:'old',examples:[0],default:10},
+    other:{type:'string',pattern:'^[a-z]+$',description:'untouched',examples:['abc']},
+  }},body:{type:'object',properties:{nested:{type:'array',items:{type:'object',properties:{flag:{type:'boolean'}}}}}}}};
+  render(React.createElement(ToolDefinitionForm,{schema,initial:{...initial,display_name:'table',url:'http://localhost/',input_schema:inputSchema},onSave:value => submitted.push(value)}));
+  fireEvent.change(screen.getByLabelText('query.limit 说明'),{target:{value:'changed'}});
+  await user.click(screen.getByRole('button',{name:'高级输入 JSON'}));
+  const editor=screen.getByLabelText('输入结构');
+  const updated=JSON.parse(editor.value);
+  assert.deepEqual(updated,{...inputSchema,properties:{...inputSchema.properties,query:{...inputSchema.properties.query,properties:{...inputSchema.properties.query.properties,limit:{...inputSchema.properties.query.properties.limit,description:'changed'}}}}});
+  assert.match(screen.getByText(/复杂结构.*高级/).textContent,/body/);
+  fireEvent.change(editor,{target:{value:'{invalid'}});
+  await user.click(screen.getByRole('button',{name:'保存工具'}));
+  assert.equal(submitted.length,0);
+  assert.equal(screen.getByLabelText('输入结构').value,'{invalid');
+  assert.match(screen.getAllByRole('alert').map(item => item.textContent).join(' '),/JSON/);
+  fireEvent.change(screen.getByLabelText('输入结构'),{target:{value:JSON.stringify(updated)}});
+  await user.click(screen.getByRole('button',{name:'保存工具'}));
+  assert.deepEqual(submitted[0].input_schema,updated);
+  assert.equal(submitted[0].output_schema,null);
+  assert.ok(screen.getByText(/未声明输出结构/));
+});
 
 test('真实业务 Form 按管理 schema 提交配置，使用本地控件并保留 schema 的实际结构', async () => {
   const user = userEvent.setup({document:browser.window.document, delay:null});

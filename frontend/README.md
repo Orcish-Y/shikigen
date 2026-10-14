@@ -4,6 +4,8 @@
 
 基础控件的固定来源、依赖版本、主题映射与回归入口见 [组件库接入说明](component-libraries.md)。
 
+工具页的 HTTP 参数映射、输入结构编辑、动态表单与 JSON 模式及验证入口见 [HTTP 参数实现](../docs/wayfinder/tools-workflow/http-parameters.md)。
+
 ```bash
 cd frontend
 pnpm install --frozen-lockfile

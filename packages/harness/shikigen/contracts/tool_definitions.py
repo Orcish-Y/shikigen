@@ -4,9 +4,14 @@ from datetime import datetime
 from typing import Annotated, Literal
 from urllib.parse import urlsplit
 
-from jsonschema import Draft7Validator
-from jsonschema.exceptions import SchemaError
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
+from pydantic import (
+  BaseModel,
+  ConfigDict,
+  Field,
+  JsonValue,
+  field_validator,
+  model_validator,
+)
 
 ToolName = Annotated[
   str, Field(min_length=1, max_length=64, pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -37,59 +42,28 @@ class ToolDefinition(BaseModel):
   def validate_schema(cls, value, info):
     if value is None:
       return value
-    if value.get("$schema", "http://json-schema.org/draft-07/schema#") not in (
-      "http://json-schema.org/draft-07/schema#",
-      "https://json-schema.org/draft-07/schema#",
-    ):
-      raise ValueError("Only draft-07 schemas are supported")
-    if info.field_name == "input_schema" and value.get("type") != "object":
-      raise ValueError("Tool inputs must use an object schema")
+    from shikigen.contracts.input_schema import validate_tool_schema
 
-    def check_refs(node):
-      if isinstance(node, dict):
-        for key, item in node.items():
-          if key == "$ref" and (not isinstance(item, str) or not item.startswith("#")):
-            raise ValueError("Only local schema references are supported")
-          check_refs(item)
-      elif isinstance(node, list):
-        for item in node:
-          check_refs(item)
-
-    check_refs(value)
-    try:
-      Draft7Validator.check_schema(value)
-    except SchemaError as error:
-      raise ValueError(f"Invalid JSON schema: {error.message}") from None
-
-    # Validate local pointers up front instead of accepting a schema that cannot
-    # be resolved at execution. Network/anchor resolution is outside this slice.
-    def resolve_refs(node):
-      if isinstance(node, dict):
-        ref = node.get("$ref")
-        if ref is not None:
-          if ref != "#" and not ref.startswith("#/"):
-            raise ValueError("Only local JSON Pointer references are supported")
-          target = value
-          try:
-            for segment in ref[2:].split("/") if ref != "#" else []:
-              key = segment.replace("~1", "/").replace("~0", "~")
-              target = target[int(key)] if isinstance(target, list) else target[key]
-          except (KeyError, IndexError, TypeError, ValueError):
-            raise ValueError("Unresolved local schema reference") from None
-        for item in node.values():
-          resolve_refs(item)
-      elif isinstance(node, list):
-        for item in node:
-          resolve_refs(item)
-
-    resolve_refs(value)
+    validate_tool_schema(value, inputs=info.field_name == "input_schema")
     return value
+
+
+class HttpParameterMapping(BaseModel):
+  model_config = ConfigDict(extra="forbid", strict=True)
+
+  location: Literal["path", "query", "headers"]
+  input_name: str = Field(min_length=1)
+  name: str = Field(min_length=1)
+  style: Literal["simple", "form"] | None = None
+  explode: bool | None = None
 
 
 class HttpToolDefinition(ToolDefinition):
   kind: Literal["http"] = "http"
-  method: Literal["GET"] = "GET"
+  method: Literal["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"] = "GET"
   url: str
+  headers: dict[str, str] = Field(default_factory=dict)
+  parameters: list[HttpParameterMapping] = Field(default_factory=list)
 
   @field_validator("url")
   @classmethod
@@ -110,6 +84,13 @@ class HttpToolDefinition(ToolDefinition):
     ):
       raise ValueError("Use an absolute HTTP(S) URL without credentials or fragment")
     return value
+
+  @model_validator(mode="after")
+  def validate_request(self):
+    from shikigen.contracts.http_requests import validate_http_request
+
+    validate_http_request(self)
+    return self
 
 
 class PythonToolDefinition(ToolDefinition):

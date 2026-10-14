@@ -5,11 +5,13 @@ import json
 import time
 from collections.abc import Awaitable, Callable
 from typing import Literal
+from urllib.parse import quote
 
 import httpx
-from jsonschema import Draft7Validator
 from pydantic import BaseModel, ConfigDict, JsonValue
 
+from shikigen.contracts.http_requests import check_header
+from shikigen.contracts.input_schema import get_schema_validator_class
 from shikigen.contracts.tool_definitions import HttpToolDefinition, ToolDefinition
 
 OUTPUT_LIMIT = 1024 * 1024
@@ -37,13 +39,77 @@ class HttpAdapter:
   async def execute(self, definition: ToolDefinition, inputs: dict) -> ToolResult:
     if not isinstance(definition, HttpToolDefinition):
       return failure("configuration", "Expected an HTTP tool definition")
-    # The first HTTP slice has no parameter mappings. Never silently ignore input.
-    if inputs:
-      return failure(
-        "input_validation", "This GET tool accepts an empty parameter object"
+    url = definition.url
+    headers = dict(definition.headers)
+    query: list[tuple[str, str]] = []
+    if set(inputs) - {"path", "query", "headers", "body"}:
+      return failure("input_validation", "Unexpected HTTP input group")
+    for location in ("path", "query", "headers"):
+      if location not in inputs:
+        continue
+      group = inputs[location]
+      allowed = {
+        item.input_name for item in definition.parameters if item.location == location
+      }
+      if not isinstance(group, dict) or set(group) - allowed:
+        return failure(
+          "input_validation", f"Unmapped {location} input", details={"path": [location]}
+        )
+
+    def scalar(value):
+      if isinstance(value, bool):
+        return "true" if value else "false"
+      return str(value)
+
+    for mapping in definition.parameters:
+      group = inputs.get(mapping.location, {})
+      if mapping.input_name not in group:
+        continue
+      value = group[mapping.input_name]
+      if value is None:
+        return failure(
+          "input_validation",
+          "Path/query/header parameters cannot be null",
+          details={"path": [mapping.location, mapping.input_name]},
+        )
+      if mapping.location == "path":
+        # RFC unreserved dots need explicit escaping here: HTTPX normalizes
+        # literal dot segments before sending and would change the target path.
+        encoded = quote(scalar(value), safe="").replace(".", "%2E")
+        url = url.replace("{" + mapping.name + "}", encoded)
+      elif mapping.location == "headers":
+        try:
+          check_header(mapping.name, scalar(value))
+        except ValueError as error:
+          return failure(
+            "input_validation",
+            str(error),
+            details={"path": [mapping.location, mapping.input_name]},
+          )
+        headers[mapping.name] = scalar(value)
+      elif isinstance(value, list):
+        if mapping.explode is not False:
+          query.extend((mapping.name, scalar(item)) for item in value)
+        else:
+          query.append((mapping.name, ",".join(scalar(item) for item in value)))
+      else:
+        query.append((mapping.name, scalar(value)))
+    request_url = httpx.URL(url)
+    if query:
+      encoded = str(httpx.QueryParams(tuple(query))).encode("ascii")
+      request_url = request_url.copy_with(
+        query=request_url.query + (b"&" if request_url.query else b"") + encoded
       )
+    content = None
+    if "body" in inputs:
+      content = json.dumps(inputs["body"], ensure_ascii=False, allow_nan=False).encode(
+        "utf-8"
+      )
+      headers["Content-Type"] = "application/json"
     async with httpx.AsyncClient(follow_redirects=False, timeout=None) as client:
-      async with client.stream(definition.method, definition.url) as response:
+      async with client.stream(
+        definition.method, request_url, headers=headers, content=content
+      ) as response:
         mime = response.headers.get("content-type", "").split(";")[0].strip().lower()
         details: dict[str, JsonValue] = {
           "status_code": response.status_code,
@@ -148,9 +214,9 @@ class ToolExecutor:
     if not manual_test and not definition.enabled:
       return failure("disabled", "Tool is disabled")
     json.dumps(inputs, allow_nan=False)
-    error = next(
-      iter(Draft7Validator(definition.input_schema).iter_errors(inputs)), None
-    )
+    validator_class = get_schema_validator_class(definition.input_schema)
+    validator = validator_class(definition.input_schema)
+    error = next(validator.iter_errors(inputs), None)
     if error is not None:
       return failure(
         "input_validation", error.message, details={"path": list(error.absolute_path)}

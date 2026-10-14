@@ -30,6 +30,8 @@ async def parameters_schema():
     "kind": "工具类型",
     "method": "请求方法",
     "url": "请求地址",
+    "headers": "固定请求头",
+    "parameters": "请求映射",
     "enabled": "启用",
     "timeout_seconds": "超时（秒）",
     "input_schema": "输入结构",

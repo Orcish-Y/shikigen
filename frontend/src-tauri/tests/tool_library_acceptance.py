@@ -50,6 +50,195 @@ class ToolLibraryAcceptance(WindowAcceptance):
     self.evaluate(f"document.getElementById({json.dumps(field)}).focus()")
     self.call("Input.insertText", text=value)
 
+  def replace(self, field, value):
+    self.evaluate(f"document.getElementById({json.dumps(field)}).select()")
+    self.fill(field, value)
+
+  def test_nested_parameters_modes_dialect_and_real_post(self):
+    requests = []
+
+    class Handler(BaseHTTPRequestHandler):
+      def do_POST(self):
+        body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        requests.append(
+          {"path": self.path, "body": body, "headers": dict(self.headers)}
+        )
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps(body).encode())
+
+      def log_message(self, format, *args):
+        pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    Thread(target=server.serve_forever, daemon=True).start()
+    self.addCleanup(server.server_close)
+    self.addCleanup(server.shutdown)
+    host = self.launch()
+    self.connect()
+    ready = self.state("ready")
+    wait_until(lambda: "新建会话开始对话" in self.body())
+    self.evaluate("document.querySelector('[aria-label=工具]').click()")
+    self.click("接入工具")
+    wait_until(
+      lambda: self.evaluate(
+        "Boolean(document.getElementById('tool-config_display_name'))"
+      )
+    )
+    self.fill("tool-config_display_name", "HTTP 嵌套参数验收")
+    self.fill("tool-config_url", f"http://127.0.0.1:{server.server_port}/items/{{id}}")
+    self.evaluate("""(() => {
+      const field = document.getElementById('tool-config_method');
+      field.value = [...field.options].find(o => o.text === 'POST').value;
+      field.dispatchEvent(new Event('change', {bubbles:true}));
+    })()""")
+    schema = {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "required": ["path"],
+      "properties": {
+        "path": {
+          "type": "object",
+          "required": ["id"],
+          "properties": {"id": {"type": "string"}},
+        },
+        "query": {
+          "type": "object",
+          "properties": {"id": {"type": "integer", "minimum": 0}},
+        },
+        "body": {
+          "type": "object",
+          "required": ["nested"],
+          "properties": {
+            "nested": {
+              "type": "object",
+              "required": ["flag"],
+              "properties": {
+                "flag": {"type": "boolean"},
+                "mail": {"type": "string", "format": "email"},
+                "dateTime": {"type": "string", "format": "date-time"},
+                "time": {"type": "string", "format": "time"},
+              },
+            }
+          },
+        },
+      },
+    }
+    self.click("高级输入 JSON")
+    self.replace("tool-config_input_schema", json.dumps(schema))
+    self.replace("tool-config_headers", '{"X-Fixed":"native"}')
+    self.replace("tool-config_output_schema", '{"type":"integer"}')
+    self.click("保存工具")
+    wait_until(lambda: "工具已保存" in self.body())
+    saved = self.client.get(ready["base_url"] + "/api/tools").json()["data"][0]
+    self.assertEqual(saved["method"], "POST")
+    self.assertEqual(len(saved["parameters"]), 2)
+    self.assertIn(
+      "POST", self.evaluate("document.querySelector('.tool-summary-tags').innerText")
+    )
+    self.assertIn(
+      "POST", self.evaluate("document.querySelector('.tool-list-footer').innerText")
+    )
+    self.click("JSON 参数")
+    self.assertEqual(
+      json.loads(self.evaluate("document.getElementById('tool-input-json').value")), {}
+    )
+    inputs = {
+      "path": {"id": "a/b"},
+      "query": {"id": 0},
+      "body": {
+        "nested": {
+          "flag": False,
+          "mail": "not-an-email",
+          "dateTime": "not-a-date",
+          "time": "not-a-time",
+        },
+        "extra": [None, False, 0, "", [], {}],
+      },
+    }
+    self.replace("tool-input-json", json.dumps(inputs))
+    self.click("参数表单")
+    wait_until(
+      lambda: self.evaluate(
+        "Boolean(document.getElementById('tool-input_body_nested_mail'))"
+      )
+    )
+    self.assertEqual(
+      self.evaluate("document.getElementById('tool-input_body_nested_mail').type"),
+      "text",
+    )
+    self.assertEqual(
+      self.evaluate("document.getElementById('tool-input_body_nested_flag').value"),
+      "false",
+    )
+    self.replace("tool-input_body_nested_dateTime", "not-a-date")
+    self.replace("tool-input_body_nested_time", "not-a-time")
+    self.click("JSON 参数")
+    self.assertEqual(
+      json.loads(self.evaluate("document.getElementById('tool-input-json').value")),
+      inputs,
+    )
+    self.replace("tool-input-json", '{"body":')
+    self.assertTrue(
+      self.evaluate(
+        "document.querySelector('[aria-label=\"测试已保存工具\"]').disabled"
+      )
+    )
+    self.assertIn("JSON 无效", self.body())
+    self.replace("tool-input-json", json.dumps(inputs))
+    self.click("执行测试")
+    wait_until(lambda: "测试成功" in self.body())
+    self.assertEqual(requests[0]["path"], "/items/a%2Fb?id=0")
+    self.assertEqual(requests[0]["body"], inputs["body"])
+    self.assertEqual(requests[0]["headers"]["X-Fixed"], "native")
+    self.assertEqual(
+      json.loads(
+        self.evaluate(
+          "document.querySelector('[aria-label=\"工具返回 data\"]').textContent"
+        )
+      ),
+      inputs["body"],
+    )
+    self.click("高级输入 JSON")
+    self.replace(
+      "tool-config_input_schema",
+      json.dumps({**schema, "description": "schema changed"}),
+    )
+    self.click("保存工具")
+    wait_until(lambda: "工具已保存" in self.body())
+    self.assertEqual(
+      json.loads(self.evaluate("document.getElementById('tool-input-json').value")),
+      inputs,
+    )
+    for width in (1440, 390):
+      self.call(
+        "Emulation.setDeviceMetricsOverride",
+        width=width,
+        height=900,
+        deviceScaleFactor=1,
+        mobile=False,
+      )
+      self.assertFalse(
+        self.evaluate("document.documentElement.scrollWidth > window.innerWidth")
+      )
+      self.evaluate(
+        "document.querySelector('.tool-parameter-table-wrap').scrollIntoView({block:'center'})"
+      )
+      self.assertLessEqual(
+        self.evaluate(
+          "document.querySelector('.tool-parameter-table-wrap').getBoundingClientRect().right"
+        ),
+        width,
+      )
+      screenshot = self.call("Page.captureScreenshot", format="png")["data"]
+      (self.artifacts / f"parameters-{width}.png").write_bytes(
+        base64.b64decode(screenshot)
+      )
+    self.record(schema=schema, inputs=inputs, requests=requests)
+    self.quit(host)
+    self.assertEqual(host.wait(timeout=10), 0)
+
   def test_create_reopen_test_theme_and_chat_navigation(self):
     payload = {"values": [None, False, 0, "", [], {}], "message": "真实响应"}
 

@@ -200,7 +200,7 @@ export function ToolsWorkspace({ session, onView, onNavigation }: {
                 <div className="tool-panel-body">
                   {!editor.tool && <p className="tool-muted">请先保存工具，再执行测试。</p>}
                   {dirty && <p className="tool-muted">配置已修改，保存后再测试。{test?.result && '下方为修改前的测试结果。'}</p>}
-                  {editor.tool && <ToolInputForm key={editor.revision} schema={editor.tool.input_schema} disabled={!canTest} onTest={runTest}/>}
+                  {editor.tool && <ToolInputForm key={editor.tool.id} schema={editor.tool.input_schema} disabled={!canTest} onTest={runTest}/>}
                   {busy === 'testing' && <p role="status" className="tool-muted">测试中，正在请求接口并读取完整响应…</p>}
                   {busy === 'testing' && error && test && <Button size="sm" variant="outline" onClick={retryTest}>重新查询测试</Button>}
                   {test?.result ? <ToolTestResult key={test.test_id} result={test.result} inputs={inputs} onView={onView}/>

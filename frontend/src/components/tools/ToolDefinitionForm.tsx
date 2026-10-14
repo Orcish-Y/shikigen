@@ -3,6 +3,8 @@ import type { ObjectFieldTemplateProps, RJSFSchema } from '@rjsf/utils';
 import { BracketsCurly, GearSix } from '@phosphor-icons/react';
 import { Button } from '../ui/button';
 import { SchemaForm } from './SchemaForm';
+import { InputSchemaEditor } from './InputSchemaEditor';
+import { syncHttpMappings, type HttpParameterMapping } from '../../tool-library';
 import type { ToolNameValidation } from '../../tool-library';
 
 function DefinitionSections({properties}: ObjectFieldTemplateProps) {
@@ -45,17 +47,24 @@ export function ToolDefinitionForm({schema, initial, disabled = false, onSave, o
   const nameError = nameCheck?.name === name && nameCheck.result?.valid === false
     ? nameCheck.result.message ?? '调用名称无效' : null;
   return <SchemaForm className="tool-definition-form" id={formId} idPrefix="tool-config" schema={schema}
+    fields={{InputSchema:InputSchemaEditor}}
     templates={{ObjectFieldTemplate:DefinitionSections}}
     extraErrors={nameError ? {name:{__errors:[nameError]}} : undefined} extraErrorsBlockSubmit
     formData={value} disabled={disabled} uiSchema={{
       'ui:submitButtonOptions':{norender:externalSubmit},
-      'ui:order':['display_name','name','description','kind','method','url','timeout_seconds','enabled','input_schema','output_schema'],
-      kind:{'ui:widget':'hidden'}, method:{'ui:readonly':true}, description:{'ui:widget':'textarea'},
+      'ui:order':['display_name','name','description','kind','method','url','headers','parameters','timeout_seconds','enabled','input_schema','output_schema'],
+      kind:{'ui:widget':'hidden'}, description:{'ui:widget':'textarea'},
+      headers:{'ui:field':'JsonSchema','ui:help':'固定请求头：JSON 对象；请求体仅支持 application/json。'},
+      parameters:{'ui:field':'JsonSchema','ui:help':'每项填写 location、input_name、name；query 使用 form（explode 默认 true），path/headers 使用 simple。'},
       name:{'ui:help':nameCheck?.name === name && nameCheck.error ? nameCheck.error
         : '1–64 个英文字母、数字或下划线，以字母或下划线开头；手动修改后保留。'},
-      input_schema:{'ui:field':'JsonSchema'}, output_schema:{'ui:field':'JsonSchema'},
+      input_schema:{'ui:field':'InputSchema'}, output_schema:{'ui:field':'JsonSchema'},
     }} onChange={event => {
       const next = {...event.formData};
+      if (schema.properties?.parameters && JSON.stringify(next.input_schema) !== JSON.stringify(value.input_schema)
+        && next.input_schema && typeof next.input_schema === 'object' && !Array.isArray(next.input_schema)
+        && Array.isArray(next.parameters))
+        next.parameters=syncHttpMappings(next.input_schema as RJSFSchema,next.parameters as HttpParameterMapping[]);
       if (next.name !== value.name) manualName.current = true;
       if (suggestName && !manualName.current && next.display_name !== value.display_name)
         next.name = suggestName(typeof next.display_name === 'string' ? next.display_name : '');

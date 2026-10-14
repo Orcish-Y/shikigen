@@ -37,7 +37,7 @@ export function ToolLibrarySidebar({tools, selectedId, busy, verified, canCreate
         <button aria-current={selectedId === tool.id ? 'true' : undefined} disabled={busy} onClick={() => onOpen(tool)}>
           <span className="tool-list-name"><Globe size={14}/><strong>{tool.display_name}</strong><span className="tool-type-tag">HTTP</span></span>
           <code>{tool.name}</code><span className="tool-list-description">{tool.description || '暂无说明'}</span>
-          <span className="tool-list-footer"><span>GET · {tool.timeout_seconds} 秒</span><span className={tool.enabled ? 'tool-enabled-text' : ''}>{tool.enabled ? '已启用' : '已禁用'}</span></span>
+          <span className="tool-list-footer"><span>{tool.method} · {tool.timeout_seconds} 秒</span><span className={tool.enabled ? 'tool-enabled-text' : ''}>{tool.enabled ? '已启用' : '已禁用'}</span></span>
         </button>
       </li>)}</ul>}
     </div>

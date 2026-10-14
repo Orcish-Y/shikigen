@@ -10,9 +10,9 @@ export function ToolSummaryCard({tool, initial, dirty}: {tool:HttpToolDefinition
         {tool && <span className={`tool-meta-tag ${tool.enabled ? 'enabled' : ''}`}>{tool.enabled ? '已启用' : '已禁用'}</span>}
         {dirty && <span className="tool-meta-tag unsaved">未保存修改</span>}
       </div>
-      <p>{tool?.description || '按保存的请求地址发起 GET 请求，并查看完整的真实响应。'}</p>
-      <div className="tool-summary-tags"><span className="tool-meta-tag">HTTP 请求</span><span className="tool-meta-tag">GET</span>
-        <span className="tool-meta-tag">无认证</span><span className="tool-meta-tag">超时 {initial.timeout_seconds} 秒</span></div>
+      <p>{tool?.description || '按保存的配置发起 HTTP 请求，并查看完整的真实响应。'}</p>
+      <div className="tool-summary-tags"><span className="tool-meta-tag">HTTP 请求</span><span className="tool-meta-tag">{tool?.method ?? initial.method}</span>
+        {initial.input_schema.properties?.body && <span className="tool-meta-tag">JSON 请求体</span>}<span className="tool-meta-tag">超时 {initial.timeout_seconds} 秒</span></div>
       {tool && <div className="tool-summary-id"><span>ID</span><code>{tool.id}</code></div>}
     </div>
     {tool && <dl className="tool-system-fields"><dt>创建时间</dt><dd><time dateTime={tool.created_at} title={tool.created_at}>{new Date(tool.created_at).toLocaleString()}</time></dd>
