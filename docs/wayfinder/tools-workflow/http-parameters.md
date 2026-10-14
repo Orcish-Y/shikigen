@@ -24,6 +24,6 @@ HTTP 定义支持 GET、POST、PUT、PATCH、DELETE、HEAD、OPTIONS。`headers`
 
 测试参数由真实 rjsf 6.11.0 渲染；AJV 8.20.0 对两种方言使用独立实例，关闭 format、类型转换、默认注入和字段移除。初始输入为空；布尔和枚举保留未提供状态，minItems 不填占位。日期时间等 format 控件直接保留字符串，超范围数字明确拒绝，不因序列化变成 null。表单与 JSON 共用一个 inputs，保存同一工具、更新 schema 和切换模式保留输入；复杂结构或原输入不符合当前类型/枚举时提供 JSON 入口并说明原因。JSON 模式保留后端校验诊断，语法错误时阻止测试。
 
-验证入口：`tests/test_tool_library_api.py` 通过公开 API 与本地 HTTP 服务检查真实请求；`frontend/tests/tool-management-dom.test.mjs` 操作真实 rjsf；`frontend/src-tauri/tests/tool_library_acceptance.py` 检查真实 WebView、嵌套输入、模式切换、schema 更新、POST 请求、主题和桌面/窄屏布局。工具测试仍使用已保存配置；草稿测试和取消由后续 ticket 实现。
+验证入口：`tests/test_tool_library_api.py` 通过公开 API 与本地 HTTP 服务检查真实请求；`frontend/tests/tool-management-dom.test.mjs` 操作真实 rjsf；`frontend/src-tauri/tests/tool_library_acceptance.py` 检查真实 WebView、嵌套输入、模式切换、schema 更新、POST 请求、主题和桌面/窄屏布局。[Ticket 03](tool-edit-drafts.md) 已将页面测试接入当前草稿；取消由后续 ticket 实现。
 
 本票验证：后端全量 369 项（1 项跳过），审查修正后的工具 API 21 项；前端全量 311 项，最后的工具表单聚焦回归 16 项；Tauri 页面 2 项、Ruff、ty、TypeScript 和生产构建通过。前端完整回归以两个测试进程运行，避免原生验收同时启动时触发既有 Vite 端口测试的 20 秒时限。规范与规格审查各发现两项 P2，均修复并复核关闭。

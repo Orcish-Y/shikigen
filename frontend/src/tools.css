@@ -125,6 +125,12 @@
 .tool-test-facts dt { color: var(--muted); }
 .tool-test-facts dd { color: var(--secondary); overflow-wrap: anywhere; }
 .tool-recent-test .tool-muted { margin-bottom: 0; }
+.tool-kind-filter { width: 100%; margin-top: 8px; }
+.tool-list-source, .tool-list-test { font-size: 10px; color: var(--muted); overflow-wrap: anywhere; }
+.tool-list-source { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tool-system-fields code { display: block; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+.tool-confirmation { padding: 16px 0; font-size: 13px; line-height: 1.7; }
+.tool-confirmation > p, .tool-confirmation > code { display: block; margin-bottom: 12px; overflow-wrap: anywhere; }
 .tool-detail-empty { min-height: 340px; display: flex; align-items: center; justify-content: center; flex-direction: column; text-align: center; padding: 32px 16px; }
 .tool-detail-empty h1 { font-size: 18px; font-weight: 500; margin: 20px 0 8px; }
 .tool-detail-empty p { font-size: 13px; line-height: 1.8; color: var(--muted); }
@@ -140,7 +146,7 @@
   .tool-toolbar-actions button:first-child { display: none; }
 }
 @media (max-width: 767px) {
-  .tool-registry { grid-template-columns: minmax(0, 1fr); grid-template-rows: 180px minmax(0, 1fr); }
+  .tool-registry { grid-template-columns: minmax(0, 1fr); grid-template-rows: 230px minmax(0, 1fr); }
   .tool-library-sidebar { border-right: 0; border-bottom: 1px solid var(--border); }
   .tool-library-heading { padding: 8px 12px; }
   .tool-sidebar-title { margin-bottom: 6px; }

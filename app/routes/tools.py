@@ -90,10 +90,10 @@ async def create_tool(payload: dict, request: Request):
   try:
     # Preserve omitted-kind creates from the first HTTP API slice at its boundary.
     definition = {"kind": "http", **payload}
-    tool, version = await request.app.state.runtime.lifecycle.accept(
+    tool, _ = await request.app.state.runtime.lifecycle.accept(
       request.app.state.runtime.tools.save_tool(definition)
     )
-    return {"data": tool, "version": version}
+    return {"data": {"id": tool.id}}
   except ToolLibraryError as error:
     fail(error)
 
@@ -104,15 +104,31 @@ class ToolUpdate(BaseModel):
   version: str
 
 
-@router.put("/{tool_id}")
+class ToolDelete(BaseModel):
+  model_config = ConfigDict(extra="forbid", strict=True)
+  version: str
+
+
+@router.delete("/{tool_id}", status_code=204)
+async def delete_tool(tool_id: str, payload: ToolDelete, request: Request):
+  try:
+    await request.app.state.runtime.lifecycle.accept(
+      request.app.state.runtime.tools.delete_tool(tool_id, payload.version)
+    )
+    return Response(status_code=204)
+  except ToolLibraryError as error:
+    fail(error)
+
+
+@router.put("/{tool_id}", status_code=204)
 async def update_tool(tool_id: str, payload: ToolUpdate, request: Request):
   try:
-    tool, version = await request.app.state.runtime.lifecycle.accept(
+    await request.app.state.runtime.lifecycle.accept(
       request.app.state.runtime.tools.save_tool(
         payload.definition, tool_id=tool_id, version=payload.version
       )
     )
-    return {"data": tool, "version": version}
+    return Response(status_code=204)
   except ToolLibraryError as error:
     fail(error)
 
@@ -120,6 +136,24 @@ async def update_tool(tool_id: str, payload: ToolUpdate, request: Request):
 class ToolInputs(BaseModel):
   model_config = ConfigDict(extra="forbid", strict=True, allow_inf_nan=False)
   inputs: dict[str, JsonValue]
+
+
+class ToolDraftTest(ToolInputs):
+  definition: dict
+  tool_id: str | None = None
+
+
+@router.post("/tests", status_code=202)
+async def start_draft_test(payload: ToolDraftTest, request: Request):
+  try:
+    snapshot = await request.app.state.runtime.lifecycle.accept(
+      request.app.state.runtime.tools.start_draft_test(
+        payload.definition, payload.inputs, payload.tool_id
+      )
+    )
+    return {"data": snapshot}
+  except ToolLibraryError as error:
+    fail(error)
 
 
 @router.post("/{tool_id}/execute")

@@ -21,9 +21,10 @@ function DefinitionSections({properties}: ObjectFieldTemplateProps) {
   </div>;
 }
 
-export function ToolDefinitionForm({schema, initial, disabled = false, onSave, onEdited, formId, externalSubmit = false, suggestName, validateName}: {
+export function ToolDefinitionForm({schema, initial, disabled = false, onSave, onEdited, onInvalid, formId, externalSubmit = false, suggestName, validateName}: {
   schema: RJSFSchema; initial: Record<string, unknown>; disabled?: boolean;
-  onSave: (value: Record<string, unknown>) => void; onEdited?: () => void;
+  onSave: (value: Record<string, unknown>) => void; onEdited?: (value:Record<string,unknown>) => void;
+  onInvalid?:(message:string) => void;
   formId?:string; externalSubmit?:boolean;
   suggestName?: (displayName: string) => string;
   validateName?: (name: string, signal: AbortSignal) => Promise<ToolNameValidation>;
@@ -63,14 +64,15 @@ export function ToolDefinitionForm({schema, initial, disabled = false, onSave, o
       const next = {...event.formData};
       if (schema.properties?.parameters && JSON.stringify(next.input_schema) !== JSON.stringify(value.input_schema)
         && next.input_schema && typeof next.input_schema === 'object' && !Array.isArray(next.input_schema)
-        && Array.isArray(next.parameters))
+        && Array.isArray(next.parameters) && next.parameters.every(item => item && typeof item === 'object'
+          && ['path','query','headers'].includes(item.location) && typeof item.input_name === 'string' && typeof item.name === 'string'))
         next.parameters=syncHttpMappings(next.input_schema as RJSFSchema,next.parameters as HttpParameterMapping[]);
       if (next.name !== value.name) manualName.current = true;
       if (suggestName && !manualName.current && next.display_name !== value.display_name)
         next.name = suggestName(typeof next.display_name === 'string' ? next.display_name : '');
       if (next.name !== value.name) setNameCheck(null);
-      setValue(next); onEdited?.();
-    }} onSubmit={event => onSave({...event.formData})}>
+      setValue(next); onEdited?.(next);
+    }} onError={errors => onInvalid?.(errors.map(error => error.stack).join('；'))} onSubmit={event => onSave({...event.formData})}>
     {!externalSubmit && <Button type="submit" disabled={disabled}>保存工具</Button>}
   </SchemaForm>;
 }

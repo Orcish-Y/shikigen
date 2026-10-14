@@ -54,6 +54,183 @@ class ToolLibraryAcceptance(WindowAcceptance):
     self.evaluate(f"document.getElementById({json.dumps(field)}).select()")
     self.fill(field, value)
 
+  def test_confirmed_create_with_lost_detail_response_retries_only_read(self):
+    host = self.launch()
+    self.connect()
+    ready = self.state("ready")
+    base = ready["base_url"]
+    self.call("Page.enable")
+    self.call(
+      "Page.addScriptToEvaluateOnNewDocument",
+      source=r"""(() => {
+      const originalFetch=window.fetch;
+      let detailResponseLost=false;
+      window.toolCreateRequests=0;
+      window.fetch=async (...args) => {
+        const url=String(args[0]);
+        const method=args[1]?.method ?? 'GET';
+        if (method === 'POST' && url.endsWith('/api/tools')) {
+          window.toolCreateRequests++;
+        }
+        const response=await originalFetch(...args);
+        if (!detailResponseLost && method === 'GET'
+          && /\/api\/tools\/[0-9a-f-]+$/.test(url)) {
+          detailResponseLost=true;
+          throw new TypeError('Injected loss of saved detail response');
+        }
+        return response;
+      };
+    })()""",
+    )
+    self.call("Page.reload")
+    wait_until(
+      lambda: (
+        self.evaluate("window.toolCreateRequests === 0")
+        and "新建会话开始对话" in self.body()
+      )
+    )
+    self.evaluate("document.querySelector('[aria-label=工具]').click()")
+    wait_until(lambda: "工具库为空" in self.body())
+    self.click("接入工具")
+    wait_until(
+      lambda: self.evaluate("Boolean(document.getElementById('tool-config_url'))")
+    )
+    self.fill("tool-config_display_name", "已保存详情待重读")
+    self.fill("tool-config_url", "http://localhost/example")
+    self.click("保存工具")
+    wait_until(lambda: "已保存，详情读取失败" in self.body())
+    saved = self.client.get(base + "/api/tools").json()["data"]
+    self.assertEqual(len(saved), 1)
+    self.assertNotIn("保存结果待确认", self.body())
+    self.assertTrue(
+      self.evaluate("document.querySelector('button[form=tool-definition]').disabled")
+    )
+    self.assertEqual(self.evaluate("window.toolCreateRequests"), 1)
+    self.screenshot()
+    self.click("重新读取工具详情")
+    wait_until(
+      lambda: (
+        not self.evaluate(
+          "document.querySelector('button[form=tool-definition]').disabled"
+        )
+      )
+    )
+    self.assertIn(saved[0]["id"], self.body())
+    self.assertNotIn("详情读取失败", self.body())
+    self.assertEqual(self.evaluate("window.toolCreateRequests"), 1)
+    self.assertEqual(len(self.client.get(base + "/api/tools").json()["data"]), 1)
+    self.record(
+      tool_id=saved[0]["id"], creates=self.evaluate("window.toolCreateRequests")
+    )
+    self.quit(host)
+    self.assertEqual(host.wait(timeout=10), 0)
+
+  def test_draft_navigation_disable_rename_and_delete(self):
+    requests = []
+
+    class Handler(BaseHTTPRequestHandler):
+      def do_GET(self):
+        requests.append(self.path)
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps({"path": self.path}).encode())
+
+      def log_message(self, format, *args):
+        pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    Thread(target=server.serve_forever, daemon=True).start()
+    self.addCleanup(server.server_close)
+    self.addCleanup(server.shutdown)
+    host = self.launch()
+    self.connect()
+    ready = self.state("ready")
+    base = ready["base_url"]
+    wait_until(lambda: "新建会话开始对话" in self.body())
+    self.evaluate("document.querySelector('[aria-label=工具]').click()")
+    wait_until(lambda: "工具库为空" in self.body())
+    self.click("接入工具")
+    wait_until(
+      lambda: self.evaluate("Boolean(document.getElementById('tool-config_url'))")
+    )
+    self.fill("tool-config_display_name", "生命周期工具")
+    self.fill("tool-config_url", f"http://127.0.0.1:{server.server_port}/draft")
+    self.click("执行测试")
+    wait_until(lambda: "测试成功" in self.body())
+    self.assertEqual(self.client.get(base + "/api/tools").json()["data"], [])
+    self.assertEqual(requests, ["/draft"])
+    self.replace("tool-config_url", f"http://127.0.0.1:{server.server_port}/changed")
+    wait_until(lambda: "修改前的测试结果" in self.body())
+    self.evaluate("document.querySelector('[aria-label=\"会话与对话\"]').click()")
+    wait_until(lambda: "未保存的工具修改" in self.body())
+    self.click("继续编辑")
+    self.assertEqual(self.client.get(base + "/api/tools").json()["data"], [])
+    self.evaluate("document.querySelector('[aria-label=\"会话与对话\"]').click()")
+    wait_until(lambda: "未保存的工具修改" in self.body())
+    self.click("保存并离开")
+    wait_until(
+      lambda: "新建会话开始对话" in self.body() and "工具配置" not in self.body()
+    )
+    saved = self.client.get(base + "/api/tools").json()["data"][0]
+    tool_id = saved["id"]
+    self.assertTrue(saved["url"].endswith("/changed"))
+    self.evaluate("document.querySelector('[aria-label=工具]').click()")
+    wait_until(lambda: "未测试" in self.body())
+    self.evaluate("document.querySelector('.tool-library-list button').click()")
+    wait_until(
+      lambda: self.evaluate("Boolean(document.getElementById('tool-config_enabled'))")
+    )
+    self.replace("tool-config_display_name", "改名后工具")
+    self.replace("tool-config_name", "renamed_lifecycle")
+    self.evaluate("""(() => {
+      const field=document.getElementById('tool-config_enabled');
+      field.value='false';field.dispatchEvent(new Event('change',{bubbles:true}));
+    })()""")
+    self.click("保存工具")
+    wait_until(lambda: "工具已保存" in self.body())
+    saved = self.client.get(base + "/api/tools").json()["data"][0]
+    self.assertEqual(saved["id"], tool_id)
+    self.assertEqual(saved["name"], "renamed_lifecycle")
+    self.assertFalse(saved["enabled"])
+    rejected = self.client.post(
+      base + f"/api/tools/{tool_id}/execute", json={"inputs": {}}
+    ).json()["data"]
+    self.assertEqual(rejected["error"]["code"], "disabled")
+    self.click("执行测试")
+    wait_until(lambda: "测试成功" in self.body())
+    self.assertEqual(requests, ["/draft", "/changed"])
+    for width, height in ((1440, 900), (390, 844)):
+      self.call(
+        "Emulation.setDeviceMetricsOverride",
+        width=width,
+        height=height,
+        deviceScaleFactor=1,
+        mobile=False,
+      )
+      wait_until(lambda width=width: self.evaluate("window.innerWidth") == width)
+      self.assertFalse(
+        self.evaluate("document.documentElement.scrollWidth > window.innerWidth")
+      )
+      screenshot = self.call("Page.captureScreenshot", format="png")["data"]
+      (self.artifacts / f"draft-lifecycle-{width}.png").write_bytes(
+        base64.b64decode(screenshot)
+      )
+    self.call("Emulation.clearDeviceMetricsOverride")
+    self.evaluate("document.querySelector('[aria-label=\"删除工具\"]').click()")
+    wait_until(lambda: "未来引用此 ID" in self.body())
+    self.assertEqual(len(self.client.get(base + "/api/tools").json()["data"]), 1)
+    self.click("确认删除")
+    wait_until(lambda: "工具已删除" in self.body())
+    self.assertEqual(self.client.get(base + "/api/tools").json()["data"], [])
+    missing = self.client.post(
+      base + f"/api/tools/{tool_id}/execute", json={"inputs": {}}
+    ).json()["data"]
+    self.assertEqual(missing["error"]["code"], "not_found")
+    self.record(tool_id=tool_id, requests=requests)
+    self.quit(host)
+    self.assertEqual(host.wait(timeout=10), 0)
+
   def test_nested_parameters_modes_dialect_and_real_post(self):
     requests = []
 
@@ -181,9 +358,7 @@ class ToolLibraryAcceptance(WindowAcceptance):
     )
     self.replace("tool-input-json", '{"body":')
     self.assertTrue(
-      self.evaluate(
-        "document.querySelector('[aria-label=\"测试已保存工具\"]').disabled"
-      )
+      self.evaluate("document.querySelector('[aria-label=\"测试当前草稿\"]').disabled")
     )
     self.assertIn("JSON 无效", self.body())
     self.replace("tool-input-json", json.dumps(inputs))

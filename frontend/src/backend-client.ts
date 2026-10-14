@@ -1,7 +1,7 @@
 import type { BackendSnapshot } from "./backend-state";
 import { RunProtocolError, validStatus, validateEvent, validateFrame, validateMessage, validateRun } from './run-protocol.ts';
 import type { ApprovalResponses } from './approval-decisions.ts';
-import type { HttpToolDefinition, ToolDraft, ToolLibraryRead, ToolNameValidation, ToolRead, ToolTest } from './tool-library';
+import type { AnyToolDefinition, ToolDraft, ToolLibraryRead, ToolNameValidation, ToolRead, ToolTest } from './tool-library';
 import type { RJSFSchema } from '@rjsf/utils';
 
 export interface Thread {
@@ -175,17 +175,34 @@ export class BackendSession {
     return this.json<{data:ToolNameValidation}>(`/api/tools/validate-name?${query}`, {cache:'no-store'}, signal);
   }
   getTool(id: string, signal?: AbortSignal) {
-    return this.json<ToolRead<HttpToolDefinition>>(`/api/tools/${encodeURIComponent(id)}`, {cache:'no-store'}, signal);
+    return this.json<ToolRead<AnyToolDefinition>>(`/api/tools/${encodeURIComponent(id)}`, {cache:'no-store'}, signal);
   }
-  saveTool(draft: ToolDraft, saved?: {id:string; version:string}) {
-    return this.json<ToolRead<HttpToolDefinition>>(saved ? `/api/tools/${encodeURIComponent(saved.id)}` : '/api/tools', {
+  async saveTool(draft: ToolDraft, saved?: {id:string; version:string}):Promise<string> {
+    const init = {
       method:saved ? 'PUT' : 'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify(saved ? {definition:draft,version:saved.version} : draft),
-    });
+    };
+    if (saved) {
+      await this.request(`/api/tools/${encodeURIComponent(saved.id)}`,init);
+      return saved.id;
+    }
+    const {data} = await this.json<{data:{id:string}}>('/api/tools',init);
+    if (!data || typeof data.id !== 'string' || !data.id) throw new Error('创建响应缺少工具 ID');
+    return data.id;
   }
   startToolTest(id: string, inputs: Record<string, unknown>) {
     return this.json<{data:ToolTest}>(`/api/tools/${encodeURIComponent(id)}/tests`, {
       method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({inputs}),
+    });
+  }
+  startToolDraftTest(definition:ToolDraft, inputs:Record<string,unknown>, toolId?:string) {
+    return this.json<{data:ToolTest}>('/api/tools/tests', {
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({definition,inputs,tool_id:toolId}),
+    });
+  }
+  async deleteTool(id:string, version:string):Promise<void> {
+    await this.request(`/api/tools/${encodeURIComponent(id)}`, {
+      method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({version}),
     });
   }
   getToolTest(id: string, signal?: AbortSignal) {

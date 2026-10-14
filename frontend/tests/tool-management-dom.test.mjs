@@ -13,6 +13,8 @@ browser.window.cancelAnimationFrame = clearTimeout;
 globalThis.requestAnimationFrame = browser.window.requestAnimationFrame;
 globalThis.cancelAnimationFrame = clearTimeout;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+browser.window.HTMLDialogElement.prototype.showModal = function () {this.setAttribute('open','');};
+browser.window.HTMLDialogElement.prototype.close = function () {this.removeAttribute('open');};
 const React = await import('react');
 const {render, cleanup, screen, waitFor, within, act, fireEvent} = await import('@testing-library/react');
 const {default:userEvent} = await import('@testing-library/user-event');
@@ -202,6 +204,237 @@ function toolSession(fetcher, id='tool-session') {
 }
 const response = data => new Response(JSON.stringify(data), {headers:{'Content-Type':'application/json'}});
 
+test('创建成功后详情读取失败明确已保存，重读恢复编辑且不重复创建', async () => {
+  const user=userEvent.setup({document:browser.window.document,delay:null});
+  const writes=[];let saved;let reads=0;
+  const session=toolSession(async (url,init) => {
+    if (url.endsWith('/schema/http')) return response({data:schema});
+    if (url.includes('/validate-name?')) return response({data:{valid:true,code:null,message:null}});
+    if (init?.method === 'POST') {
+      writes.push(JSON.parse(init.body));
+      saved={...writes[0],id:'created-id',created_at:'2026-10-14T00:00:00Z',updated_at:'2026-10-14T00:00:00Z'};
+      return response({data:{id:saved.id}});
+    }
+    if (url.endsWith('/api/tools/created-id')) {
+      if (++reads <= 2) return new Response(JSON.stringify({detail:{code:'config_read',message:'暂时无法读取'}}),{status:503});
+      return response({data:saved,version:'new-version'});
+    }
+    return response({data:[],version:'version'});
+  });
+  render(React.createElement(ToolsWorkspace,{session,onView:() => {}}));
+  await waitFor(() => assert.equal(screen.getByRole('button',{name:'创建 HTTP 工具'}).disabled,false));
+  await user.click(screen.getByRole('button',{name:'创建 HTTP 工具'}));
+  await user.type(screen.getByLabelText(/页面名称/),'已提交');
+  await user.type(screen.getByLabelText(/请求地址/),'http://localhost/');
+  await user.click(screen.getByRole('button',{name:'保存工具'}));
+  await screen.findByText(/已保存，详情读取失败/);
+  assert.equal(screen.queryByText(/保存结果待确认/),null);
+  assert.equal(screen.getByLabelText(/页面名称/).value,'已提交');
+  assert.equal(screen.getByRole('button',{name:'保存工具'}).disabled,true);
+  await user.click(screen.getByRole('button',{name:'重新读取工具详情'}));
+  await screen.findByText(/已保存，详情读取失败/);
+  assert.equal(writes.length,1);
+  await user.click(screen.getByRole('button',{name:'重新读取工具详情'}));
+  await waitFor(() => assert.equal(screen.getByRole('button',{name:'保存工具'}).disabled,false));
+  assert.equal(screen.queryByRole('alert'),null);
+  assert.ok(screen.getByText('created-id'));
+  assert.equal(screen.getByRole('button',{name:'保存工具'}).disabled,false);
+  assert.equal(writes.length,1);
+});
+
+test('更新 204 后详情读取失败保留已保存状态，重读后完成离开并使用新版本', async () => {
+  const user=userEvent.setup({document:browser.window.document,delay:null});
+  let tool={...initial,kind:'http',method:'GET',headers:{},parameters:[],description:'',id:'updated-id',name:'updated_tool',display_name:'更新工具',url:'http://localhost/',created_at:'2026-10-14T00:00:00Z',updated_at:'2026-10-14T00:00:00Z'};
+  const writes=[];let reads=0;let version='old-version';
+  const session=toolSession(async (url,init) => {
+    if (url.endsWith('/schema/http')) return response({data:schema});
+    if (url.includes('/validate-name?')) return response({data:{valid:true,code:null,message:null}});
+    if (init?.method === 'PUT') {
+      writes.push(JSON.parse(init.body));tool={...tool,...writes.at(-1).definition};version=`version-${writes.length}`;
+      return new Response(null,{status:204});
+    }
+    if (url.endsWith('/api/tools/updated-id') && ++reads === 2) throw new TypeError('details temporarily unavailable');
+    return response({data:url.endsWith('/api/tools') ? [tool] : tool,version});
+  });
+  render(React.createElement(ToolsWorkspace,{session,onView:() => {}}));
+  await user.click(await screen.findByRole('button',{name:/更新工具.*updated_tool/}));
+  await user.type(screen.getByLabelText(/请求地址/),'changed');
+  await user.click(screen.getByRole('button',{name:'返回工具列表'}));
+  await user.click(screen.getByRole('button',{name:'保存并离开'}));
+  const dialog=await screen.findByRole('dialog',{name:'工具已保存'});
+  await within(dialog).findByText(/已保存，详情读取失败/);
+  assert.equal(writes.length,1);
+  assert.equal(within(dialog).getByRole('button',{name:'保存并离开'}).disabled,true);
+  assert.equal(screen.queryByText(/保存结果待确认/),null);
+  await user.click(within(dialog).getByRole('button',{name:'重新读取工具详情'}));
+  await waitFor(() => assert.equal(screen.queryByLabelText(/请求地址/),null));
+  await user.click(screen.getByRole('button',{name:/更新工具.*updated_tool/}));
+  await waitFor(() => assert.equal(screen.getByLabelText(/请求地址/).value,'http://localhost/changed'));
+  await user.type(screen.getByLabelText(/请求地址/),'-second');
+  await user.click(screen.getByRole('button',{name:'保存工具'}));
+  await screen.findByText('工具已保存');
+  assert.equal(writes.length,2);
+  assert.equal(writes[0].version,'old-version');
+  assert.equal(writes[1].version,'version-1');
+});
+
+test('未保存草稿可测试，修改后标记旧结果，离开保存失败保留草稿', async () => {
+  const user=userEvent.setup({document:browser.window.document,delay:null});
+  const writes=[];const tests=[];
+  const session=toolSession(async (url,init) => {
+    if (url.endsWith('/schema/http')) return response({data:schema});
+    if (url.includes('/validate-name?')) return response({data:{valid:true,code:null,message:null}});
+    if (url.endsWith('/api/tools/tests')) {
+      tests.push(JSON.parse(init.body));
+      return response({data:{test_id:'draft-test',tool_id:null,status:'success',created_at:'2026-10-14T00:00:00Z',result:{status:'success',data:0,error:null,duration_ms:1,details:{}}}});
+    }
+    if (init?.method === 'POST') {
+      writes.push(JSON.parse(init.body));
+      return new Response(JSON.stringify({detail:{code:'config_write',message:'磁盘不可写'}}),{status:503});
+    }
+    return response({data:[],version:'version'});
+  });
+  render(React.createElement(ToolsWorkspace,{session,onView:() => {}}));
+  await waitFor(() => assert.equal(screen.getByRole('button',{name:'创建 HTTP 工具'}).disabled,false));
+  await user.click(screen.getByRole('button',{name:'创建 HTTP 工具'}));
+  await user.type(screen.getByLabelText(/页面名称/),'草稿');
+  await user.type(screen.getByLabelText(/请求地址/),'http://localhost/draft');
+  await user.click(screen.getByRole('button',{name:'测试当前草稿'}));
+  await screen.findAllByText('测试成功');
+  assert.equal(tests[0].definition.url,'http://localhost/draft');
+  assert.deepEqual(tests[0].inputs,{});
+  assert.equal(writes.length,0);
+  await user.type(screen.getByLabelText(/请求地址/),'-changed');
+  assert.ok(screen.getByText('修改前的测试结果'));
+  await user.click(screen.getByRole('button',{name:'返回工具列表'}));
+  const dialog=screen.getByRole('dialog',{name:'未保存的工具修改'});
+  await user.click(within(dialog).getByRole('button',{name:'保存并离开'}));
+  await within(dialog).findByText(/保存失败/);
+  assert.equal(screen.getByLabelText(/请求地址/).value,'http://localhost/draft-changed');
+  await user.click(within(dialog).getByRole('button',{name:'继续编辑'}));
+  assert.equal(screen.queryByRole('dialog'),null);
+  await user.click(screen.getByRole('button',{name:'返回工具列表'}));
+  await user.click(screen.getByRole('button',{name:'放弃修改'}));
+  assert.equal(screen.queryByLabelText(/请求地址/),null);
+});
+
+test('离开保存成功后才切换工具，未保存内容不会进入浏览器存储', async () => {
+  const user=userEvent.setup({document:browser.window.document,delay:null});
+  const a={...initial,kind:'http',method:'GET',headers:{},parameters:[],description:'',id:'a',display_name:'工具甲',name:'tool_a',url:'http://localhost/a',created_at:'2026-10-14T00:00:00Z',updated_at:'2026-10-14T00:00:00Z'};
+  const b={...a,id:'b',name:'tool_b',display_name:'工具乙'};
+  let resolveSave;let update;let currentA=a;let version='read-version';
+  const storage=browser.window.localStorage.length;
+  const session=toolSession(async (url,init) => {
+    if (url.endsWith('/schema/http')) return response({data:schema});
+    if (url.includes('/validate-name?')) return response({data:{valid:true,code:null,message:null}});
+    if (init?.method === 'PUT') {update=JSON.parse(init.body);return new Promise(resolve => {resolveSave=resolve;});}
+    return response({data:url.endsWith('/api/tools') ? [currentA,b] : url.endsWith('/a') ? currentA : b,version});
+  });
+  render(React.createElement(ToolsWorkspace,{session,onView:() => {}}));
+  await user.click(await screen.findByRole('button',{name:/工具甲.*tool_a/}));
+  await user.type(screen.getByLabelText(/页面名称/),'修改');
+  await user.click(screen.getByRole('button',{name:/工具乙.*tool_b/}));
+  await user.click(screen.getByRole('button',{name:'保存并离开'}));
+  assert.equal(update.version,'read-version');
+  assert.equal(screen.getByLabelText(/页面名称/).value,'工具甲修改');
+  assert.equal(screen.getByRole('button',{name:'放弃修改'}).disabled,true);
+  await act(async () => {currentA={...a,...update.definition};version='new-version';resolveSave(new Response(null,{status:204}));});
+  await waitFor(() => assert.equal(screen.getByLabelText(/页面名称/).value,'工具乙'));
+  assert.equal(screen.queryByRole('dialog'),null);
+  assert.equal(browser.window.localStorage.length,storage);
+});
+
+test('工具删除要求确认和读取版本，失败保留编辑，成功移除列表及详情', async () => {
+  const user=userEvent.setup({document:browser.window.document,delay:null});
+  const tool={...initial,kind:'http',method:'GET',headers:{},parameters:[],description:'',id:'delete-id',display_name:'待删工具',name:'delete_tool',url:'http://localhost/',created_at:'2026-10-14T00:00:00Z',updated_at:'2026-10-14T00:00:00Z'};
+  const deletes=[];
+  const session=toolSession(async (url,init) => {
+    if (url.endsWith('/schema/http')) return response({data:schema});
+    if (url.includes('/validate-name?')) return response({data:{valid:true,code:null,message:null}});
+    if (init?.method === 'DELETE') {
+      deletes.push(JSON.parse(init.body));
+      if (deletes.length === 1) return new Response(JSON.stringify({detail:{code:'config_write',message:'不可写'}}),{status:503});
+      return new Response(null,{status:204});
+    }
+    return response({data:url.endsWith('/api/tools') ? [tool] : tool,version:'read-version'});
+  });
+  render(React.createElement(ToolsWorkspace,{session,onView:() => {}}));
+  await user.click(await screen.findByRole('button',{name:/待删工具.*delete_tool/}));
+  await user.click(screen.getByRole('button',{name:'删除工具'}));
+  assert.equal(deletes.length,0);
+  assert.ok(screen.getByText(/未来引用此 ID.*工具不存在/));
+  await user.click(screen.getByRole('button',{name:'确认删除'}));
+  await screen.findByText(/删除失败/);
+  assert.equal(screen.getByLabelText(/页面名称/).value,'待删工具');
+  await user.click(screen.getByRole('button',{name:'确认删除'}));
+  await screen.findByText('工具已删除');
+  assert.deepEqual(deletes,[{version:'read-version'},{version:'read-version'}]);
+  assert.equal(screen.queryByLabelText(/页面名称/),null);
+  assert.equal(screen.queryByRole('button',{name:/待删工具.*delete_tool/}),null);
+  assert.equal(screen.getByRole('button',{name:'创建 HTTP 工具'}).disabled,false);
+});
+
+test('保存相同草稿保留有效测试，修改保存后列表和详情标记旧结果', async () => {
+  const user=userEvent.setup({document:browser.window.document,delay:null});
+  let tool={...initial,kind:'http',method:'GET',headers:{},parameters:[{location:'query',input_name:'q',name:'q'}],input_schema:{type:'object',properties:{query:{type:'object',properties:{q:{type:'string'}}}}},description:'',id:'tested',display_name:'测试记录工具',name:'tested_tool',url:'http://localhost/before',created_at:'2026-10-14T00:00:00Z',updated_at:'2026-10-14T00:00:00Z'};
+  let version='version';
+  const session=toolSession(async (url,init) => {
+    if (url.endsWith('/schema/http')) return response({data:schema});
+    if (url.includes('/validate-name?')) return response({data:{valid:true,code:null,message:null}});
+    if (url.endsWith('/api/tools/tests')) return response({data:{test_id:'recent-test',tool_id:tool.id,status:'success',created_at:tool.created_at,result:{status:'success',data:0,error:null,duration_ms:1,details:{}}}});
+    if (init?.method === 'PUT') {
+      const definition=JSON.parse(init.body).definition;
+      tool={...tool,...definition,parameters:definition.parameters.map(mapping => ({...mapping,style:null,explode:null}))};version='saved-version';return new Response(null,{status:204});
+    }
+    return response({data:url.endsWith('/api/tools') ? [tool] : tool,version});
+  });
+  render(React.createElement(ToolsWorkspace,{session,onView:() => {}}));
+  await user.click(await screen.findByRole('button',{name:/测试记录工具.*tested_tool/}));
+  await user.click(screen.getByRole('button',{name:'测试当前草稿'}));
+  await screen.findAllByText('测试成功');
+  await user.click(screen.getByRole('button',{name:'保存工具'}));
+  await screen.findByText('工具已保存');
+  assert.equal(screen.queryByText('修改前的测试结果'),null);
+  await user.type(screen.getByLabelText(/请求地址/),'-after');
+  await user.click(screen.getByRole('button',{name:'保存工具'}));
+  await screen.findByText('工具已保存');
+  const sidebar=screen.getByRole('complementary',{name:'工具库'});
+  assert.ok(within(sidebar).getByText('修改前的测试结果'));
+  await user.click(screen.getByRole('button',{name:'返回工具列表'}));
+  await user.click(within(sidebar).getByRole('button',{name:/测试记录工具.*tested_tool/}));
+  await waitFor(() => assert.ok(within(screen.getByRole('region',{name:'快速测试调试'})).getByText('修改前的测试结果')));
+});
+
+test('无效映射 JSON 保留原文并阻止测试，离开校验失败后仍可继续编辑', async () => {
+  const user=userEvent.setup({document:browser.window.document,delay:null});
+  const management={...schema,properties:{...schema.properties,parameters:{
+    type:'array',title:'请求映射',items:{type:'object',required:['location','input_name','name'],
+      properties:{location:{type:'string'},input_name:{type:'string'},name:{type:'string'}}},
+  }}};
+  const session=toolSession(async (url,init) => {
+    assert.ok(!init?.method || init.method === 'GET','invalid draft must not start tests or save');
+    if (url.endsWith('/schema/http')) return response({data:management});
+    if (url.includes('/validate-name?')) return response({data:{valid:true,code:null,message:null}});
+    return response({data:[],version:'version'});
+  });
+  render(React.createElement(ToolsWorkspace,{session,onView:() => {}}));
+  await waitFor(() => assert.equal(screen.getByRole('button',{name:'创建 HTTP 工具'}).disabled,false));
+  await user.click(screen.getByRole('button',{name:'创建 HTTP 工具'}));
+  await user.type(screen.getByLabelText(/页面名称/),'无效草稿');
+  await user.type(screen.getByLabelText(/请求地址/),'http://localhost/');
+  fireEvent.change(screen.getByLabelText('请求映射'),{target:{value:'[null]'}});
+  assert.deepEqual(JSON.parse(screen.getByLabelText('请求映射').value),[null]);
+  assert.equal(screen.getByRole('button',{name:'测试当前草稿'}).disabled,true);
+  await user.type(screen.getByLabelText('新参数名称'),'q');
+  await user.click(screen.getByRole('button',{name:'添加参数'}));
+  assert.deepEqual(JSON.parse(screen.getByLabelText('请求映射').value),[null]);
+  await user.click(screen.getByRole('button',{name:'返回工具列表'}));
+  await user.click(screen.getByRole('button',{name:'保存并离开'}));
+  await screen.findByText(/保存前校验失败/);
+  await user.click(screen.getByRole('button',{name:'继续编辑'}));
+  assert.deepEqual(JSON.parse(screen.getByLabelText('请求映射').value),[null]);
+});
+
 test('保存响应丢失后锁定重复创建，保留草稿并通过重读核实提交', async () => {
   const user = userEvent.setup({document:browser.window.document,delay:null});
   let saved = null;
@@ -272,7 +505,7 @@ test('旧宿主手动查询的迟到错误不会覆盖新宿主页面', async ()
   },'old-query');
   const workspace = render(React.createElement(ToolsWorkspace,{session:oldSession,onView:() => {}}));
   await user.click(await screen.findByRole('button',{name:/旧宿主工具/}));
-  await user.click(await screen.findByRole('button',{name:'测试已保存工具'}));
+  await user.click(await screen.findByRole('button',{name:'测试当前草稿'}));
   await user.click(await screen.findByRole('button',{name:'重新查询测试'}));
   const newSession = toolSession(async url => response(url.endsWith('/schema/http') ? {data:schema} : {data:[],version:'new-version'}),'new-query');
   workspace.rerender(React.createElement(ToolsWorkspace,{session:newSession,onView:() => {}}));
@@ -304,6 +537,24 @@ test('工具侧栏在编辑时保留，并按真实工具名称和启用状态�
   assert.equal(within(sidebar).queryByRole('button',{name:/天气查询/}),null);
   assert.ok(within(sidebar).getByRole('button',{name:/库存查询/}));
   assert.equal(screen.queryByText(/HITL|Rust Sandbox|1,429|近 24 小时调用历史/),null);
+});
+
+test('工具列表按类型筛选，展示实际来源与未测试，不把启用视为在线', async () => {
+  const user=userEvent.setup({document:browser.window.document,delay:null});
+  const http={...initial,kind:'http',method:'GET',description:'读取天气',id:'http',display_name:'HTTP 查询',name:'http_query',url:'http://localhost/weather',created_at:'2026-10-14T00:00:00Z',updated_at:'2026-10-14T00:00:00Z'};
+  const python={...http,id:'python',kind:'python',display_name:'Python 计算',name:'python_calc',code_path:'tools/calc.py'};
+  const mcp={...http,id:'mcp',kind:'mcp',display_name:'MCP 搜索',name:'mcp_search',server_id:'local-server',remote_name:'search'};
+  const session=toolSession(async url => response(url.endsWith('/schema/http') ? {data:schema} : {data:[http,python,mcp],version:'version'}));
+  render(React.createElement(ToolsWorkspace,{session,onView:() => {}}));
+  const sidebar=await screen.findByRole('complementary',{name:'工具库'});
+  await within(sidebar).findByRole('button',{name:/HTTP 查询/});
+  assert.equal(within(sidebar).getAllByText('未测试').length,3);
+  await user.selectOptions(screen.getByLabelText('工具类型筛选'),'python');
+  assert.ok(within(sidebar).getByRole('button',{name:/Python 计算.*tools\/calc.py/}));
+  assert.equal(within(sidebar).queryByRole('button',{name:/HTTP 查询/}),null);
+  await user.selectOptions(screen.getByLabelText('工具类型筛选'),'mcp');
+  assert.ok(within(sidebar).getByRole('button',{name:/MCP 搜索.*local-server \/ search/}));
+  assert.equal(within(sidebar).queryByText(/在线/),null);
 });
 
 test('新建工具在前端建议名称并避开列表和内置名称，手动修改后不再跟随页面名称', async () => {

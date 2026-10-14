@@ -22,8 +22,8 @@ function advancedReason(schema:RJSFSchema):string | null {
   return needsJson(schema) ? '此结构含可空类型、引用或复杂字段，请使用 JSON 参数保留完整结构。' : null;
 }
 
-export function ToolInputForm({schema, disabled, onTest}: {
-  schema:RJSFSchema; disabled:boolean; onTest:(inputs:Record<string, unknown>) => void;
+export function ToolInputForm({schema, disabled, onTest, draft=false}: {
+  schema:RJSFSchema; disabled:boolean; onTest:(inputs:Record<string, unknown>) => void; draft?:boolean;
 }) {
   const [inputs, setInputs] = useState<Record<string, unknown>>({});
   const [raw,setRaw] = useState('{}');
@@ -37,7 +37,7 @@ export function ToolInputForm({schema, disabled, onTest}: {
       reason='原输入与当前类型、枚举或常量不匹配；保留原输入，使用 JSON 参数并查看后端诊断。';
   }
   const advanced = jsonMode || Boolean(reason);
-  const actions = <div className="tool-input-actions"><span>使用已保存的配置</span><Button size="sm" type="submit" aria-label="测试已保存工具" disabled={disabled || Boolean(error)}><Play size={14}/>执行测试</Button></div>;
+  const actions = <div className="tool-input-actions"><span>{draft ? '使用当前草稿 · 测试不会保存' : '使用已保存的配置'}</span><Button size="sm" type="submit" aria-label={draft ? '测试当前草稿' : '测试已保存工具'} disabled={disabled || Boolean(error)}><Play size={14}/>执行测试</Button></div>;
   return <div className="tool-input-editor">
     <div className="tool-editor-modes" role="group" aria-label="测试参数模式">
       <Button size="sm" variant="outline" disabled={disabled || Boolean(error) || Boolean(reason)} aria-pressed={!advanced} onClick={() => setJsonMode(false)}>参数表单</Button>

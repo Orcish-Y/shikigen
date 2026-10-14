@@ -6,6 +6,8 @@
 
 工具页的 HTTP 参数映射、输入结构编辑、动态表单与 JSON 模式及验证入口见 [HTTP 参数实现](../docs/wayfinder/tools-workflow/http-parameters.md)。
 
+工具搜索筛选、编辑启用、删除确认、未保存修改离开及当前草稿测试见 [工具编辑与草稿测试](../docs/wayfinder/tools-workflow/tool-edit-drafts.md)。
+
 ```bash
 cd frontend
 pnpm install --frozen-lockfile

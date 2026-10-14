@@ -10,7 +10,7 @@ import {
   SlidersHorizontal,
 } from "@phosphor-icons/react";
 import { Navigation, History, type WorkspacePage } from "./components/Sidebar";
-import { ToolsWorkspace } from './components/tools/ToolsWorkspace';
+import { ToolsWorkspace, type ToolsWorkspaceHandle } from './components/tools/ToolsWorkspace';
 import { Conversation, Composer, type ConversationActions } from "./components/Conversation";
 import { Overlay } from "./components/Overlay";
 import { ContentViewer } from './components/ContentViewer';
@@ -97,6 +97,7 @@ function Workspace({ session, conversations }: {
   const { sessions, active, activeId } = conversations;
   const [query, setQuery] = useState("");
   const [page, setPage] = useState<WorkspacePage>('chat');
+  const toolsWorkspace = useRef<ToolsWorkspaceHandle>(null);
   const [mobilePanel, setMobilePanel] = useState<SidebarView | null>(null);
   const layout = useNavigationLayout(() => setMobilePanel(null));
   const historyReadingPosition = useRef(0);
@@ -175,7 +176,13 @@ function Workspace({ session, conversations }: {
   const shortcut = detectShortcutPlatform(navigator.platform) === 'mac' ? "⌘" : "Ctrl";
 
   function navigate(destination: WorkspacePage) {
-    setPage(destination); setMobilePanel(null); setOverlay(null); setCancelTarget(null); closeFileOpen();
+    if (destination === page) return;
+    leaveTools(() => {setPage(destination); setMobilePanel(null); setOverlay(null); setCancelTarget(null); closeFileOpen();});
+  }
+  function leaveTools(action:() => void) {
+    if (page === 'tools' && toolsWorkspace.current) {
+      setMobilePanel(null);setOverlay(null);toolsWorkspace.current.requestLeave(action);
+    } else action();
   }
 
   function toggleNavigation() {
@@ -195,26 +202,27 @@ function Workspace({ session, conversations }: {
     setMobilePanel(null); setCancelTarget(null); closeFileOpen(); setOverlay(view);
   }
   function findConversation() {
-    setPage('chat');
-    setOverlay(null); setCancelTarget(null); closeFileOpen();
-    if (layout.isDesktop) requestAnimationFrame(() => document.querySelector<HTMLInputElement>('.search input')?.focus());
-    else openSidebar('history');
+    leaveTools(() => {
+      setPage('chat');setOverlay(null); setCancelTarget(null); closeFileOpen();
+      if (layout.isDesktop) requestAnimationFrame(() => document.querySelector<HTMLInputElement>('.search input')?.focus());
+      else openSidebar('history');
+    });
   }
   function createSession() {
     if (!conversations.canCreate) return;
-    setPage('chat');
-    timeline.current?.rememberReadingPosition();
-    void conversations.create();
-    closeFileOpen(); setCancelTarget(null);
-    setMobilePanel(null);
-    setOverlay(null);
+    leaveTools(() => {
+      setPage('chat');timeline.current?.rememberReadingPosition();
+      void conversations.create();closeFileOpen(); setCancelTarget(null);
+      setMobilePanel(null);setOverlay(null);
+    });
   }
   function selectConversation(conversationId: string) {
     if (!sessions.some(conversation => conversation.id === conversationId)) return;
-    setPage('chat');
-    timeline.current?.rememberReadingPosition();
-    if (conversationId !== activeId) conversations.select(conversationId);
-    closeFileOpen(); setCancelTarget(null); setMobilePanel(null); setOverlay(null);
+    leaveTools(() => {
+      setPage('chat');timeline.current?.rememberReadingPosition();
+      if (conversationId !== activeId) conversations.select(conversationId);
+      closeFileOpen(); setCancelTarget(null); setMobilePanel(null); setOverlay(null);
+    });
   }
   function executeCommand(action: CommandAction) {
     switch (action.kind) {
@@ -284,7 +292,7 @@ function Workspace({ session, conversations }: {
               {!layout.isDesktop && <button className="icon-button" aria-label="打开主导航" onClick={() => openSidebar('navigation')}><SidebarSimple/></button>}
               <h1>MCP 服务</h1>
             </div>}
-            {page === 'tools' ? <ToolsWorkspace session={session} onView={openContent} onNavigation={() => openSidebar('navigation')}/>
+            {page === 'tools' ? <ToolsWorkspace ref={toolsWorkspace} session={session} onView={openContent} onNavigation={() => openSidebar('navigation')}/>
               : <div className="tools-page"><p>MCP 服务连接管理将在后续开放。</p><p>工具库连接与启动时的 MCP 配置独立保存。</p></div>}
           </main>}
           <main className="chat-workspace" tabIndex={-1} hidden={page !== 'chat'}>

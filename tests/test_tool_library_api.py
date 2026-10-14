@@ -50,6 +50,13 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
     self.addAsyncCleanup(self.client.aclose)
     self.addAsyncCleanup(runtime.lifecycle.shutdown)
 
+  async def read_created_tool(self, response):
+    self.assertEqual(response.status_code, 201, response.text)
+    tool_id = response.json()["data"]["id"]
+    loaded = await self.client.get(f"/api/tools/{tool_id}")
+    self.assertEqual(loaded.status_code, 200, loaded.text)
+    return loaded.json()
+
   async def test_create_and_reread_from_loaded_config_preserves_other_groups(self):
     environment = patch.dict(os.environ, {"TOOL_TEST_ENDPOINT": "https://example.test"})
     environment.start()
@@ -76,7 +83,7 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
       },
     )
     self.assertEqual(response.status_code, 201, response.text)
-    saved = response.json()["data"]
+    saved = (await self.read_created_tool(response))["data"]
     self.assertTrue(saved["id"])
     self.assertTrue(saved["enabled"])
     self.assertEqual(saved["timeout_seconds"], 30)
@@ -98,6 +105,42 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
         listed = await client.get("/api/tools")
         self.assertEqual(listed.json()["data"], [saved])
 
+  async def test_writes_return_id_or_empty_success_and_details_are_read_separately(
+    self,
+  ):
+    payload = {
+      "kind": "http",
+      "display_name": "精简响应",
+      "name": "write_response",
+      "url": "http://localhost/",
+    }
+    created = await self.client.post("/api/tools", json=payload)
+    self.assertEqual(created.status_code, 201, created.text)
+    self.assertEqual(set(created.json()), {"data"})
+    self.assertEqual(set(created.json()["data"]), {"id"})
+    tool_id = created.json()["data"]["id"]
+    saved = (await self.client.get(f"/api/tools/{tool_id}")).json()
+    self.assertEqual(saved["data"]["display_name"], "精简响应")
+    self.assertIsInstance(saved["version"], str)
+    updated = await self.client.put(
+      f"/api/tools/{tool_id}",
+      json={
+        "definition": {**payload, "display_name": "修改后"},
+        "version": saved["version"],
+      },
+    )
+    self.assertEqual(updated.status_code, 204, updated.text)
+    self.assertEqual(updated.content, b"")
+    reread = (await self.client.get(f"/api/tools/{tool_id}")).json()
+    self.assertEqual(reread["data"]["display_name"], "修改后")
+    self.assertNotEqual(reread["version"], saved["version"])
+    deleted = await self.client.request(
+      "DELETE", f"/api/tools/{tool_id}", json={"version": reread["version"]}
+    )
+    self.assertEqual(deleted.status_code, 204, deleted.text)
+    self.assertEqual(deleted.content, b"")
+    self.assertEqual((await self.client.get(f"/api/tools/{tool_id}")).status_code, 404)
+
   async def test_mixed_tool_library_roundtrips_concrete_definitions(self):
     saved = []
     variants = (
@@ -115,7 +158,7 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
           json={"display_name": "工具", "name": f"tool_{fields['kind']}", **fields},
         )
         self.assertEqual(created.status_code, 201, created.text)
-        tool = created.json()["data"]
+        tool = (await self.read_created_tool(created))["data"]
         saved.append(tool)
         for field, value in fields.items():
           self.assertEqual(tool[field], value)
@@ -153,8 +196,8 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
     updated = await self.client.put(
       f"/api/tools/{python['id']}", json={"definition": edited, "version": version}
     )
-    self.assertEqual(updated.status_code, 200, updated.text)
-    updated_tool = updated.json()["data"]
+    self.assertEqual(updated.status_code, 204, updated.text)
+    updated_tool = (await self.client.get(f"/api/tools/{python['id']}")).json()["data"]
     self.assertEqual(updated_tool["kind"], "python")
     self.assertEqual(updated_tool["id"], python["id"])
     self.assertEqual(updated_tool["created_at"], python["created_at"])
@@ -200,7 +243,8 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
       },
     )
     self.assertEqual(created.status_code, 201, created.text)
-    tool = created.json()["data"]
+    created_snapshot = await self.read_created_tool(created)
+    tool = created_snapshot["data"]
     before = self.path.read_bytes()
     response = await self.client.put(
       f"/api/tools/{tool['id']}",
@@ -212,7 +256,7 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
           "server_id": "local",
           "remote_name": "search",
         },
-        "version": created.json()["version"],
+        "version": created_snapshot["version"],
       },
     )
     self.assertEqual(response.status_code, 422, response.text)
@@ -296,20 +340,22 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
   ):
     payload = {"display_name": "add", "name": "custom_add", "url": "http://localhost/"}
     first = await self.client.post("/api/tools", json=payload)
+    first_saved = await self.read_created_tool(first)
     second = await self.client.post(
       "/api/tools", json={**payload, "name": "custom_add_2"}
     )
     self.assertEqual(first.status_code, 201)
     self.assertEqual(second.status_code, 201)
-    self.assertNotEqual(first.json()["data"]["name"], "add")
-    self.assertNotEqual(first.json()["data"]["name"], second.json()["data"]["name"])
+    second_saved = await self.read_created_tool(second)
+    self.assertNotEqual(first_saved["data"]["name"], "add")
+    self.assertNotEqual(first_saved["data"]["name"], second_saved["data"]["name"])
     before = self.path.read_bytes()
-    for name in ("add", first.json()["data"]["name"]):
+    for name in ("add", first_saved["data"]["name"]):
       response = await self.client.post("/api/tools", json={**payload, "name": name})
       self.assertEqual(response.status_code, 409)
       self.assertEqual(response.json()["detail"]["code"], "name_conflict")
     self.assertEqual(self.path.read_bytes(), before)
-    saved = first.json()["data"]
+    saved = first_saved["data"]
     edited = {
       key: value
       for key, value in saved.items()
@@ -320,17 +366,18 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
       f"/api/tools/{saved['id']}",
       json={
         "definition": edited,
-        "version": second.json()["version"],
+        "version": second_saved["version"],
       },
     )
-    self.assertEqual(response.status_code, 200)
-    self.assertEqual(response.json()["data"]["id"], saved["id"])
-    self.assertEqual(response.json()["data"]["created_at"], saved["created_at"])
+    self.assertEqual(response.status_code, 204)
+    updated_saved = (await self.client.get(f"/api/tools/{saved['id']}")).json()["data"]
+    self.assertEqual(updated_saved["id"], saved["id"])
+    self.assertEqual(updated_saved["created_at"], saved["created_at"])
     stale = await self.client.put(
       f"/api/tools/{saved['id']}",
       json={
         "definition": edited,
-        "version": first.json()["version"],
+        "version": first_saved["version"],
       },
     )
     self.assertEqual(stale.status_code, 409)
@@ -380,18 +427,17 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
   async def test_name_validation_excludes_self_and_checks_reserved_and_disabled_tools(
     self,
   ):
-    saved = (
-      await self.client.post(
-        "/api/tools",
-        json={
-          "kind": "python",
-          "display_name": "禁用工具",
-          "name": "occupied",
-          "code_path": "tools/example.py",
-          "enabled": False,
-        },
-      )
-    ).json()["data"]
+    created = await self.client.post(
+      "/api/tools",
+      json={
+        "kind": "python",
+        "display_name": "禁用工具",
+        "name": "occupied",
+        "code_path": "tools/example.py",
+        "enabled": False,
+      },
+    )
+    saved = (await self.read_created_tool(created))["data"]
     before = self.path.read_bytes()
     listed = (await self.client.get("/api/tools")).json()
     self.assertIn("add", listed["reserved_names"])
@@ -476,6 +522,244 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
     self.addCleanup(server.server_close)
     self.addCleanup(server.shutdown)
     return f"http://127.0.0.1:{server.server_port}", requests
+
+  async def test_draft_test_uses_current_definition_without_saving(self):
+    base, requests = self.http_service()
+    original = (await self.client.get("/api/tools")).json()
+    definition = {
+      "kind": "http",
+      "display_name": "未保存草稿",
+      "name": "draft_tool",
+      "url": base + "/text",
+      "enabled": False,
+      "input_schema": {"type": "object", "additionalProperties": False},
+    }
+    started = await self.client.post(
+      "/api/tools/tests", json={"definition": definition, "inputs": {}}
+    )
+    self.assertEqual(started.status_code, 202, started.text)
+    test_id = started.json()["data"]["test_id"]
+    for _ in range(200):
+      observed = (await self.client.get(f"/api/tools/tests/{test_id}")).json()["data"]
+      if observed["status"] != "running":
+        break
+      await asyncio.sleep(0.02)
+    self.assertEqual(observed["result"]["data"], "  精确文本\n")
+    self.assertEqual(requests, ["/text"])
+
+    self.assertEqual((await self.client.get("/api/tools")).json(), original)
+
+    invalid = await self.client.post(
+      "/api/tools/tests", json={"definition": definition, "inputs": {"extra": 1}}
+    )
+    test_id = invalid.json()["data"]["test_id"]
+    for _ in range(200):
+      observed = (await self.client.get(f"/api/tools/tests/{test_id}")).json()["data"]
+      if observed["status"] != "running":
+        break
+      await asyncio.sleep(0.02)
+    self.assertEqual(observed["result"]["error"]["code"], "input_validation")
+    self.assertEqual(requests, ["/text"])
+
+  async def test_edit_disable_draft_and_delete_preserve_saved_lifecycle(self):
+    base, requests = self.http_service()
+    payload = {
+      "kind": "http",
+      "name": "original_tool",
+      "display_name": "原工具",
+      "url": base + "/text",
+    }
+    created = await self.read_created_tool(
+      await self.client.post("/api/tools", json=payload)
+    )
+    tool_id = created["data"]["id"]
+    edited = {
+      **payload,
+      "name": "renamed_tool",
+      "display_name": "改名",
+      "enabled": False,
+    }
+    updated = await self.client.put(
+      f"/api/tools/{tool_id}",
+      json={"definition": edited, "version": created["version"]},
+    )
+    self.assertEqual(updated.status_code, 204, updated.text)
+    saved = (await self.client.get(f"/api/tools/{tool_id}")).json()
+    self.assertEqual(saved["data"]["id"], tool_id)
+    self.assertEqual(saved["data"]["created_at"], created["data"]["created_at"])
+    rejected = (
+      await self.client.post(f"/api/tools/{tool_id}/execute", json={"inputs": {}})
+    ).json()["data"]
+    self.assertEqual(rejected["error"]["code"], "disabled")
+    self.assertEqual(requests, [])
+    tested = await self.client.post(
+      "/api/tools/tests",
+      json={
+        "definition": {**edited, "url": base + "/empty"},
+        "tool_id": tool_id,
+        "inputs": {},
+      },
+    )
+    self.assertEqual(tested.status_code, 202, tested.text)
+    test_id = tested.json()["data"]["test_id"]
+    for _ in range(200):
+      observed = (await self.client.get(f"/api/tools/tests/{test_id}")).json()["data"]
+      if observed["status"] != "running":
+        break
+      await asyncio.sleep(0.02)
+    self.assertEqual(observed["status"], "success")
+    self.assertEqual(requests, ["/empty"])
+    self.assertEqual((await self.client.get(f"/api/tools/{tool_id}")).json(), saved)
+    stale = await self.client.request(
+      "DELETE", f"/api/tools/{tool_id}", json={"version": created["version"]}
+    )
+    self.assertEqual(stale.status_code, 409, stale.text)
+    deleted = await self.client.request(
+      "DELETE", f"/api/tools/{tool_id}", json={"version": saved["version"]}
+    )
+    self.assertEqual(deleted.status_code, 204, deleted.text)
+    self.assertEqual((await self.client.get("/api/tools")).json()["data"], [])
+    self.assertEqual((await self.client.get(f"/api/tools/{tool_id}")).status_code, 404)
+    missing = (
+      await self.client.post(f"/api/tools/{tool_id}/execute", json={"inputs": {}})
+    ).json()["data"]
+    self.assertEqual(missing["error"]["code"], "not_found")
+
+  async def test_draft_and_update_cannot_bypass_system_fields_or_type_permissions(self):
+    payload = {
+      "kind": "http",
+      "name": "secured_tool",
+      "display_name": "工具",
+      "url": "http://localhost/",
+    }
+    saved = await self.read_created_tool(
+      await self.client.post("/api/tools", json=payload)
+    )
+    tool_id = saved["data"]["id"]
+    for change in (
+      {"kind": "python", "code_path": "user.py"},
+      {"id": "forged"},
+      {"created_at": saved["data"]["created_at"]},
+    ):
+      with self.subTest(change=change):
+        definition = {**payload, **change}
+        updated = await self.client.put(
+          f"/api/tools/{tool_id}",
+          json={"definition": definition, "version": saved["version"]},
+        )
+        draft = await self.client.post(
+          "/api/tools/tests",
+          json={"definition": definition, "tool_id": tool_id, "inputs": {}},
+        )
+        self.assertEqual(updated.json()["detail"]["code"], "read_only")
+        self.assertEqual(draft.json()["detail"]["code"], "read_only")
+    self.assertEqual((await self.client.get(f"/api/tools/{tool_id}")).json(), saved)
+
+  async def test_mcp_manual_edits_and_draft_tests_protect_source_fields(self):
+    payload = {
+      "kind": "mcp",
+      "display_name": "MCP 搜索",
+      "name": "mcp_search",
+      "server_id": "local",
+      "remote_name": "search",
+      "input_schema": {"type": "object", "properties": {"query": {"type": "string"}}},
+      "output_schema": {"type": "object", "properties": {"count": {"type": "integer"}}},
+    }
+    created = await self.client.post("/api/tools", json=payload)
+    self.assertEqual(created.status_code, 201, created.text)
+    saved = await self.read_created_tool(created)
+    tool_id = saved["data"]["id"]
+    changed_schema = {"type": "object", "properties": {"limit": {"type": "integer"}}}
+    for change in (
+      {"server_id": "another_server"},
+      {"remote_name": "another_tool"},
+      {"input_schema": changed_schema},
+      {"output_schema": {"type": "string"}},
+      {"output_schema": None},
+      {"input_schema": changed_schema, "discovery_update": True},
+    ):
+      with self.subTest(change=change):
+        definition = {**payload, **change}
+        updated = await self.client.put(
+          f"/api/tools/{tool_id}",
+          json={"definition": definition, "version": saved["version"]},
+        )
+        draft = await self.client.post(
+          "/api/tools/tests",
+          json={"definition": definition, "tool_id": tool_id, "inputs": {}},
+        )
+        for response in (updated, draft):
+          self.assertEqual(response.status_code, 422, response.text)
+          self.assertEqual(response.json()["detail"]["code"], "read_only")
+    self.assertEqual((await self.client.get(f"/api/tools/{tool_id}")).json(), saved)
+
+    # Local edits may omit source fields, which must retain their saved values.
+    editable = {
+      "kind": "mcp",
+      "display_name": "本地改名",
+      "name": "renamed_search",
+      "description": "本地用途",
+      "enabled": False,
+      "timeout_seconds": 12,
+    }
+    updated = await self.client.put(
+      f"/api/tools/{tool_id}",
+      json={"definition": editable, "version": saved["version"]},
+    )
+    self.assertEqual(updated.status_code, 204, updated.text)
+    updated_saved = (await self.client.get(f"/api/tools/{tool_id}")).json()
+    for field in (
+      "server_id",
+      "remote_name",
+      "input_schema",
+      "output_schema",
+      "id",
+      "created_at",
+    ):
+      self.assertEqual(updated_saved["data"][field], saved["data"][field])
+    for field, value in editable.items():
+      self.assertEqual(updated_saved["data"][field], value)
+    draft = await self.client.post(
+      "/api/tools/tests",
+      json={"definition": editable, "tool_id": tool_id, "inputs": {}},
+    )
+    self.assertEqual(draft.status_code, 202, draft.text)
+    self.assertEqual(
+      (await self.client.get(f"/api/tools/{tool_id}")).json(), updated_saved
+    )
+
+  async def test_executable_definitions_recheck_enabled_and_deleted_tools(self):
+    from shikigen.runtime.tool_library import ToolLibraryError
+
+    library = self.app.state.runtime.tools
+    payload = {
+      "kind": "http",
+      "name": "select_tool",
+      "display_name": "工具",
+      "url": "http://localhost/",
+    }
+    saved = await self.read_created_tool(
+      await self.client.post("/api/tools", json=payload)
+    )
+    tool_id = saved["data"]["id"]
+    self.assertEqual(
+      (await library.get_executable_tool_definitions([tool_id]))[0].id, tool_id
+    )
+    disabled = await self.client.put(
+      f"/api/tools/{tool_id}",
+      json={"definition": {**payload, "enabled": False}, "version": saved["version"]},
+    )
+    self.assertEqual(disabled.status_code, 204)
+    disabled_saved = (await self.client.get(f"/api/tools/{tool_id}")).json()
+    with self.assertRaises(ToolLibraryError) as error:
+      await library.get_executable_tool_definitions([tool_id])
+    self.assertEqual(error.exception.code, "disabled")
+    await self.client.request(
+      "DELETE", f"/api/tools/{tool_id}", json={"version": disabled_saved["version"]}
+    )
+    with self.assertRaises(ToolLibraryError) as error:
+      await library.get_executable_tool_definitions([tool_id])
+    self.assertEqual(error.exception.code, "not_found")
 
   def echo_service(self):
     requests = []

@@ -8,6 +8,25 @@ import { subscribeBackendState } from '../src/backend-state.ts';
 const ready = (revision, startup_id, base_url) => ({revision, startup_id, base_url, state:'ready', can_retry:false, error:null});
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
+test('tool writes accept creation ID and empty update/delete success without JSON parsing', async () => {
+  const requests=[];
+  const client=new BackendClient(async (url,init) => {
+    requests.push({url,method:init.method,body:JSON.parse(init.body)});
+    return init.method === 'POST' ? Response.json({data:{id:'created-id'}},{status:201}) : new Response(null,{status:204});
+  });
+  client.update(ready(1,'host','http://test'));
+  const draft={kind:'http',display_name:'HTTP',name:'http_tool',url:'http://localhost/'};
+  assert.equal(await client.session.saveTool(draft),'created-id');
+  assert.equal(await client.session.saveTool(draft,{id:'id / 中文',version:'read-version'}),'id / 中文');
+  assert.equal(await client.session.deleteTool('id / 中文','new-version'),undefined);
+  assert.deepEqual(requests,[
+    {url:'http://test/api/tools',method:'POST',body:draft},
+    {url:'http://test/api/tools/id%20%2F%20%E4%B8%AD%E6%96%87',method:'PUT',body:{definition:draft,version:'read-version'}},
+    {url:'http://test/api/tools/id%20%2F%20%E4%B8%AD%E6%96%87',method:'DELETE',body:{version:'new-version'}},
+  ]);
+  client.update(null);
+});
+
 test('history preserves complete records and snapshot identity is normalized and verified', async () => {
   const record = {id: 9, thread_id: 't', run_id: 'r', seq: 7, run_status: 'completed',
     event_type: 'tool_message', category: 'message', event_key: 'tool:x', metadata: {source:'kept'},

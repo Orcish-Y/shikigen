@@ -1,9 +1,12 @@
 import type { RJSFSchema } from '@rjsf/utils';
 
-export interface HttpToolDefinition {
-  id: string; kind: 'http'; display_name: string; name: string; description: string;
+export interface ToolDefinition {
+  id: string; kind: 'http' | 'python' | 'mcp'; display_name: string; name: string; description: string;
   input_schema: RJSFSchema; output_schema: RJSFSchema | null; enabled: boolean;
   timeout_seconds: number; created_at: string; updated_at: string;
+}
+export interface HttpToolDefinition extends ToolDefinition {
+  kind:'http';
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS'; url: string;
   headers:Record<string,string>; parameters:HttpParameterMapping[];
 }
@@ -15,16 +18,23 @@ export type ToolDraft = Omit<HttpToolDefinition, 'id' | 'created_at' | 'updated_
 export interface ToolNameValidation {
   valid: boolean; code: 'name_invalid' | 'name_conflict' | null; message: string | null;
 }
-export type ToolLibraryRead = ToolRead<HttpToolDefinition[]> & {reserved_names: string[]};
+export interface PythonToolDefinition extends ToolDefinition {kind:'python'; code_path:string}
+export interface McpToolDefinition extends ToolDefinition {kind:'mcp'; server_id:string; remote_name:string}
+export type AnyToolDefinition = HttpToolDefinition | PythonToolDefinition | McpToolDefinition;
+export type ToolLibraryRead = ToolRead<AnyToolDefinition[]> & {reserved_names: string[]};
 export interface ToolResult {
   status: 'success' | 'error' | 'timeout' | 'cancelled'; data: unknown;
   error: {code: string; message: string} | null; duration_ms: number; details: Record<string, unknown>;
 }
 export interface ToolTest {
-  test_id: string; tool_id: string; created_at: string;
+  test_id: string; tool_id: string | null; created_at: string;
   status: 'running' | ToolResult['status']; result: ToolResult | null;
 }
 export interface ToolRead<T> {data: T; version: string}
+export interface RecentToolTest {test:ToolTest; inputs:Record<string,unknown>; definition:string}
+export function toolTestStatus(status:ToolTest['status']):string {
+  return {running:'测试中',success:'测试成功',error:'测试失败',timeout:'测试超时',cancelled:'测试已取消'}[status];
+}
 export const emptyToolDraft: ToolDraft = {
   kind:'http', method:'GET', display_name:'', name:'tool', description:'', url:'', enabled:true,
   timeout_seconds:30, input_schema:{type:'object',properties:{},additionalProperties:false},
@@ -55,6 +65,13 @@ export function suggestToolName(displayName: string, occupiedNames: Iterable<str
 export function editTool(tool: HttpToolDefinition): ToolDraft {
   const {id, created_at, updated_at, ...draft} = tool;
   return draft;
+}
+export function toolDraftFingerprint(draft:ToolDraft):string {
+  const normalized={...draft,headers:draft.headers === undefined ? {} : draft.headers,
+    parameters:Array.isArray(draft.parameters) ? draft.parameters.map(mapping => mapping && typeof mapping === 'object' && !Array.isArray(mapping)
+      ? {...mapping,style:mapping.style ?? null,explode:mapping.explode ?? null} : mapping) : draft.parameters === undefined ? [] : draft.parameters};
+  return JSON.stringify(normalized,(_key,value:unknown) => value && typeof value === 'object' && !Array.isArray(value)
+    ? Object.fromEntries(Object.entries(value).sort(([a],[b]) => a.localeCompare(b))) : value);
 }
 export function formatToolValue(value: unknown): string {
   // JSON quotes distinguish an empty string from a missing/empty display.

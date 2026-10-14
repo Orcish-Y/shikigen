@@ -226,6 +226,18 @@ class DesktopTests(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(
         preflight.headers["access-control-allow-origin"], selected_origin
       )
+      delete_preflight = await client.options(
+        f"http://127.0.0.1:{port}/api/tools/example",
+        headers={
+          "Origin": selected_origin,
+          "Access-Control-Request-Method": "DELETE",
+          "Access-Control-Request-Headers": "content-type",
+        },
+      )
+      self.assertEqual(delete_preflight.status_code, 200)
+      self.assertEqual(
+        delete_preflight.headers["access-control-allow-origin"], selected_origin
+      )
       for origin in (selected_origin, "http://tauri.localhost"):
         response = await client.get(
           url, params={"limit": 20}, headers={"Origin": origin}
