@@ -2,7 +2,7 @@
 
 import re
 from typing import Any, cast
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlsplit
 
 from shikigen.contracts.schema_references import resolve_schema
 from shikigen.contracts.tool_definitions import HttpToolDefinition
@@ -50,6 +50,26 @@ def validate_http_request(definition: HttpToolDefinition):
     != "application/json"
   ):
     raise ValueError("Only application/json request bodies are supported")
+  auth_targets = set()
+  auth_ids = set()
+  fixed_query = {name for name, _ in parse_qsl(parsed.query, keep_blank_values=True)}
+  for binding in definition.auth:
+    target = (
+      binding.location,
+      binding.name.lower() if binding.location == "headers" else binding.name,
+    )
+    if binding.id in auth_ids or target in auth_targets:
+      raise ValueError("Duplicate authentication binding or target")
+    auth_ids.add(binding.id)
+    auth_targets.add(target)
+    if binding.kind == "bearer" and target != ("headers", "authorization"):
+      raise ValueError("Bearer authentication requires the Authorization header")
+    if binding.location == "headers":
+      check_header(binding.name, binding.value)
+      if target[1] in fixed_headers or target[1] == "content-type":
+        raise ValueError("Authentication conflicts with a fixed or Content-Type header")
+    elif binding.name in fixed_query:
+      raise ValueError("Authentication conflicts with a URL query parameter")
   targets, sources = set(), set()
   path_targets = set()
   for mapping in definition.parameters:
@@ -58,6 +78,8 @@ def validate_http_request(definition: HttpToolDefinition):
       mapping.name.lower() if mapping.location == "headers" else mapping.name,
     )
     source = (mapping.location, mapping.input_name)
+    if target in auth_targets:
+      raise ValueError("Authentication conflicts with a business parameter mapping")
     if target in targets or source in sources:
       raise ValueError(
         f"Duplicate parameter target or input: {mapping.location}.{mapping.input_name}"

@@ -59,10 +59,10 @@ class ToolLibrary:
         raise ValueError("Tool name conflicts with a built-in tool")
       config_version = hashlib.sha256(content).hexdigest()
       return raw, library, config_version
-    except (OSError, ValueError, UnicodeError) as error:
+    except (OSError, ValueError, UnicodeError):
       raise ToolLibraryError(
         "config_read", "Cannot read valid tool configuration", 503
-      ) from error
+      ) from None
 
   async def list_tools(self) -> tuple[list[AnyToolDefinition], str]:
     async with self._lock:
@@ -200,7 +200,11 @@ class ToolLibrary:
     await asyncio.gather(*tasks, return_exceptions=True)
 
   async def save_tool(
-    self, payload: dict, *, tool_id: str | None = None, version: str | None = None
+    self,
+    payload: dict,
+    *,
+    tool_id: str | None = None,
+    version: str | None = None,
   ) -> tuple[AnyToolDefinition, str]:
     async with self._lock:
       raw, library, current_config_version = await asyncio.to_thread(self._read)
@@ -264,10 +268,17 @@ class ToolLibrary:
         for field in ("server_id", "remote_name", "input_schema", "output_schema"):
           definition.setdefault(field, getattr(previous, field))
     try:
+      if previous and previous.kind == "http":
+        definition.setdefault("auth", previous.model_dump(mode="json")["auth"])
       return definition_adapter.validate_python(definition)
     except ValidationError as error:
       details = "; ".join(
-        f"{'.'.join(map(str, item['loc']))}: {item['msg']}"
+        f"{'.'.join(map(str, item['loc']))}: "
+        + (
+          "Invalid discriminator value"
+          if item["type"] == "union_tag_invalid"
+          else item["msg"]
+        )
         for item in error.errors(include_input=False, include_context=False)
       )
       raise ToolLibraryError("definition_invalid", details) from None

@@ -14,6 +14,8 @@
 
 涉及工具页的 ticket 完成时，对照原型检查实际页面的区域组织、比例、留白和操作位置，并检查桌面及窄屏的滚动和字段可见性。原型确定布局，业务契约确定功能和行为；原型中的示例不扩张 ticket 的实现范围。
 
+HTTP 认证沿用配置卡片的整行区域，使用密码输入框直接编辑认证值；清空后保存即清除该值，组合认证仍位于该区域。2026-10-15 用户决定保留认证、移除通用 credential 功能，凭据管理及遮盖留待统一设计。当前契约和后续 MCP／OpenAPI 注意事项见[HTTP 认证记录](../docs/wayfinder/tools-workflow/http-auth-credentials.md)。
+
 > 工具模块规格发布后补充：用户确定使用 shadcn/ui、rjsf（react-jsonschema-form）和 AI Elements。基础控件与主题采用 shadcn/ui；工具配置表单和测试参数表单由 rjsf 按对应 schema 动态渲染；适用的 AI Elements 组件用于工具输入、输出及状态展示。沿用本文的外壳、布局与颜色规则，具体参数编辑、动态表单值保持和测试行为见[工具页面决议](../docs/wayfinder/tools-workflow/tickets/004-management-ui-lifecycle.resolution.md)。后续已完成基础控件、Reasoning 与 rjsf 依赖准备，见[组件接入记录](component-libraries.md)；工具业务 Form/Tool、主题扫描及校验策略仍由工具专项完成。
 
 > 2026-10-07 状态校正：以下正文保留 2026-10-04 定稿时的设计目标和阶段观察；其中“待实施/待补齐”不代表当前待办。首版 23 张票据现已完成，当前交付与未覆盖范围见 [开发交接](../docs/development-handoff.md)和[原生验收汇总](../docs/wayfinder/frontend-completion/native-acceptance-summary.md)。视觉规则继续适用。

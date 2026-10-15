@@ -11,11 +11,12 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
 test('tool writes accept creation ID and empty update/delete success without JSON parsing', async () => {
   const requests=[];
   const client=new BackendClient(async (url,init) => {
+    assert.deepEqual(init.headers,{'Content-Type':'application/json'});
     requests.push({url,method:init.method,body:JSON.parse(init.body)});
     return init.method === 'POST' ? Response.json({data:{id:'created-id'}},{status:201}) : new Response(null,{status:204});
   });
   client.update(ready(1,'host','http://test'));
-  const draft={kind:'http',display_name:'HTTP',name:'http_tool',url:'http://localhost/'};
+  const draft={kind:'http',display_name:'HTTP',name:'http_tool',url:'http://localhost/',auth:[{id:'bearer',kind:'bearer',value:'client-test-secret'}]};
   assert.equal(await client.session.saveTool(draft),'created-id');
   assert.equal(await client.session.saveTool(draft,{id:'id / 中文',version:'read-version'}),'id / 中文');
   assert.equal(await client.session.deleteTool('id / 中文','new-version'),undefined);

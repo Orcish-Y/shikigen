@@ -187,3 +187,10 @@
 @media (prefers-reduced-motion: reduce) {
   .tool-disabled-filter input, .tool-disabled-filter input::before { transition: none; }
 }
+.tool-field-auth { grid-column: 1 / -1; }
+.tool-auth-editor { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.tool-auth-editor > label, .tool-auth-binding > label { font-size: 12px; font-weight: 500; }
+.tool-auth-binding { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: 6px; }
+.tool-auth-binding legend { padding: 0 4px; font-size: 12px; color: var(--muted); }
+.tool-auth-editor .tool-muted { margin: 0; }
+.tool-auth-editor button { align-self: flex-start; }

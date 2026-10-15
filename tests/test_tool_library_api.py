@@ -57,6 +57,227 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(loaded.status_code, 200, loaded.text)
     return loaded.json()
 
+  def authenticated_service(self):
+    requests = []
+
+    class Handler(BaseHTTPRequestHandler):
+      def do_GET(self):
+        record = {
+          "authorization": self.headers.get("Authorization"),
+          "header_key": self.headers.get("X-Api-Key"),
+          "query": parse_qs(urlsplit(self.path).query),
+        }
+        requests.append(record)
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps(record).encode())
+
+      def log_message(self, format, *args):
+        pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    Thread(target=server.serve_forever, daemon=True).start()
+    self.addCleanup(server.server_close)
+    self.addCleanup(server.shutdown)
+    return f"http://127.0.0.1:{server.server_port}/", requests
+
+  async def test_bearer_prefix_is_added_only_when_missing_and_api_keys_are_unchanged(
+    self,
+  ):
+    url, requests = self.authenticated_service()
+    for index, (kind, secret, expected) in enumerate(
+      (
+        ("bearer", "token", "Bearer token"),
+        ("bearer", "Bearer token", "Bearer token"),
+        ("bearer", "bEaReR token", "bEaReR token"),
+        ("bearer", "BearerToken", "Bearer BearerToken"),
+        ("api_key", "Bearer api-key", "Bearer api-key"),
+      )
+    ):
+      with self.subTest(kind=kind, secret=secret):
+        saved = await self.read_created_tool(
+          await self.client.post(
+            "/api/tools",
+            json={
+              "name": f"auth_prefix_{index}",
+              "display_name": "认证前缀",
+              "url": url,
+              "auth": [{"id": "auth", "kind": kind, "value": secret}],
+            },
+          )
+        )
+        executed = await self.client.post(
+          f"/api/tools/{saved['data']['id']}/execute", json={"inputs": {}}
+        )
+        self.assertEqual(executed.json()["data"]["status"], "success")
+        self.assertEqual(requests[-1]["authorization"], expected)
+
+  async def test_auth_direct_values_roundtrip_and_inject_all_bindings(self):
+    url, requests = self.authenticated_service()
+    bindings = [
+      {"id": "bearer", "kind": "bearer", "value": "bearer-token"},
+      {
+        "id": "header",
+        "kind": "api_key",
+        "name": "X-Api-Key",
+        "value": "$LITERAL_KEY",
+      },
+      {
+        "id": "query",
+        "kind": "api_key",
+        "location": "query",
+        "name": "api_key",
+        "value": "query +/key",
+      },
+    ]
+    saved = await self.read_created_tool(
+      await self.client.post(
+        "/api/tools",
+        json={
+          "name": "authenticated",
+          "display_name": "认证接口",
+          "url": url,
+          "auth": bindings,
+        },
+      )
+    )
+    tool_id = saved["data"]["id"]
+    expected = {
+      "authorization": "Bearer bearer-token",
+      "header_key": "$LITERAL_KEY",
+      "query": {"api_key": ["query +/key"]},
+    }
+    executed = await self.client.post(
+      f"/api/tools/{tool_id}/execute", json={"inputs": {}}
+    )
+    self.assertEqual(executed.json()["data"]["data"], expected)
+    self.assertEqual(requests, [expected])
+    self.assertEqual(
+      [binding["value"] for binding in saved["data"]["auth"]],
+      [binding["value"] for binding in bindings],
+    )
+    self.assertEqual(
+      load_app_config(self.path).tool_library.tools[0].auth[1].value, "$LITERAL_KEY"
+    )
+    listed = await self.client.get("/api/tools")
+    self.assertEqual(listed.json()["data"][0]["auth"], saved["data"]["auth"])
+    management = (await self.client.get("/api/tools/schema/http")).json()["data"]
+    self.assertNotIn("Credential", management["$defs"])
+    self.assertEqual(
+      management["$defs"]["HttpAuthBinding"]["properties"]["value"]["type"], "string"
+    )
+    self.assertNotIn("credential", management["$defs"]["HttpAuthBinding"]["properties"])
+
+  async def test_auth_direct_value_draft_replace_clear_and_remove(self):
+    url, requests = self.authenticated_service()
+    payload = {
+      "name": "edit_auth",
+      "display_name": "编辑认证",
+      "url": url,
+      "auth": [
+        {"id": "key", "kind": "api_key", "name": "X-Api-Key", "value": "original"}
+      ],
+    }
+    saved = await self.read_created_tool(
+      await self.client.post("/api/tools", json=payload)
+    )
+    tool_id = saved["data"]["id"]
+    before = self.path.read_bytes()
+    draft = {**payload, "auth": [{**payload["auth"][0], "value": "draft"}]}
+    started = await self.client.post(
+      "/api/tools/tests", json={"definition": draft, "tool_id": tool_id, "inputs": {}}
+    )
+    self.assertEqual(started.status_code, 202, started.text)
+    for _ in range(100):
+      observed = await self.client.get(
+        f"/api/tools/tests/{started.json()['data']['test_id']}"
+      )
+      if observed.json()["data"]["status"] != "running":
+        break
+      await asyncio.sleep(0.01)
+    self.assertEqual(observed.json()["data"]["result"]["status"], "success")
+    self.assertEqual(requests[-1]["header_key"], "draft")
+    self.assertEqual(self.path.read_bytes(), before)
+    await self.client.post(f"/api/tools/{tool_id}/execute", json={"inputs": {}})
+    self.assertEqual(requests[-1]["header_key"], "original")
+    for value in ("replacement", ""):
+      payload["auth"][0]["value"] = value
+      updated = await self.client.put(
+        f"/api/tools/{tool_id}",
+        json={"definition": payload, "version": saved["version"]},
+      )
+      self.assertEqual(updated.status_code, 204, updated.text)
+      saved = (await self.client.get(f"/api/tools/{tool_id}")).json()
+      self.assertEqual(saved["data"]["auth"][0]["value"], value)
+      count = len(requests)
+      result = (
+        await self.client.post(f"/api/tools/{tool_id}/execute", json={"inputs": {}})
+      ).json()["data"]
+      if value:
+        self.assertEqual(requests[-1]["header_key"], value)
+        self.assertEqual(result["status"], "success")
+      else:
+        self.assertEqual(result["error"]["code"], "authentication_missing")
+        self.assertEqual(len(requests), count)
+    payload["auth"] = []
+    updated = await self.client.put(
+      f"/api/tools/{tool_id}", json={"definition": payload, "version": saved["version"]}
+    )
+    self.assertEqual(updated.status_code, 204)
+    result = (
+      await self.client.post(f"/api/tools/{tool_id}/execute", json={"inputs": {}})
+    ).json()["data"]
+    self.assertEqual(result["status"], "success")
+    self.assertIsNone(requests[-1]["header_key"])
+
+  async def test_auth_conflicts_and_invalid_direct_values_are_rejected(self):
+    url, requests = self.authenticated_service()
+    binding = {"id": "key", "kind": "api_key", "name": "X-Api-Key", "value": "test-key"}
+    payload = {
+      "name": "invalid_auth",
+      "display_name": "认证校验",
+      "url": url,
+      "auth": [binding],
+    }
+    cases = [
+      {"auth": [binding, binding]},
+      {"auth": [binding, {**binding, "id": "other", "name": "x-api-key"}]},
+      {"headers": {"x-api-key": "fixed"}},
+      {"auth": [{**binding, "kind": "bearer"}]},
+      {"auth": [{**binding, "name": "Content-Type"}]},
+      {"auth": [{**binding, "name": "bad header"}]},
+      {"auth": [{**binding, "value": "bad\r\nheader"}]},
+      {"auth": [{**binding, "value": 123}]},
+      {"auth": [{**binding, "kind": "unsupported"}]},
+      {"auth": [{**binding, "credential": {"value": "legacy"}}]},
+      {"auth": [{**binding, "clear": True}]},
+      {"auth": [{**binding, "is_set": True}]},
+      {
+        "url": url + "?key=fixed",
+        "auth": [{**binding, "location": "query", "name": "key"}],
+      },
+      {
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "headers": {"type": "object", "properties": {"key": {"type": "string"}}}
+          },
+        },
+        "parameters": [
+          {"location": "headers", "input_name": "key", "name": "x-api-key"}
+        ],
+      },
+    ]
+    before = self.path.read_bytes()
+    for changes in cases:
+      with self.subTest(changes=changes):
+        response = await self.client.post("/api/tools", json={**payload, **changes})
+        self.assertEqual(response.status_code, 422, response.text)
+        self.assertEqual(response.json()["detail"]["code"], "definition_invalid")
+        self.assertEqual(self.path.read_bytes(), before)
+    self.assertEqual(requests, [])
+
   async def test_create_and_reread_from_loaded_config_preserves_other_groups(self):
     environment = patch.dict(os.environ, {"TOOL_TEST_ENDPOINT": "https://example.test"})
     environment.start()

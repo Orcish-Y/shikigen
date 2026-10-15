@@ -137,6 +137,39 @@ const schema = {type:'object', required:['display_name','name','url'], propertie
 }};
 const initial = {display_name:'',name:'tool',url:'',enabled:true,timeout_seconds:30,
   input_schema:{type:'object',properties:{},additionalProperties:false},output_schema:null};
+const authManagementSchema={...schema,properties:{...schema.properties,auth:{type:'array',title:'认证',items:{type:'object',properties:{
+  id:{type:'string'},kind:{type:'string'},location:{type:'string'},name:{type:'string'},value:{type:'string'},
+}}}}};
+
+test('认证表单直接回填和编辑密钥，清空提交空字符串且不改变业务输入', async () => {
+  const user=userEvent.setup({document:browser.window.document,delay:null});
+  const submitted=[];
+  render(React.createElement(ToolDefinitionForm,{schema:authManagementSchema,initial:{...initial,display_name:'认证',url:'http://localhost/',auth:[{id:'bearer',kind:'bearer',location:'headers',name:'Authorization',value:'saved-token'}]},onSave:value => submitted.push(value)}));
+  const password=screen.getByLabelText('认证密钥');
+  assert.equal(password.type,'password');
+  assert.equal(password.value,'saved-token');
+  await user.click(screen.getByRole('button',{name:'保存工具'}));
+  assert.equal(submitted[0].auth[0].value,'saved-token');
+  await user.clear(password);
+  await user.type(password,'replacement-token');
+  await user.click(screen.getByRole('button',{name:'保存工具'}));
+  assert.equal(submitted.at(-1).auth[0].value,'replacement-token');
+  assert.ok(!('credential' in submitted.at(-1).auth[0]));
+  assert.equal(screen.queryByRole('button',{name:'清空已保存密钥'}),null);
+  await user.clear(password);
+  await user.click(screen.getByRole('button',{name:'保存工具'}));
+  assert.equal(submitted.at(-1).auth[0].value,'');
+  assert.deepEqual(submitted.at(-1).input_schema,initial.input_schema);
+  assert.doesNotMatch(JSON.stringify({...browser.window.localStorage}),/saved-token|replacement-token/);
+  await user.selectOptions(screen.getByLabelText('认证方式'),'api_key_query');
+  assert.equal(screen.getByLabelText('凭据参数名').value,'api_key');
+  await user.click(screen.getByRole('button',{name:'添加认证凭据'}));
+  assert.equal(screen.getAllByLabelText(/认证密钥/).length,2);
+  await user.selectOptions(screen.getByLabelText('认证方式'),'none');
+  assert.equal(screen.queryByLabelText('认证密钥'),null);
+  await user.click(screen.getByRole('button',{name:'保存工具'}));
+  assert.deepEqual(submitted.at(-1).auth,[]);
+});
 
 test('参数表格修改单字段保留约束和说明，高级 JSON 错误保留原文并阻止保存', async () => {
   const user = userEvent.setup({document:browser.window.document,delay:null});
@@ -204,6 +237,48 @@ function toolSession(fetcher, id='tool-session') {
 }
 const response = data => new Response(JSON.stringify(data), {headers:{'Content-Type':'application/json'}});
 
+test('认证保存响应丢失保留不确定状态，明确放弃后只重读工具库', async () => {
+  const user=userEvent.setup({document:browser.window.document,delay:null});
+  const writes=[];let tool;let reloads=0;
+  const session=toolSession(async (url,init) => {
+    if (url.endsWith('/schema/http')) return response({data:authManagementSchema});
+    if (url.includes('/validate-name?')) return response({data:{valid:true,code:null,message:null}});
+    if (init?.method === 'POST') {
+      writes.push(JSON.parse(init.body));
+      assert.deepEqual(init.headers,{'Content-Type':'application/json'});
+      tool={...writes.at(-1),id:'auth-tool',created_at:'2026-10-14T00:00:00Z',updated_at:'2026-10-14T00:00:00Z'};
+      throw new TypeError('write response lost');
+    }
+    if (tool && url.endsWith('/api/tools') && ++reloads === 1) throw new TypeError('read failed');
+    return response({data:url.endsWith('/api/tools') ? (tool ? [tool] : []) : tool,version:'version'});
+  });
+  render(React.createElement(ToolsWorkspace,{session,onView:() => {}}));
+  await waitFor(() => assert.equal(screen.getByRole('button',{name:'创建 HTTP 工具'}).disabled,false));
+  await user.click(screen.getByRole('button',{name:'创建 HTTP 工具'}));
+  await user.type(screen.getByLabelText(/页面名称/),'认证保存');
+  await user.type(screen.getByLabelText(/请求地址/),'http://localhost/');
+  await user.selectOptions(screen.getByLabelText('认证方式'),'bearer');
+  await user.type(screen.getByLabelText('认证密钥'),'ticket04-uncertain-secret');
+  await user.click(screen.getByRole('button',{name:'保存工具'}));
+  await screen.findByText(/保存结果不确定/);
+  assert.equal(screen.getByRole('button',{name:'保存工具'}).disabled,true);
+  assert.equal(screen.queryByText('工具已保存'),null);
+  await user.click(screen.getByRole('button',{name:'放弃草稿并重读工具库'}));
+  await screen.findByText(/工具库重读失败/);
+  assert.equal(screen.getByLabelText('认证密钥').value,'ticket04-uncertain-secret');
+  assert.equal(screen.getByRole('button',{name:'保存工具'}).disabled,true);
+  assert.equal(writes.length,1);
+  await user.click(screen.getByRole('button',{name:'放弃草稿并重读工具库'}));
+  await screen.findByText(/此前保存结果仍不确定/);
+  assert.equal(screen.queryByLabelText('认证密钥'),null);
+  assert.equal(screen.queryByText('工具已保存'),null);
+  await user.click(screen.getByRole('button',{name:/认证保存/}));
+  assert.equal(screen.getByLabelText('认证密钥').value,'ticket04-uncertain-secret');
+  assert.equal(writes.length,1);
+  assert.equal(screen.queryByRole('alert'),null);
+  assert.doesNotMatch(document.body.textContent,/ticket04-uncertain-secret/);
+});
+
 test('创建成功后详情读取失败明确已保存，重读恢复编辑且不重复创建', async () => {
   const user=userEvent.setup({document:browser.window.document,delay:null});
   const writes=[];let saved;let reads=0;
@@ -228,7 +303,7 @@ test('创建成功后详情读取失败明确已保存，重读恢复编辑且�
   await user.type(screen.getByLabelText(/请求地址/),'http://localhost/');
   await user.click(screen.getByRole('button',{name:'保存工具'}));
   await screen.findByText(/已保存，详情读取失败/);
-  assert.equal(screen.queryByText(/保存结果待确认/),null);
+  assert.equal(screen.queryByText(/保存结果不确定/),null);
   assert.equal(screen.getByLabelText(/页面名称/).value,'已提交');
   assert.equal(screen.getByRole('button',{name:'保存工具'}).disabled,true);
   await user.click(screen.getByRole('button',{name:'重新读取工具详情'}));
@@ -265,7 +340,7 @@ test('更新 204 后详情读取失败保留已保存状态，重读后完成离
   await within(dialog).findByText(/已保存，详情读取失败/);
   assert.equal(writes.length,1);
   assert.equal(within(dialog).getByRole('button',{name:'保存并离开'}).disabled,true);
-  assert.equal(screen.queryByText(/保存结果待确认/),null);
+  assert.equal(screen.queryByText(/保存结果不确定/),null);
   await user.click(within(dialog).getByRole('button',{name:'重新读取工具详情'}));
   await waitFor(() => assert.equal(screen.queryByLabelText(/请求地址/),null));
   await user.click(screen.getByRole('button',{name:/updated_tool.*更新工具/}));
@@ -435,7 +510,7 @@ test('无效映射 JSON 保留原文并阻止测试，离开校验失败后仍�
   assert.deepEqual(JSON.parse(screen.getByLabelText('请求映射').value),[null]);
 });
 
-test('保存响应丢失后锁定重复创建，保留草稿并通过重读核实提交', async () => {
+test('保存响应丢失后锁定重复创建，明确放弃草稿后重读工具库', async () => {
   const user = userEvent.setup({document:browser.window.document,delay:null});
   let saved = null;
   let posts = 0;
@@ -447,7 +522,7 @@ test('保存响应丢失后锁定重复创建，保留草稿并通过重读核�
       saved = {...JSON.parse(init.body), id:'saved-id',created_at:'2026-10-13T00:00:00Z',updated_at:'2026-10-13T00:00:00Z'};
       throw new TypeError('response lost after commit');
     }
-    return response({data:saved ? [saved] : [],version:'saved-version'});
+    return response({data:url.endsWith('/api/tools') ? (saved ? [saved] : []) : saved,version:'saved-version'});
   });
   render(React.createElement(ToolsWorkspace, {session,onView:() => {}}));
   await waitFor(() => assert.equal(screen.getByRole('button',{name:'创建 HTTP 工具'}).disabled,false));
@@ -455,15 +530,46 @@ test('保存响应丢失后锁定重复创建，保留草稿并通过重读核�
   await user.type(await screen.findByLabelText(/页面名称/),'响应丢失');
   await user.type(screen.getByLabelText(/请求地址/),'http://localhost/');
   await user.click(screen.getByRole('button',{name:'保存工具'}));
-  await screen.findByText(/保存结果待确认/);
+  await screen.findByText(/保存结果不确定/);
   assert.equal(screen.getByLabelText(/页面名称/).value,'响应丢失');
   assert.equal(screen.getByRole('button',{name:'保存工具'}).disabled,true);
   await user.click(screen.getByRole('button',{name:'保存工具'}));
   assert.equal(posts,1);
-  await user.click(screen.getByRole('button',{name:'核实保存结果'}));
-  await screen.findByText('已核实工具保存结果');
+  await user.click(screen.getByRole('button',{name:'放弃草稿并重读工具库'}));
+  await screen.findByText(/此前保存结果仍不确定/);
+  assert.equal(screen.queryByLabelText(/页面名称/),null);
+  assert.equal(screen.queryByText('工具已保存'),null);
+  await user.click(screen.getByRole('button',{name:/响应丢失/}));
   assert.ok(screen.getByText('saved-id'));
   assert.equal(posts,1);
+});
+
+test('保存并离开响应丢失后，明确放弃草稿并重读才继续原操作', async () => {
+  const user=userEvent.setup({document:browser.window.document,delay:null});
+  let posts=0;
+  const session=toolSession(async (url,init) => {
+    if (url.endsWith('/schema/http')) return response({data:schema});
+    if (url.includes('/validate-name?')) return response({data:{valid:true,code:null,message:null}});
+    if (init?.method === 'POST') {posts++;throw new TypeError('write response unavailable');}
+    return response({data:[],version:'read-version'});
+  });
+  render(React.createElement(ToolsWorkspace,{session,onView:() => {}}));
+  await waitFor(() => assert.equal(screen.getByRole('button',{name:'创建 HTTP 工具'}).disabled,false));
+  await user.click(screen.getByRole('button',{name:'创建 HTTP 工具'}));
+  await user.type(screen.getByLabelText(/页面名称/),'离开草稿');
+  await user.type(screen.getByLabelText(/请求地址/),'http://localhost/');
+  await user.click(screen.getByRole('button',{name:'返回工具列表'}));
+  await user.click(screen.getByRole('button',{name:'保存并离开'}));
+  const dialog=await screen.findByRole('dialog',{name:'保存结果不确定'});
+  assert.equal(screen.getByLabelText(/页面名称/).value,'离开草稿');
+  assert.equal(within(dialog).getByRole('button',{name:'保存并离开'}).disabled,true);
+  assert.equal(within(dialog).getByRole('button',{name:'放弃修改'}).disabled,true);
+  await user.click(within(dialog).getByRole('button',{name:'放弃草稿并重读工具库'}));
+  await waitFor(() => assert.equal(screen.queryByRole('dialog'),null));
+  assert.equal(screen.queryByLabelText(/页面名称/),null);
+  assert.equal(posts,1);
+  assert.equal(screen.queryByText('工具已保存'),null);
+  assert.equal(screen.getByRole('button',{name:'创建 HTTP 工具'}).disabled,false);
 });
 
 test('旧宿主的迟到保存错误不会覆盖新宿主已读取的工具页面', async () => {

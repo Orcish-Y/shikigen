@@ -247,7 +247,13 @@ class ApprovalPauseTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_default_composition_installs_policy_on_actual_tool_registry(self):
     config = AppConfig(
-      model=ModelConfig(), mcp=McpConfig(), database=DatabaseConfig(path=str(self.path))
+      model=ModelConfig(),
+      mcp=McpConfig(),
+      database=DatabaseConfig(path=str(self.path)),
+      checkpointer={
+        "type": "sqlite",
+        "path": str(self.path.with_name("checkpoints.db")),
+      },
     )
     with (
       patch(

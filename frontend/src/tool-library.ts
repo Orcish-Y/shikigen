@@ -9,6 +9,10 @@ export interface HttpToolDefinition extends ToolDefinition {
   kind:'http';
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS'; url: string;
   headers:Record<string,string>; parameters:HttpParameterMapping[];
+  auth?:HttpAuthBinding[];
+}
+export interface HttpAuthBinding {
+  id:string; kind:'bearer' | 'api_key'; location:'headers' | 'query'; name:string; value:string;
 }
 export interface HttpParameterMapping {
   location:'path' | 'query' | 'headers'; input_name:string; name:string;
@@ -39,7 +43,7 @@ export const emptyToolDraft: ToolDraft = {
   kind:'http', method:'GET', display_name:'', name:'tool', description:'', url:'', enabled:true,
   timeout_seconds:30, input_schema:{type:'object',properties:{},additionalProperties:false},
   output_schema:null,
-  headers:{},parameters:[],
+  headers:{},parameters:[],auth:[],
 };
 export function syncHttpMappings(schema:RJSFSchema, mappings:HttpParameterMapping[]):HttpParameterMapping[] {
   const sources=['path','query','headers'].flatMap(location => {
@@ -68,6 +72,7 @@ export function editTool(tool: HttpToolDefinition): ToolDraft {
 }
 export function toolDraftFingerprint(draft:ToolDraft):string {
   const normalized={...draft,headers:draft.headers === undefined ? {} : draft.headers,
+    auth:(draft.auth ?? []).map(binding => ({...binding,value:binding.value ?? ''})),
     parameters:Array.isArray(draft.parameters) ? draft.parameters.map(mapping => mapping && typeof mapping === 'object' && !Array.isArray(mapping)
       ? {...mapping,style:mapping.style ?? null,explode:mapping.explode ?? null} : mapping) : draft.parameters === undefined ? [] : draft.parameters};
   return JSON.stringify(normalized,(_key,value:unknown) => value && typeof value === 'object' && !Array.isArray(value)

@@ -58,12 +58,23 @@ class HttpParameterMapping(BaseModel):
   explode: bool | None = None
 
 
+class HttpAuthBinding(BaseModel):
+  model_config = ConfigDict(extra="forbid", strict=True)
+
+  id: ToolName
+  kind: Literal["bearer", "api_key"]
+  location: Literal["headers", "query"] = "headers"
+  name: str = Field(default="Authorization", min_length=1)
+  value: str = Field(default="", repr=False)
+
+
 class HttpToolDefinition(ToolDefinition):
   kind: Literal["http"] = "http"
   method: Literal["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"] = "GET"
   url: str
   headers: dict[str, str] = Field(default_factory=dict)
   parameters: list[HttpParameterMapping] = Field(default_factory=list)
+  auth: list[HttpAuthBinding] = Field(default_factory=list)
 
   @field_validator("url")
   @classmethod

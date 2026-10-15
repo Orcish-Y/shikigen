@@ -4,6 +4,7 @@ import { BracketsCurly, GearSix } from '@phosphor-icons/react';
 import { Button } from '../ui/button';
 import { SchemaForm } from './SchemaForm';
 import { InputSchemaEditor } from './InputSchemaEditor';
+import { HttpAuthEditor } from './HttpAuthEditor';
 import { syncHttpMappings, type HttpParameterMapping } from '../../tool-library';
 import type { ToolNameValidation } from '../../tool-library';
 
@@ -48,15 +49,16 @@ export function ToolDefinitionForm({schema, initial, enabled, disabled = false, 
   const nameError = nameCheck?.name === name && nameCheck.result?.valid === false
     ? nameCheck.result.message ?? '调用名称无效' : null;
   return <SchemaForm className="tool-definition-form" id={formId} idPrefix="tool-config" schema={schema}
-    fields={{InputSchema:InputSchemaEditor}}
+    fields={{InputSchema:InputSchemaEditor,HttpAuth:HttpAuthEditor}}
     templates={{ObjectFieldTemplate:DefinitionSections}}
     extraErrors={nameError ? {name:{__errors:[nameError]}} : undefined} extraErrorsBlockSubmit
     formData={enabled === undefined ? value : {...value,enabled}} disabled={disabled} uiSchema={{
       'ui:submitButtonOptions':{norender:externalSubmit},
-      'ui:order':['display_name','name','description','kind','method','url','headers','parameters','timeout_seconds','enabled','input_schema','output_schema'],
+      'ui:order':['display_name','name','description','kind','method','url','headers','parameters','auth','timeout_seconds','enabled','input_schema','output_schema'],
       kind:{'ui:widget':'hidden'}, description:{'ui:widget':'textarea'},
       headers:{'ui:field':'JsonSchema','ui:help':'固定请求头：JSON 对象；请求体仅支持 application/json。'},
       parameters:{'ui:field':'JsonSchema','ui:help':'每项填写 location、input_name、name；query 使用 form（explode 默认 true），path/headers 使用 simple。'},
+      auth:{'ui:field':'HttpAuth'},
       name:{'ui:help':nameCheck?.name === name && nameCheck.error ? nameCheck.error
         : '1–64 个英文字母、数字或下划线，以字母或下划线开头；手动修改后保留。'},
       input_schema:{'ui:field':'InputSchema'}, output_schema:{'ui:field':'JsonSchema'},

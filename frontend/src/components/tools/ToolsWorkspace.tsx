@@ -17,7 +17,6 @@ import { editTool, emptyToolDraft, suggestToolName, toolDraftFingerprint, toolTe
 const message = (error:unknown) => error instanceof Error ? error.message : String(error);
 interface Editor {tool:HttpToolDefinition | null; initial:ToolDraft; draft:ToolDraft; version:string; revision:number; inputKey:number}
 export interface ToolsWorkspaceHandle {requestLeave:(action:() => void) => void}
-interface PendingSave {draft:ToolDraft; toolId?:string}
 function rejectedSave(failure:unknown) {
   if (!(failure instanceof BackendRequestError)) return false;
   if (failure.status === 409 || failure.status === 422) return true;
@@ -42,7 +41,7 @@ export function ToolsWorkspace({ session, onView, onNavigation, ref }: {
   const [notice, setNotice] = useState<string | null>(null);
   const [test, setTest] = useState<ToolTest | null>(null);
   const [inputs, setInputs] = useState<Record<string, unknown>>({});
-  const [pendingSave, setPendingSave] = useState<PendingSave | null>(null);
+  const [saveOutcomeUnknown, setSaveOutcomeUnknown] = useState(false);
   const [savedToolAwaitingRead, setSavedToolAwaitingRead] = useState<string | null>(null);
   const [recent, setRecent] = useState<Record<string,RecentToolTest>>({});
   const [testDefinition, setTestDefinition] = useState<string | null>(null);
@@ -51,7 +50,7 @@ export function ToolsWorkspace({ session, onView, onNavigation, ref }: {
   const leaveAfterSave = useRef(false);
   const selection = useRef(0);
   useEffect(() => {
-    setSchema(null); setTools(null); setReservedNames([]); setEditor(null); setTest(null); setVerified(false); setPendingSave(null);
+    setSchema(null); setTools(null); setReservedNames([]); setEditor(null); setTest(null); setVerified(false); setSaveOutcomeUnknown(false);
     setSavedToolAwaitingRead(null);
     setDirty(false);setNotice(null);setInputs({});
     setRecent({});setTestDefinition(null);setLeaveAction(null);setConfirmDelete(false);leaveAfterSave.current=false;
@@ -66,7 +65,7 @@ export function ToolsWorkspace({ session, onView, onNavigation, ref }: {
   }, [session]);
 
   function requestLeave(action:() => void) {
-    if (busy || pendingSave) {setNotice('当前操作尚未完成，请完成后再离开。');return;}
+    if (busy || saveOutcomeUnknown) {setNotice('当前操作尚未完成，请完成后再离开。');return;}
     if (dirty) {setLeaveAction(() => action);leaveAfterSave.current=false;}
     else action();
   }
@@ -90,6 +89,7 @@ export function ToolsWorkspace({ session, onView, onNavigation, ref }: {
   function closeEditor() {
     selection.current++;setEditor(null);setTest(null);setDirty(false);setBusy(null);setNotice(null);setTestDefinition(null);
     setSavedToolAwaitingRead(null);
+    setSaveOutcomeUnknown(false);
   }
 
   useEffect(() => {
@@ -162,7 +162,7 @@ export function ToolsWorkspace({ session, onView, onNavigation, ref }: {
     finally {if (request === selection.current) setBusy(null);}
   }
   async function save(value:Record<string, unknown>) {
-    if (!session || !editor || busy || pendingSave || savedToolAwaitingRead) return;
+    if (!session || !editor || busy || saveOutcomeUnknown || savedToolAwaitingRead) return;
     const request = ++selection.current;
     setBusy('saving'); setError(null); setNotice(null);
     let savedToolId:string;
@@ -172,8 +172,8 @@ export function ToolsWorkspace({ session, onView, onNavigation, ref }: {
       if (request !== selection.current) return;
       if (rejectedSave(failure)) setError(`保存失败：${message(failure)}`);
       else {
-        setPendingSave({draft:value as ToolDraft,toolId:editor.tool?.id}); setVerified(false);
-        setError(`保存结果待确认：${message(failure)}。请先核实保存结果。`);
+        setSaveOutcomeUnknown(true); setVerified(false);
+        setError(`保存结果不确定：${message(failure)}。没有收到保存响应，请勿重复提交；可放弃草稿并重读工具库查看已保存配置。`);
       }
       setBusy(null);return;
     }
@@ -182,8 +182,8 @@ export function ToolsWorkspace({ session, onView, onNavigation, ref }: {
     try {await readSavedToolDetails(savedToolId,request);}
     finally {if (request === selection.current) setBusy(null);}
   }
-  async function verifySave() {
-    if (!session || !pendingSave) return;
+  async function discardDraftAndReload() {
+    if (!session || !saveOutcomeUnknown || busy) return;
     const request = ++selection.current;
     setBusy('loading');
     try {
@@ -191,16 +191,10 @@ export function ToolsWorkspace({ session, onView, onNavigation, ref }: {
       if (request !== selection.current) return;
       setTools(loaded.data);
       setReservedNames(loaded.reserved_names ?? []);
-      const matches = loaded.data.filter(tool => tool.kind === 'http' && (!pendingSave.toolId || tool.id === pendingSave.toolId)
-        && Object.entries(pendingSave.draft).every(([key,value]) => JSON.stringify(tool[key as keyof HttpToolDefinition]) === JSON.stringify(value)));
-      if (matches.length !== 1) {setError('保存结果仍待确认，未找到唯一匹配的已保存定义。请核对列表后再次查询；先前请求仍可能迟到生效。'); return;}
-      const tool = matches[0];
-      if (tool.kind !== 'http') return;
-      const draft=editTool(tool);
-      setEditor({tool,initial:draft,draft,version:loaded.version,revision:request,inputKey:editor?.inputKey ?? request});
-      setPendingSave(null);setSavedToolAwaitingRead(null);setVerified(true);setDirty(false);setError(null);setNotice('已核实工具保存结果');
+      closeEditor();setInputs({});setVerified(true);setError(null);
+      setNotice('已放弃草稿并重读工具库；此前保存结果仍不确定，请查看已保存配置。');
       if (leaveAfterSave.current) finishLeave();
-    } catch (failure) {if (request === selection.current) setError(`保存核实失败：${message(failure)}`);}
+    } catch (failure) {if (request === selection.current) setError(`工具库重读失败：${message(failure)}。保存结果仍不确定，草稿已保留。`);}
     finally {if (request === selection.current) setBusy(null);}
   }
   async function runTest(value:Record<string, unknown>) {
@@ -238,7 +232,7 @@ export function ToolsWorkspace({ session, onView, onNavigation, ref }: {
     } catch (failure) {if (request === selection.current) setError(message(failure));}
   }
   async function remove() {
-    if (!session || !editor?.tool || busy || pendingSave || savedToolAwaitingRead) return;
+    if (!session || !editor?.tool || busy || saveOutcomeUnknown || savedToolAwaitingRead) return;
     const request=++selection.current;const id=editor.tool.id;
     setBusy('deleting');setError(null);
     try {
@@ -255,7 +249,7 @@ export function ToolsWorkspace({ session, onView, onNavigation, ref }: {
     const validation=schemaValidatorFor(schema).rawValidation(schema,editor.draft);
     validDraft=!validation.validationError && !validation.errors?.length;
   }
-  const canTest = Boolean(editor && validDraft && !busy && verified && !pendingSave && !savedToolAwaitingRead);
+  const canTest = Boolean(editor && validDraft && !busy && verified && !saveOutcomeUnknown && !savedToolAwaitingRead);
   const staleTest=Boolean(test?.result && editor && testDefinition !== toolDraftFingerprint(editor.draft));
   function editDraft(draft:ToolDraft) {
     setEditor(current => current ? {...current,draft} : current);
@@ -263,28 +257,28 @@ export function ToolsWorkspace({ session, onView, onNavigation, ref }: {
   }
   return <div className="tool-registry">
     <ToolLibrarySidebar tools={tools} recent={recent} selectedId={editor?.tool?.id} busy={Boolean(busy)} verified={verified}
-      connected={Boolean(session)} canCreate={Boolean(session && schema && verified && !busy && !pendingSave && !savedToolAwaitingRead)}
+      connected={Boolean(session)} canCreate={Boolean(session && schema && verified && !busy && !saveOutcomeUnknown && !savedToolAwaitingRead)}
       onCreate={() => requestLeave(create)} onOpen={tool => requestLeave(() => void open(tool))} onReload={() => void reload()}/>
     <section className="tool-detail-view" aria-label="工具详情">
       <div className="tool-detail-toolbar" role="toolbar" aria-label="工具操作">
         {onNavigation && <button className="icon-button tool-navigation-toggle" aria-label="打开主导航" onClick={onNavigation}><SidebarSimple/></button>}
-        <div className="tool-breadcrumb"><button aria-label="返回工具列表" disabled={Boolean(busy) || Boolean(pendingSave)}
+        <div className="tool-breadcrumb"><button aria-label="返回工具列表" disabled={Boolean(busy) || saveOutcomeUnknown}
           onClick={() => requestLeave(closeEditor)}>工具与技能</button>{editor && <><span>/</span><span>HTTP</span></>}
           {editor && <><span>/</span><strong>{editor.tool?.display_name || '新建工具'}</strong></>}</div>
         {editor && <div className="tool-toolbar-actions"><Button size="sm" variant="outline" disabled={!canTest}
           onClick={() => document.getElementById('tool-test-panel')?.scrollIntoView({behavior:'smooth',block:'start'})}><Play size={14}/>测试运行</Button>
-          <Button size="sm" variant="outline" disabled={Boolean(busy) || Boolean(pendingSave) || Boolean(savedToolAwaitingRead)}
+          <Button size="sm" variant="outline" disabled={Boolean(busy) || saveOutcomeUnknown || Boolean(savedToolAwaitingRead)}
             onClick={() => editDraft({...editor.draft,enabled:!editor.draft.enabled})}>
             {editor.draft.enabled ? <ToggleRight size={14}/> : <ToggleLeft size={14}/>}{editor.draft.enabled ? '禁用此工具' : '启用此工具'}</Button>
-          <Button size="sm" type="submit" form="tool-definition" disabled={!schema || Boolean(busy) || Boolean(pendingSave) || Boolean(savedToolAwaitingRead)}><FloppyDisk size={14}/>保存工具</Button>
-          {editor.tool && <Button size="sm" variant="outline" aria-label="删除工具" disabled={Boolean(busy) || Boolean(pendingSave) || Boolean(savedToolAwaitingRead)} onClick={() => {setError(null);setConfirmDelete(true);}}><Trash size={14}/></Button>}
+          <Button size="sm" type="submit" form="tool-definition" disabled={!schema || Boolean(busy) || saveOutcomeUnknown || Boolean(savedToolAwaitingRead)}><FloppyDisk size={14}/>保存工具</Button>
+          {editor.tool && <Button size="sm" variant="outline" aria-label="删除工具" disabled={Boolean(busy) || saveOutcomeUnknown || Boolean(savedToolAwaitingRead)} onClick={() => {setError(null);setConfirmDelete(true);}}><Trash size={14}/></Button>}
         </div>}
       </div>
       <div className="tool-detail-body">
         <div className="tool-page-notices" aria-label="工具页面提示">
           {error && !leaveAction && !confirmDelete && <p role="alert" className="business-notice">{error}</p>}
           {notice && <p role="status">{notice}</p>}
-          {pendingSave && <Button size="sm" variant="outline" disabled={Boolean(busy)} onClick={verifySave}>核实保存结果</Button>}
+          {saveOutcomeUnknown && !leaveAction && <Button size="sm" variant="outline" disabled={Boolean(busy)} onClick={discardDraftAndReload}>放弃草稿并重读工具库</Button>}
           {savedToolAwaitingRead && !leaveAction && <><p>已保存工具 ID：<code>{savedToolAwaitingRead}</code></p><Button size="sm" variant="outline" disabled={Boolean(busy)} onClick={retrySavedToolRead}>重新读取工具详情</Button></>}
           {busy === 'loading' && tools !== null && <p role="status">正在读取工具库…</p>}
           {!verified && tools !== null && <p>读取尚未核实，不能使用旧配置开始测试。</p>}
@@ -294,7 +288,7 @@ export function ToolsWorkspace({ session, onView, onNavigation, ref }: {
           <div className="tool-editor-layout">
             {schema && <ToolDefinitionForm key={editor.revision} schema={schema} initial={{...editor.initial}} formId="tool-definition" externalSubmit
               suggestName={editor.tool ? undefined : suggestName} validateName={validateName} enabled={editor.draft.enabled}
-              disabled={Boolean(busy) || Boolean(pendingSave) || Boolean(savedToolAwaitingRead)} onSave={save} onInvalid={diagnostic => setError(`保存前校验失败：${diagnostic}。请继续编辑并修正。`)} onEdited={value => {
+              disabled={Boolean(busy) || saveOutcomeUnknown || Boolean(savedToolAwaitingRead)} onSave={save} onInvalid={diagnostic => setError(`保存前校验失败：${diagnostic}。请继续编辑并修正。`)} onEdited={value => {
                 editDraft(value as ToolDraft);
               }}/>}
             <div className="tool-test-column">
@@ -323,14 +317,14 @@ export function ToolsWorkspace({ session, onView, onNavigation, ref }: {
           <p>{session ? '从左侧工具库选择已有工具，或接入一个 HTTP 工具。' : '后端尚未连接，工具配置和测试暂不可用。'}</p><span><ArrowLeft size={14}/>工具库位于左侧</span></div>}
       </div>
     </section>
-    {leaveAction && <Overlay title={savedToolAwaitingRead ? '工具已保存' : '未保存的工具修改'} onClose={() => {if (!busy) {setLeaveAction(null);leaveAfterSave.current=false;}}} fallbackFocus=".tool-toolbar-actions button">
-      <div className="tool-confirmation"><p>{savedToolAwaitingRead ? '保存已成功，详情尚未读取成功。可以重新读取详情，或直接离开。' : '当前草稿尚未保存。测试不会保存工具，离开后草稿不再保留。'}</p>
+    {leaveAction && <Overlay title={savedToolAwaitingRead ? '工具已保存' : saveOutcomeUnknown ? '保存结果不确定' : '未保存的工具修改'} onClose={() => {if (!busy) {setLeaveAction(null);leaveAfterSave.current=false;}}} fallbackFocus=".tool-toolbar-actions button">
+      <div className="tool-confirmation"><p>{savedToolAwaitingRead ? '保存已成功，详情尚未读取成功。可以重新读取详情，或直接离开。' : saveOutcomeUnknown ? '没有收到保存响应，无法确认是否生效。放弃草稿并重读工具库后可以继续离开；不会再次保存。' : '当前草稿尚未保存。测试不会保存工具，离开后草稿不再保留。'}</p>
         {error && <p role="alert">{error}</p>}
-        {pendingSave && <Button disabled={Boolean(busy)} variant="outline" onClick={verifySave}>核实保存结果</Button>}
+        {saveOutcomeUnknown && <Button disabled={Boolean(busy)} variant="outline" onClick={discardDraftAndReload}>放弃草稿并重读工具库</Button>}
         {savedToolAwaitingRead && <Button disabled={Boolean(busy)} variant="outline" onClick={retrySavedToolRead}>重新读取工具详情</Button>}
-        <div className="tool-actions"><Button type="submit" form="tool-definition" disabled={Boolean(busy) || Boolean(pendingSave) || Boolean(savedToolAwaitingRead)} onClick={() => {leaveAfterSave.current=true;}}>保存并离开</Button>
+        <div className="tool-actions"><Button type="submit" form="tool-definition" disabled={Boolean(busy) || saveOutcomeUnknown || Boolean(savedToolAwaitingRead)} onClick={() => {leaveAfterSave.current=true;}}>保存并离开</Button>
           {savedToolAwaitingRead ? <Button variant="outline" disabled={Boolean(busy)} onClick={finishLeave}>已保存，直接离开</Button>
-            : <Button variant="outline" disabled={Boolean(busy) || Boolean(pendingSave)} onClick={() => {closeEditor();finishLeave();}}>放弃修改</Button>}
+            : <Button variant="outline" disabled={Boolean(busy) || saveOutcomeUnknown} onClick={() => {closeEditor();finishLeave();}}>放弃修改</Button>}
           <Button variant="outline" disabled={Boolean(busy)} onClick={() => {setLeaveAction(null);leaveAfterSave.current=false;}}>继续编辑</Button></div>
       </div>
     </Overlay>}

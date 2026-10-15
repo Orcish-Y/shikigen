@@ -12,7 +12,10 @@ from pydantic import BaseModel, ConfigDict, JsonValue
 
 from shikigen.contracts.http_requests import check_header
 from shikigen.contracts.input_schema import get_schema_validator_class
-from shikigen.contracts.tool_definitions import HttpToolDefinition, ToolDefinition
+from shikigen.contracts.tool_definitions import (
+  HttpToolDefinition,
+  ToolDefinition,
+)
 
 OUTPUT_LIMIT = 1024 * 1024
 
@@ -42,6 +45,17 @@ class HttpAdapter:
     url = definition.url
     headers = dict(definition.headers)
     query: list[tuple[str, str]] = []
+    for binding in definition.auth:
+      secret = binding.value
+      if not secret:
+        return failure("authentication_missing", "Authentication credential is not set")
+      value = secret
+      if binding.kind == "bearer" and not secret.lower().startswith("bearer "):
+        value = "Bearer " + secret
+      if binding.location == "headers":
+        headers[binding.name] = value
+      else:
+        query.append((binding.name, value))
     if set(inputs) - {"path", "query", "headers", "body"}:
       return failure("input_validation", "Unexpected HTTP input group")
     for location in ("path", "query", "headers"):

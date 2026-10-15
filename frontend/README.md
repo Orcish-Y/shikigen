@@ -8,6 +8,8 @@
 
 工具搜索筛选、编辑启用、删除确认、未保存修改离开及当前草稿测试见 [工具编辑与草稿测试](../docs/wayfinder/tools-workflow/tool-edit-drafts.md)。
 
+HTTP 认证使用直接密钥字段，通用凭据管理留待统一设计；认证与保存结果处理见 [HTTP 认证记录](../docs/wayfinder/tools-workflow/http-auth-credentials.md)。
+
 ```bash
 cd frontend
 pnpm install --frozen-lockfile

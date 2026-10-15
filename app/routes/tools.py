@@ -32,6 +32,7 @@ async def parameters_schema():
     "url": "请求地址",
     "headers": "固定请求头",
     "parameters": "请求映射",
+    "auth": "认证",
     "enabled": "启用",
     "timeout_seconds": "超时（秒）",
     "input_schema": "输入结构",
@@ -125,7 +126,9 @@ async def update_tool(tool_id: str, payload: ToolUpdate, request: Request):
   try:
     await request.app.state.runtime.lifecycle.accept(
       request.app.state.runtime.tools.save_tool(
-        payload.definition, tool_id=tool_id, version=payload.version
+        payload.definition,
+        tool_id=tool_id,
+        version=payload.version,
       )
     )
     return Response(status_code=204)

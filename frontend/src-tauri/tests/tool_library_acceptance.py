@@ -54,6 +54,167 @@ class ToolLibraryAcceptance(WindowAcceptance):
     self.evaluate(f"document.getElementById({json.dumps(field)}).select()")
     self.fill(field, value)
 
+  def test_http_auth_password_reads_replaces_and_clears_direct_value(self):
+    requests = []
+    token = "ticket04-native-secret"
+    replacement = "ticket04-native-replacement"
+
+    class Handler(BaseHTTPRequestHandler):
+      def do_GET(self):
+        received = self.headers.get("Authorization")
+        requests.append(received)
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(
+          json.dumps({"authenticated": bool(received), "count": 2}).encode()
+        )
+
+      def log_message(self, format, *args):
+        pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    Thread(target=server.serve_forever, daemon=True).start()
+    self.addCleanup(server.server_close)
+    self.addCleanup(server.shutdown)
+    host = self.launch()
+    self.connect()
+    base = self.state("ready")["base_url"]
+    wait_until(lambda: "新建会话开始对话" in self.body())
+    self.evaluate("document.querySelector('[aria-label=工具]').click()")
+    wait_until(lambda: "工具库为空" in self.body())
+    self.click("接入工具")
+    wait_until(
+      lambda: self.evaluate("Boolean(document.getElementById('tool-config_url'))")
+    )
+    self.fill("tool-config_display_name", "认证工具")
+    self.fill("tool-config_url", f"http://127.0.0.1:{server.server_port}/")
+    self.evaluate("""(() => {
+      const field=document.getElementById('tool-config_auth-mode');
+      field.value='bearer';
+      field.dispatchEvent(new Event('change',{bubbles:true}));
+    })()""")
+    wait_until(
+      lambda: self.evaluate("Boolean(document.querySelector('input[type=password]'))")
+    )
+    password_id = self.evaluate("document.querySelector('input[type=password]').id")
+    self.fill(password_id, token)
+    self.click("执行测试")
+    wait_until(lambda: "测试成功" in self.body())
+    self.assertEqual(requests, ["Bearer " + token])
+    self.assertEqual(self.client.get(base + "/api/tools").json()["data"], [])
+    self.click("保存工具")
+    wait_until(lambda: len(self.client.get(base + "/api/tools").json()["data"]) == 1)
+    tool = self.client.get(base + "/api/tools").json()["data"][0]
+    tool_id = tool["id"]
+    self.assertEqual(tool["auth"][0]["value"], token)
+    self.assertNotIn("credential", tool["auth"][0])
+    wait_until(lambda: "工具已保存" in self.body())
+    self.assertEqual(
+      self.evaluate("document.querySelector('input[type=password]').value"), token
+    )
+    self.assertNotIn("留空保留", self.body())
+    for width, height in ((1440, 900), (390, 844)):
+      self.call(
+        "Emulation.setDeviceMetricsOverride",
+        width=width,
+        height=height,
+        deviceScaleFactor=1,
+        mobile=False,
+      )
+      wait_until(lambda width=width: self.evaluate("window.innerWidth") == width)
+      self.evaluate(
+        "document.querySelector('.tool-auth-editor').scrollIntoView({block:'center'})"
+      )
+      self.assertFalse(
+        self.evaluate("document.documentElement.scrollWidth > window.innerWidth")
+      )
+      data = self.call("Page.captureScreenshot", format="png")["data"]
+      (self.artifacts / f"auth-{width}.png").write_bytes(base64.b64decode(data))
+    self.call("Emulation.clearDeviceMetricsOverride")
+    self.replace("tool-config_display_name", "修改说明保留认证")
+    self.click("保存工具")
+    wait_until(
+      lambda: (
+        self.client.get(base + f"/api/tools/{tool_id}").json()["data"]["display_name"]
+        == "修改说明保留认证"
+      )
+    )
+    result = self.client.post(
+      base + f"/api/tools/{tool_id}/execute", json={"inputs": {}}
+    )
+    self.assertEqual(result.json()["data"]["status"], "success")
+    self.assertEqual(requests[-1], "Bearer " + token)
+    wait_until(
+      lambda: (
+        not self.evaluate(
+          "document.querySelector('button[form=tool-definition]').disabled"
+        )
+      )
+    )
+    self.replace(password_id, replacement)
+    self.click("保存工具")
+    wait_until(
+      lambda: (
+        self.client.get(base + f"/api/tools/{tool_id}").json()["data"]["auth"][0][
+          "value"
+        ]
+        == replacement
+      )
+    )
+    result = self.client.post(
+      base + f"/api/tools/{tool_id}/execute", json={"inputs": {}}
+    )
+    self.assertEqual(requests[-1], "Bearer " + replacement)
+    wait_until(
+      lambda: (
+        not self.evaluate(
+          "document.querySelector('button[form=tool-definition]').disabled"
+        )
+      )
+    )
+    self.evaluate(
+      f"document.getElementById({json.dumps(password_id)}).focus();document.getElementById({json.dumps(password_id)}).select()"
+    )
+    for event_type in ("keyDown", "keyUp"):
+      self.call(
+        "Input.dispatchKeyEvent",
+        type=event_type,
+        key="Backspace",
+        code="Backspace",
+        windowsVirtualKeyCode=8,
+      )
+    self.assertEqual(
+      self.evaluate("document.querySelector('input[type=password]').value"), ""
+    )
+    self.click("保存工具")
+    wait_until(
+      lambda: (
+        self.client.get(base + f"/api/tools/{tool_id}").json()["data"]["auth"][0][
+          "value"
+        ]
+        == ""
+      )
+    )
+    count = len(requests)
+    result = self.client.post(
+      base + f"/api/tools/{tool_id}/execute", json={"inputs": {}}
+    ).json()["data"]
+    self.assertEqual(result["error"]["code"], "authentication_missing")
+    self.assertEqual(len(requests), count)
+    storage = self.evaluate("JSON.stringify({...localStorage})")
+    self.assertNotIn(token, storage)
+    self.assertNotIn(replacement, storage)
+    self.assertNotIn("auth_1", storage)
+    self.record(
+      tool_id=tool_id,
+      requests_verified=True,
+      auth_value_cleared=True,
+      missing_result=result,
+    )
+    self.quit(host)
+    self.assertEqual(host.wait(timeout=10), 0)
+
   def test_prototype_layout_type_tabs_and_hide_disabled(self):
     host = self.launch()
     self.connect()
@@ -235,7 +396,7 @@ class ToolLibraryAcceptance(WindowAcceptance):
     wait_until(lambda: "已保存，详情读取失败" in self.body())
     saved = self.client.get(base + "/api/tools").json()["data"]
     self.assertEqual(len(saved), 1)
-    self.assertNotIn("保存结果待确认", self.body())
+    self.assertNotIn("保存结果不确定", self.body())
     self.assertTrue(
       self.evaluate("document.querySelector('button[form=tool-definition]').disabled")
     )
