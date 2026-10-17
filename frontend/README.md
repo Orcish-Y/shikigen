@@ -10,6 +10,8 @@
 
 HTTP 认证使用直接密钥字段，通用凭据管理留待统一设计；认证与保存结果处理见 [HTTP 认证记录](../docs/wayfinder/tools-workflow/http-auth-credentials.md)。
 
+Python 工具使用 CodeMirror 6 + Lezer 提供源码高亮、本地静态分析和只读参数预览；保存、测试时由后端 Python 复核，并支持真实本机子进程测试。入口及限制见 [Python 工具实现](../docs/wayfinder/tools-workflow/python-tool-execution.md)。
+
 ```bash
 cd frontend
 pnpm install --frozen-lockfile

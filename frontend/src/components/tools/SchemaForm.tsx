@@ -65,7 +65,7 @@ export function SchemaForm(props: Omit<FormProps<Record<string, unknown>, RJSFSc
     noHtml5Validate templates={{...props.templates,BaseInputTemplate:BaseInput}}
     widgets={{TextareaWidget,CheckboxWidget:BooleanWidget,SelectWidget,
       DateWidget:FormatWidget,DateTimeWidget:FormatWidget,TimeWidget:FormatWidget,
-      EmailWidget:FormatWidget,URLWidget:FormatWidget,FileWidget:FormatWidget}}
+      EmailWidget:FormatWidget,URLWidget:FormatWidget,FileWidget:FormatWidget,...props.widgets}}
     fields={{JsonSchema:JsonSchemaField,...props.fields}}
     experimental_defaultFormStateBehavior={{emptyObjectFields:'skipDefaults',
       arrayMinItems:{populate:'never'}, requiredBooleanDefault:'skip', constAsDefaults:'never', allOf:'skipDefaults', mergeDefaultsIntoFormData:'useFormDataIfPresent'}}/>;

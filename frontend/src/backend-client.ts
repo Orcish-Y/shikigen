@@ -166,6 +166,9 @@ export class BackendSession {
   getToolManagementSchema(signal?: AbortSignal) {
     return this.json<{data:RJSFSchema}>('/api/tools/schema/http', {cache:'no-store'}, signal);
   }
+  getPythonToolManagementSchema(signal?: AbortSignal) {
+    return this.json<{data:RJSFSchema}>('/api/tools/schema/python', {cache:'no-store'}, signal);
+  }
   listTools(signal?: AbortSignal) {
     return this.json<ToolLibraryRead>('/api/tools', {cache:'no-store'}, signal);
   }

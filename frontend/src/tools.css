@@ -188,6 +188,20 @@
   .tool-disabled-filter input, .tool-disabled-filter input::before { transition: none; }
 }
 .tool-field-auth { grid-column: 1 / -1; }
+.tool-field-source { grid-column: 1 / -1; }
+.tool-python-editor { min-width: 0; max-width: 100%; }
+.tool-python-editor .cm-editor { height: 320px; max-width: 100%; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; font: 12px/1.7 'JetBrains Mono', monospace; }
+.tool-python-editor .cm-editor.cm-focused { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tool-python-editor .cm-scroller { overflow: auto; font-family: inherit; }
+.tool-python-editor .cm-content { min-height: 100%; padding: 10px 0; }
+.tool-python-editor .cm-gutters { background: var(--sidebar); color: var(--muted); border-right-color: var(--border); }
+.tool-python-editor .cm-content[aria-disabled=true] { opacity: .6; }
+.tool-python-preview { overflow-x: auto; }
+.tool-python-preview table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.tool-python-preview th, .tool-python-preview td { padding: 8px; text-align: left; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.tool-create-actions { display: flex; position: relative; flex-shrink: 0; }
+.tool-create-menu { position: absolute; z-index: 5; top: 32px; right: 0; min-width: 150px; padding: 4px; border: 1px solid var(--border); border-radius: 6px; background: var(--sidebar); box-shadow: 0 8px 24px #0002; }
+.tool-create-menu button { width: 100%; justify-content: flex-start; }
 .tool-auth-editor { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .tool-auth-editor > label, .tool-auth-binding > label { font-size: 12px; font-weight: 500; }
 .tool-auth-binding { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: 6px; }

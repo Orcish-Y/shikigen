@@ -11,11 +11,12 @@ const categories = [
 
 export function ToolLibrarySidebar({tools, recent, selectedId, busy, verified, canCreate, connected, onCreate, onOpen, onReload}: {
   tools:AnyToolDefinition[] | null; recent:Record<string,RecentToolTest>; selectedId?:string; busy:boolean; verified:boolean;
-  canCreate:boolean; connected:boolean; onCreate:() => void; onOpen:(tool:AnyToolDefinition) => void; onReload:() => void;
+  canCreate:boolean; connected:boolean; onCreate:(kind:'http' | 'python') => void; onOpen:(tool:AnyToolDefinition) => void; onReload:() => void;
 }) {
   const [query, setQuery] = useState('');
   const [hideDisabled, setHideDisabled] = useState(false);
   const [kind, setKind] = useState<typeof categories[number]['value']>('all');
+  const [createMenu, setCreateMenu] = useState(false);
   const tabs = useRef<(HTMLButtonElement | null)[]>([]);
   const id = useId();
   const normalized = query.trim().toLocaleLowerCase();
@@ -26,7 +27,11 @@ export function ToolLibrarySidebar({tools, recent, selectedId, busy, verified, c
   return <aside className="tool-library-sidebar" aria-label="工具库">
     <header className="tool-library-heading">
       <div className="tool-sidebar-title"><h2>工具与技能</h2>
-        <Button size="xs" aria-label="创建 HTTP 工具" disabled={!canCreate} onClick={onCreate}><Plus/>接入工具</Button>
+        <div className="tool-create-actions"><Button size="xs" aria-label="创建 HTTP 工具" disabled={!canCreate} onClick={() => onCreate('http')}><Plus/>接入工具</Button>
+          <Button size="xs" variant="outline" aria-label="选择接入类型" aria-expanded={createMenu} disabled={!canCreate} onClick={() => setCreateMenu(!createMenu)}>⌄</Button>
+          {createMenu && <div className="tool-create-menu"><Button variant="ghost" onClick={() => {setCreateMenu(false);onCreate('http');}}>新建 HTTP 工具</Button>
+            <Button variant="ghost" onClick={() => {setCreateMenu(false);onCreate('python');}}>新建 Python 工具</Button></div>}
+        </div>
       </div>
       <div className="tool-search"><MagnifyingGlass size={14}/><Input type="search" aria-label="搜索工具"
         placeholder="过滤已注册工具…" value={query} onChange={event => setQuery(event.target.value)}/></div>
@@ -51,7 +56,7 @@ export function ToolLibrarySidebar({tools, recent, selectedId, busy, verified, c
     <div className="tool-library-items" id={`${id}-items`} role="tabpanel" aria-labelledby={`${id}-${kind}`} tabIndex={0}>
       {!connected && <p className="tool-list-message">后端尚未连接，工具库不可读取。</p>}
       {connected && tools === null && <p className="tool-list-message" role="status">{busy ? '正在读取工具库…' : '工具库读取失败，请刷新重试。'}</p>}
-      {tools?.length === 0 && verified && <p className="tool-list-message" role="status">工具库为空。接入第一个 HTTP 工具开始测试。</p>}
+      {tools?.length === 0 && verified && <p className="tool-list-message" role="status">工具库为空。接入 HTTP 或 Python 工具开始测试。</p>}
       {tools && tools.length > 0 && filtered?.length === 0 && <p className="tool-list-message">没有匹配的工具。{hideDisabled && '已隐藏禁用工具。'}</p>}
       {filtered && filtered.length > 0 && <ul className="tool-library-list">{filtered.map(tool => {
         const source=tool.kind === 'http' ? tool.url : tool.kind === 'python' ? tool.code_path : `${tool.server_id} / ${tool.remote_name}`;

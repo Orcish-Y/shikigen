@@ -18,11 +18,13 @@ export interface HttpParameterMapping {
   location:'path' | 'query' | 'headers'; input_name:string; name:string;
   style?:'simple' | 'form' | null; explode?:boolean | null;
 }
-export type ToolDraft = Omit<HttpToolDefinition, 'id' | 'created_at' | 'updated_at'>;
+export type HttpToolDraft = Omit<HttpToolDefinition, 'id' | 'created_at' | 'updated_at'>;
+export type PythonToolDraft = Omit<PythonToolDefinition, 'id' | 'created_at' | 'updated_at' | 'code_path' | 'source' | 'input_schema'> & {source:string};
+export type ToolDraft = HttpToolDraft | PythonToolDraft;
 export interface ToolNameValidation {
   valid: boolean; code: 'name_invalid' | 'name_conflict' | null; message: string | null;
 }
-export interface PythonToolDefinition extends ToolDefinition {kind:'python'; code_path:string}
+export interface PythonToolDefinition extends ToolDefinition {kind:'python'; code_path:string; source?:string}
 export interface McpToolDefinition extends ToolDefinition {kind:'mcp'; server_id:string; remote_name:string}
 export type AnyToolDefinition = HttpToolDefinition | PythonToolDefinition | McpToolDefinition;
 export type ToolLibraryRead = ToolRead<AnyToolDefinition[]> & {reserved_names: string[]};
@@ -39,11 +41,16 @@ export interface RecentToolTest {test:ToolTest; inputs:Record<string,unknown>; d
 export function toolTestStatus(status:ToolTest['status']):string {
   return {running:'测试中',success:'测试成功',error:'测试失败',timeout:'测试超时',cancelled:'测试已取消'}[status];
 }
-export const emptyToolDraft: ToolDraft = {
+export const emptyToolDraft: HttpToolDraft = {
   kind:'http', method:'GET', display_name:'', name:'tool', description:'', url:'', enabled:true,
   timeout_seconds:30, input_schema:{type:'object',properties:{},additionalProperties:false},
   output_schema:null,
   headers:{},parameters:[],auth:[],
+};
+export const emptyPythonToolDraft:PythonToolDraft = {
+  kind:'python',display_name:'',name:'tool',description:'',enabled:true,timeout_seconds:30,
+  source:'def main(quantity: int, price: float = 2.5):\n    return {"total": quantity * price}\n',
+  output_schema:null,
 };
 export function syncHttpMappings(schema:RJSFSchema, mappings:HttpParameterMapping[]):HttpParameterMapping[] {
   const sources=['path','query','headers'].flatMap(location => {
@@ -66,12 +73,16 @@ export function suggestToolName(displayName: string, occupiedNames: Iterable<str
   for (let suffix = 2; occupied.has(name); suffix++) name = `${stem}_${suffix}`;
   return name;
 }
-export function editTool(tool: HttpToolDefinition): ToolDraft {
+export function editTool(tool: HttpToolDefinition | PythonToolDefinition): ToolDraft {
+  if (tool.kind === 'python') {
+    const {id, created_at, updated_at, code_path, source, input_schema, ...draft} = tool;
+    return {...draft,source:source ?? ''};
+  }
   const {id, created_at, updated_at, ...draft} = tool;
   return draft;
 }
 export function toolDraftFingerprint(draft:ToolDraft):string {
-  const normalized={...draft,headers:draft.headers === undefined ? {} : draft.headers,
+  const normalized=draft.kind === 'python' ? draft : {...draft,headers:draft.headers === undefined ? {} : draft.headers,
     auth:(draft.auth ?? []).map(binding => ({...binding,value:binding.value ?? ''})),
     parameters:Array.isArray(draft.parameters) ? draft.parameters.map(mapping => mapping && typeof mapping === 'object' && !Array.isArray(mapping)
       ? {...mapping,style:mapping.style ?? null,explode:mapping.explode ?? null} : mapping) : draft.parameters === undefined ? [] : draft.parameters};

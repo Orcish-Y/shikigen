@@ -50,9 +50,159 @@ class ToolLibraryAcceptance(WindowAcceptance):
     self.evaluate(f"document.getElementById({json.dumps(field)}).focus()")
     self.call("Input.insertText", text=value)
 
+  def press_key(self, key, code, virtual_key, modifiers=0):
+    self.call(
+      "Input.dispatchKeyEvent",
+      type="keyDown",
+      key=key,
+      code=code,
+      windowsVirtualKeyCode=virtual_key,
+      modifiers=modifiers,
+    )
+    self.call("Input.dispatchKeyEvent", type="keyUp", key=key, code=code, modifiers=0)
+
   def replace(self, field, value):
-    self.evaluate(f"document.getElementById({json.dumps(field)}).select()")
+    editable = self.evaluate(
+      f"document.getElementById({json.dumps(field)}).isContentEditable"
+    )
+    if editable:
+      self.evaluate(f"document.getElementById({json.dumps(field)}).focus()")
+      self.press_key("a", "KeyA", 65, 2)
+    else:
+      self.evaluate(f"document.getElementById({json.dumps(field)}).select()")
     self.fill(field, value)
+
+  def test_python_source_preview_named_inputs_and_separate_debug_output(self):
+    host = self.launch()
+    self.connect()
+    base = self.state("ready")["base_url"]
+    wait_until(lambda: "新建会话开始对话" in self.body())
+    self.evaluate("document.querySelector('[aria-label=工具]').click()")
+    wait_until(lambda: "工具库为空" in self.body())
+    self.evaluate("document.querySelector('[aria-label=选择接入类型]').click()")
+    self.click("新建 Python 工具")
+    wait_until(
+      lambda: self.evaluate("Boolean(document.getElementById('tool-config_source'))")
+    )
+    self.fill("tool-config_display_name", "Python 订单计算")
+    source = (
+      "import sys\n\ndef main(quantity: int, price: float = 2.5):\n"
+      "    print('native stdout')\n"
+      "    print('native stderr', file=sys.stderr)\n"
+      "    return {'total': quantity * price, 'ok': True}\n"
+      + "# "
+      + "long source line " * 50
+      + "\n"
+    )
+    self.replace("tool-config_source", source)
+    self.fill("tool-config_source", "# ")
+    self.call("Input.imeSetComposition", text="中文", selectionStart=2, selectionEnd=2)
+    self.call("Input.insertText", text="中文")
+    self.press_key("Tab", "Tab", 9)
+    last_line = "[...document.querySelectorAll('.cm-line')].at(-1).textContent"
+    wait_until(lambda: self.evaluate(last_line) == "    # 中文")
+    self.press_key("z", "KeyZ", 90, 2)
+    wait_until(lambda: self.evaluate(last_line) == "# 中文")
+    self.press_key("y", "KeyY", 89, 2)
+    wait_until(lambda: self.evaluate(last_line) == "    # 中文")
+    source += "    # 中文"
+    self.press_key("Escape", "Escape", 27)
+    self.press_key("Tab", "Tab", 9)
+    self.assertNotEqual(
+      self.evaluate("document.activeElement.id"), "tool-config_source"
+    )
+    wait_until(
+      lambda: self.evaluate("Boolean(document.getElementById('tool-input_price'))")
+    )
+    self.assertEqual(
+      self.evaluate("document.getElementById('tool-input_price').value"), ""
+    )
+    self.fill("tool-input_quantity", "4")
+    self.click("执行测试")
+    wait_until(lambda: "测试成功" in self.body())
+    self.assertIn('"total": 10', self.body())
+    self.assertIn("native stdout", self.body())
+    self.assertIn("native stderr", self.body())
+    self.assertIn("退出码：0", self.body())
+    self.assertEqual(self.client.get(base + "/api/tools").json()["data"], [])
+    self.click("保存工具")
+    wait_until(lambda: "工具已保存" in self.body())
+    saved = self.client.get(base + "/api/tools").json()["data"][0]
+    self.assertEqual(saved["kind"], "python")
+    self.assertNotIn("source", saved)
+    detail = self.client.get(base + f"/api/tools/{saved['id']}").json()["data"]
+    self.assertEqual(detail["source"], source)
+    self.assertNotIn("未保存修改", self.body())
+    self.assertTrue(self.evaluate("Boolean(document.querySelector('.cm-gutters'))"))
+    self.assertTrue(
+      self.evaluate("Boolean(document.querySelector('.cm-content span'))")
+    )
+    for width, height in ((1440, 900), (390, 844)):
+      self.call(
+        "Emulation.setDeviceMetricsOverride",
+        width=width,
+        height=height,
+        deviceScaleFactor=1,
+        mobile=False,
+      )
+      wait_until(lambda width=width: self.evaluate("window.innerWidth") == width)
+      self.evaluate(
+        "document.getElementById('tool-config_source').scrollIntoView({block:'center'})"
+      )
+      self.evaluate("document.querySelector('.cm-scroller').scrollLeft=0")
+      self.assertTrue(
+        self.evaluate(
+          "document.querySelector('.cm-content').getBoundingClientRect().left >= "
+          "document.querySelector('.cm-gutters').getBoundingClientRect().right"
+        )
+      )
+      self.assertFalse(
+        self.evaluate("document.documentElement.scrollWidth > window.innerWidth")
+      )
+      self.assertTrue(
+        self.evaluate(
+          "(() => {const scroller=document.querySelector('.cm-scroller');"
+          "return scroller.scrollWidth > scroller.clientWidth;})()"
+        )
+      )
+      data = self.call("Page.captureScreenshot", format="png")["data"]
+      (self.artifacts / f"python-{width}.png").write_bytes(base64.b64decode(data))
+      for area, selector in (
+        ("preview", ".tool-python-preview"),
+        ("result", "[aria-label='Python 调试输出']"),
+      ):
+        self.evaluate(
+          f"document.querySelector({json.dumps(selector)}).scrollIntoView({{block:'center'}})"
+        )
+        self.assertFalse(
+          self.evaluate("document.documentElement.scrollWidth > window.innerWidth")
+        )
+        data = self.call("Page.captureScreenshot", format="png")["data"]
+        (self.artifacts / f"python-{area}-{width}.png").write_bytes(
+          base64.b64decode(data)
+        )
+    self.call("Emulation.clearDeviceMetricsOverride")
+    self.replace("tool-config_source", "def main(:")
+    wait_until(lambda: "python_syntax" in self.body())
+    self.assertTrue(
+      self.evaluate("document.querySelector('button[form=tool-definition]').disabled")
+    )
+    self.assertEqual(
+      self.evaluate("document.getElementById('tool-config_source').textContent"),
+      "def main(:",
+    )
+    self.replace("tool-config_source", source)
+    wait_until(
+      lambda: (
+        not self.evaluate(
+          "document.querySelector('button[form=tool-definition]').disabled"
+        )
+      )
+    )
+    self.assertEqual(
+      self.evaluate("document.getElementById('tool-input_quantity').value"), "4"
+    )
+    self.record(tool_id=saved["id"], source=saved["code_path"], pid=host.pid)
 
   def test_http_auth_password_reads_replaces_and_clears_direct_value(self):
     requests = []
@@ -247,7 +397,7 @@ class ToolLibraryAcceptance(WindowAcceptance):
         name="calculate_total",
         display_name="金额计算",
         description="汇总项目金额",
-        code_path="tools/calculate.py",
+        source="def main(quantity: int): return quantity * 2\n",
       ),
       dict(
         kind="mcp",
@@ -681,6 +831,11 @@ class ToolLibraryAcceptance(WindowAcceptance):
     )
     self.click("保存工具")
     wait_until(lambda: "工具已保存" in self.body())
+    wait_until(
+      lambda: self.evaluate(
+        "Boolean(document.querySelector('.tool-parameter-table-wrap'))"
+      )
+    )
     self.assertEqual(
       json.loads(self.evaluate("document.getElementById('tool-input-json').value")),
       inputs,

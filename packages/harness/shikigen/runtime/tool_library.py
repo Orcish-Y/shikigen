@@ -11,11 +11,16 @@ from uuid import uuid4
 
 from pydantic import TypeAdapter, ValidationError
 
+from shikigen.contracts.python_source import PythonSourceError, parse_python_source
 from shikigen.contracts.tool_definitions import (
   AnyToolDefinition,
   ToolLibraryConfig,
   ToolName,
 )
+from shikigen.contracts.tool_execution import PythonToolExecution, ToolExecution
+from shikigen.persistence.python_source_store import PythonSourceStore
+from shikigen.tools.adapter.http_execution import HttpAdapter
+from shikigen.tools.adapter.python_execution import PythonAdapter
 from shikigen.tools.library_execution import ToolExecutor
 from shikigen.tools.tool_registry import create_builtin_registry
 
@@ -32,10 +37,16 @@ class ToolLibraryError(ValueError):
 
 class ToolLibrary:
   def __init__(self, source_path: Path | None):
-    self.source_path = source_path
+    self.source_path = source_path.resolve() if source_path else None
+    self.python_source_store = PythonSourceStore(self.source_path)
     self._lock = asyncio.Lock()
     self._reserved_names = set(create_builtin_registry().names) | {"task"}
-    self.executor = ToolExecutor()
+    self.executor = ToolExecutor(
+      adapters={
+        "http": HttpAdapter(),
+        "python": PythonAdapter(),
+      }
+    )
     self._tests: dict[str, dict] = {}
     self._tasks: dict[str, asyncio.Task] = {}
 
@@ -108,9 +119,30 @@ class ToolLibrary:
   async def execute_tool(self, tool_id: str, inputs: dict):
     async def load():
       tool, _ = await self.get_tool(tool_id)
-      return tool
+      return await self._load_saved_execution(tool)
 
     return await self.executor.execute(load, inputs)
+
+  async def _load_saved_execution(self, tool: AnyToolDefinition) -> ToolExecution:
+    """读取持久资源，形成完整执行快照；适配器只消费准备后的数据。"""
+    if tool.kind == "python":
+      source = await asyncio.to_thread(self.python_source_store.read, tool.code_path)
+      return PythonToolExecution(definition=tool, source=source)
+    return ToolExecution(definition=tool)
+
+  async def get_tool_detail(self, tool_id: str):
+    tool, version = await self.get_tool(tool_id)
+    data = tool.model_dump(mode="json")
+    if tool.kind == "python":
+      data["source"] = await asyncio.to_thread(
+        self.python_source_store.read, tool.code_path
+      )
+    return data, version
+
+  def _cleanup_python_source_files(self, library: ToolLibraryConfig):
+    self.python_source_store.cleanup(
+      {tool.code_path for tool in library.tools if tool.kind == "python"}
+    )
 
   async def get_executable_tool_definitions(
     self, tool_ids: list[str]
@@ -142,12 +174,15 @@ class ToolLibrary:
       raw["tool_library"] = library.model_dump(mode="json")
       # Code-file cleanup belongs to the managed Python lifecycle; arbitrary
       # code_path values must never cause deletion of user files.
-      return await asyncio.to_thread(self._commit, raw, current_config_version)
+      saved_version = await asyncio.to_thread(self._commit, raw, current_config_version)
+      await asyncio.to_thread(self._cleanup_python_source_files, library)
+      return saved_version
 
   async def start_test(self, tool_id: str, inputs: dict):
     # Resolve before admission. A corrupt/deleted definition must never use cache.
     tool, _ = await self.get_tool(tool_id)
-    return self._start_test(tool, inputs, tool_id)
+    execution = await self._load_saved_execution(tool)
+    return self._start_test(execution, inputs, tool_id)
 
   async def start_draft_test(
     self, payload: dict, inputs: dict, tool_id: str | None = None
@@ -155,11 +190,24 @@ class ToolLibrary:
     async with self._lock:
       _, library, _ = await asyncio.to_thread(self._read)
       previous = next((tool for tool in library.tools if tool.id == tool_id), None)
+      if tool_id is not None and previous is None:
+        raise ToolLibraryError("not_found", "Tool does not exist", 404)
       self._check_tool_edit_permissions(payload, previous)
-      tool = self._prepare_tool(payload, library, tool_id)
-    return self._start_test(tool, inputs, tool_id)
+      payload, source = self._prepare_python_payload(payload)
+      tool = self._prepare_tool(payload, library, previous)
+      if tool.kind == "python":
+        assert source is not None
+        execution = PythonToolExecution(definition=tool, source=source)
+      else:
+        execution = ToolExecution(definition=tool)
+    return self._start_test(execution, inputs, tool_id)
 
-  def _start_test(self, tool: AnyToolDefinition, inputs: dict, tool_id: str | None):
+  def _start_test(
+    self,
+    execution: ToolExecution,
+    inputs: dict,
+    tool_id: str | None,
+  ):
     test_id = str(uuid4())
     snapshot = {
       "test_id": test_id,
@@ -178,7 +226,7 @@ class ToolLibrary:
     self._tests[test_id] = snapshot
 
     async def load():
-      return tool
+      return execution
 
     async def run():
       result = await self.executor.execute(load, inputs, manual_test=True)
@@ -216,18 +264,47 @@ class ToolLibrary:
           "version_conflict", "Configuration changed; reload before saving", 409
         )
       self._check_tool_edit_permissions(payload, previous)
-      tool = self._prepare_tool(payload, library, tool_id)
+      payload, source = self._prepare_python_payload(payload)
+      tool = self._prepare_tool(payload, library, previous)
+      if source is not None and tool.kind == "python":
+        tool.code_path = await asyncio.to_thread(
+          self.python_source_store.write, tool.id, source
+        )
       library.tools = [tool if item.id == tool.id else item for item in library.tools]
       if previous is None:
         library.tools.append(tool)
       raw["tool_library"] = library.model_dump(mode="json")
       saved_version = await asyncio.to_thread(self._commit, raw, current_config_version)
+      await asyncio.to_thread(self._cleanup_python_source_files, library)
       return tool, saved_version
+
+  def _prepare_python_payload(self, payload: dict) -> tuple[dict, str | None]:
+    """只解析本次提交的 Python 草稿，不读取或修改持久状态及传入对象。"""
+    if payload.get("kind") != "python":
+      return payload, None
+    if "code_path" in payload:
+      raise ToolLibraryError("read_only", "代码路径由系统管理，请提交 source")
+    source = payload.get("source")
+    parsed = parse_python_source(source)
+    if "input_schema" in payload and payload["input_schema"] != parsed["input_schema"]:
+      raise PythonSourceError(
+        "python_schema",
+        "参数结构须与源码解析结果一致，不能改写名称、类型、必填性或默认值",
+      )
+    definition = {key: value for key, value in payload.items() if key != "source"}
+    definition["input_schema"] = parsed["input_schema"]
+    return definition, source
 
   def _check_tool_edit_permissions(
     self, payload: dict, previous: AnyToolDefinition | None
   ) -> None:
     """普通保存和草稿测试的编辑限制；发现更新使用自己的来源核对。"""
+    if {"id", "created_at", "updated_at"} & payload.keys():
+      raise ToolLibraryError(
+        "read_only", "ID and timestamps are maintained by the system"
+      )
+    if previous and payload.get("kind", previous.kind) != previous.kind:
+      raise ToolLibraryError("read_only", "Tool type cannot be changed")
     if previous and previous.kind == "mcp":
       for field in ("server_id", "remote_name", "input_schema", "output_schema"):
         if payload.get(field, getattr(previous, field)) != getattr(previous, field):
@@ -236,20 +313,14 @@ class ToolLibrary:
           )
 
   def _prepare_tool(
-    self, payload: dict, library: ToolLibraryConfig, tool_id: str | None
+    self,
+    payload: dict,
+    library: ToolLibraryConfig,
+    previous: AnyToolDefinition | None,
   ) -> AnyToolDefinition:
     """校验定义并准备系统字段；调用方负责普通编辑或发现更新的权限核对。"""
-    previous = next((tool for tool in library.tools if tool.id == tool_id), None)
-    if tool_id is not None and previous is None:
-      raise ToolLibraryError("not_found", "Tool does not exist", 404)
-    if {"id", "created_at", "updated_at"} & payload.keys():
-      raise ToolLibraryError(
-        "read_only", "ID and timestamps are maintained by the system"
-      )
-    if previous and payload.get("kind", previous.kind) != previous.kind:
-      raise ToolLibraryError("read_only", "Tool type cannot be changed")
     occupied = self._reserved_names | {
-      tool.name for tool in library.tools if tool.id != tool_id
+      tool.name for tool in library.tools if previous is None or tool.id != previous.id
     }
     if not isinstance(payload.get("display_name"), str):
       raise ToolLibraryError("definition_invalid", "Page name must be a string")
@@ -262,8 +333,12 @@ class ToolLibrary:
       "created_at": previous.created_at if previous else now,
       "updated_at": now,
     }
+    if definition.get("kind") == "python":
+      # 满足持久定义模型的必填字段；草稿只用源码快照，保存时替换为实际写入路径。
+      definition["code_path"] = "config/tools/pending.py"
     if previous:
-      definition.setdefault("kind", previous.kind)
+      if previous.kind != "python":
+        definition.setdefault("kind", previous.kind)
       if previous.kind == "mcp":
         for field in ("server_id", "remote_name", "input_schema", "output_schema"):
           definition.setdefault(field, getattr(previous, field))

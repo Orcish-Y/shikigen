@@ -12,17 +12,18 @@ import { ToolInputForm } from './ToolInputForm';
 import { ToolTestResult } from './ToolTestResult';
 import { ToolLibrarySidebar } from './ToolLibrarySidebar';
 import { ToolSummaryCard } from './ToolSummaryCard';
-import { editTool, emptyToolDraft, suggestToolName, toolDraftFingerprint, toolTestStatus, type AnyToolDefinition, type HttpToolDefinition, type RecentToolTest, type ToolDraft, type ToolTest } from '../../tool-library';
+import { editTool, emptyToolDraft, emptyPythonToolDraft, suggestToolName, toolDraftFingerprint, toolTestStatus, type AnyToolDefinition, type HttpToolDefinition, type PythonToolDefinition, type RecentToolTest, type ToolDraft, type ToolTest } from '../../tool-library';
+import type { PythonSourceAnalysis } from '../../python-source';
 
 const message = (error:unknown) => error instanceof Error ? error.message : String(error);
-interface Editor {tool:HttpToolDefinition | null; initial:ToolDraft; draft:ToolDraft; version:string; revision:number; inputKey:number}
+interface Editor {tool:HttpToolDefinition | PythonToolDefinition | null; initial:ToolDraft; draft:ToolDraft; version:string; revision:number; inputKey:number}
 export interface ToolsWorkspaceHandle {requestLeave:(action:() => void) => void}
 function rejectedSave(failure:unknown) {
   if (!(failure instanceof BackendRequestError)) return false;
   if (failure.status === 409 || failure.status === 422) return true;
   try {
     const code = JSON.parse(failure.detail).detail?.code;
-    return ['config_read','config_write','config_source','not_found','definition_invalid','read_only'].includes(code);
+    return ['config_read','config_write','config_source','python_source_empty','python_source_read','python_source_write','not_found','definition_invalid','read_only'].includes(code);
   } catch {return false;}
 }
 
@@ -30,10 +31,15 @@ export function ToolsWorkspace({ session, onView, onNavigation, ref }: {
   session: BackendSession | null; onView: (view: ContentView) => void;
   onNavigation?:() => void; ref?:Ref<ToolsWorkspaceHandle>;
 }) {
-  const [schema, setSchema] = useState<RJSFSchema | null>(null);
+  const [httpSchema, setSchema] = useState<RJSFSchema | null>(null);
+  const [pythonSchema, setPythonSchema] = useState<RJSFSchema | null>(null);
+  const [pythonAnalysis, setPythonAnalysis] = useState<PythonSourceAnalysis | null>(null);
   const [tools, setTools] = useState<AnyToolDefinition[] | null>(null);
   const [reservedNames, setReservedNames] = useState<string[]>([]);
   const [editor, setEditor] = useState<Editor | null>(null);
+  const schema=editor?.draft.kind === 'python' ? pythonSchema : httpSchema;
+  const currentPythonSchema=editor?.draft.kind === 'python' && pythonAnalysis?.source === editor.draft.source ? pythonAnalysis.input_schema : null;
+  const sourceValid=Boolean(currentPythonSchema);
   const [dirty, setDirty] = useState(false);
   const [verified, setVerified] = useState(false);
   const [busy, setBusy] = useState<'loading' | 'saving' | 'testing' | 'deleting' | null>('loading');
@@ -50,7 +56,7 @@ export function ToolsWorkspace({ session, onView, onNavigation, ref }: {
   const leaveAfterSave = useRef(false);
   const selection = useRef(0);
   useEffect(() => {
-    setSchema(null); setTools(null); setReservedNames([]); setEditor(null); setTest(null); setVerified(false); setSaveOutcomeUnknown(false);
+    setPythonSchema(null);setPythonAnalysis(null);setSchema(null); setTools(null); setReservedNames([]); setEditor(null); setTest(null); setVerified(false); setSaveOutcomeUnknown(false);
     setSavedToolAwaitingRead(null);
     setDirty(false);setNotice(null);setInputs({});
     setRecent({});setTestDefinition(null);setLeaveAction(null);setConfirmDelete(false);leaveAfterSave.current=false;
@@ -129,7 +135,9 @@ export function ToolsWorkspace({ session, onView, onNavigation, ref }: {
     try {
       const saved = await session.getTool(tool.id);
       if (request !== selection.current) return;
-      if (saved.data.kind !== 'http') {closeEditor();setBusy(null);setVerified(true);setNotice('此类型的专属编辑与测试将在后续 ticket 接入。');return;}
+      if (saved.data.kind === 'mcp') {closeEditor();setBusy(null);setVerified(true);setNotice('此类型的专属编辑与测试将在后续 ticket 接入。');return;}
+      if (saved.data.kind === 'python' && !pythonSchema) setPythonSchema((await session.getPythonToolManagementSchema()).data);
+      setPythonAnalysis(null);
       const draft=editTool(saved.data);
       setEditor({tool:saved.data, initial:draft, draft, version:saved.version, revision:request, inputKey:request});
       const previous=recent[tool.id];
@@ -144,7 +152,7 @@ export function ToolsWorkspace({ session, onView, onNavigation, ref }: {
     try {
       const saved=await session.getTool(toolId);
       if (request !== selection.current) return;
-      if (saved.data.kind !== 'http') throw new Error('保存后的工具类型与编辑页不一致');
+      if (saved.data.kind === 'mcp') throw new Error('保存后的工具类型与编辑页不一致');
       const draft=editTool(saved.data);
       setEditor({tool:saved.data,initial:draft,draft,version:saved.version,revision:request,inputKey:editor?.inputKey ?? request});
       setTools(current => [...(current ?? []).filter(tool => tool.id !== saved.data.id),saved.data]);
@@ -162,7 +170,7 @@ export function ToolsWorkspace({ session, onView, onNavigation, ref }: {
     finally {if (request === selection.current) setBusy(null);}
   }
   async function save(value:Record<string, unknown>) {
-    if (!session || !editor || busy || saveOutcomeUnknown || savedToolAwaitingRead) return;
+    if (!session || !editor || busy || saveOutcomeUnknown || savedToolAwaitingRead || (editor.draft.kind === 'python' && !sourceValid)) return;
     const request = ++selection.current;
     setBusy('saving'); setError(null); setNotice(null);
     let savedToolId:string;
@@ -213,10 +221,17 @@ export function ToolsWorkspace({ session, onView, onNavigation, ref }: {
     if (!session) throw new Error('后端尚未连接');
     return (await session.validateToolName(name, editor?.tool?.id, signal)).data;
   }, [session, editor?.tool?.id]);
-  function create() {
+  async function create(kind:'http' | 'python' = 'http') {
     if (!session) return;
     const request = ++selection.current;
-    const draft={...structuredClone(emptyToolDraft),name:suggestName('')};
+    if (kind === 'python' && !pythonSchema) {
+      setBusy('loading');
+      try {setPythonSchema((await session.getPythonToolManagementSchema()).data);}
+      catch (failure) {setError(`Python 配置读取失败：${message(failure)}`);setBusy(null);return;}
+      setBusy(null);
+    }
+    setPythonAnalysis(null);
+    const draft={...structuredClone(kind === 'python' ? emptyPythonToolDraft : emptyToolDraft),name:suggestName('')};
     setEditor({tool:null,initial:draft,draft,version:'',revision:request,inputKey:request});
     setDirty(false);setTest(null);setNotice(null);setError(null);
     setSavedToolAwaitingRead(null);
@@ -247,7 +262,7 @@ export function ToolsWorkspace({ session, onView, onNavigation, ref }: {
   let validDraft=false;
   if (schema && editor && !hasNonFiniteNumber(editor.draft)) {
     const validation=schemaValidatorFor(schema).rawValidation(schema,editor.draft);
-    validDraft=!validation.validationError && !validation.errors?.length;
+    validDraft=!validation.validationError && !validation.errors?.length && (editor.draft.kind !== 'python' || sourceValid);
   }
   const canTest = Boolean(editor && validDraft && !busy && verified && !saveOutcomeUnknown && !savedToolAwaitingRead);
   const staleTest=Boolean(test?.result && editor && testDefinition !== toolDraftFingerprint(editor.draft));
@@ -258,19 +273,19 @@ export function ToolsWorkspace({ session, onView, onNavigation, ref }: {
   return <div className="tool-registry">
     <ToolLibrarySidebar tools={tools} recent={recent} selectedId={editor?.tool?.id} busy={Boolean(busy)} verified={verified}
       connected={Boolean(session)} canCreate={Boolean(session && schema && verified && !busy && !saveOutcomeUnknown && !savedToolAwaitingRead)}
-      onCreate={() => requestLeave(create)} onOpen={tool => requestLeave(() => void open(tool))} onReload={() => void reload()}/>
+      onCreate={kind => requestLeave(() => void create(kind))} onOpen={tool => requestLeave(() => void open(tool))} onReload={() => void reload()}/>
     <section className="tool-detail-view" aria-label="工具详情">
       <div className="tool-detail-toolbar" role="toolbar" aria-label="工具操作">
         {onNavigation && <button className="icon-button tool-navigation-toggle" aria-label="打开主导航" onClick={onNavigation}><SidebarSimple/></button>}
         <div className="tool-breadcrumb"><button aria-label="返回工具列表" disabled={Boolean(busy) || saveOutcomeUnknown}
-          onClick={() => requestLeave(closeEditor)}>工具与技能</button>{editor && <><span>/</span><span>HTTP</span></>}
+          onClick={() => requestLeave(closeEditor)}>工具与技能</button>{editor && <><span>/</span><span>{editor.draft.kind === 'python' ? 'Python' : 'HTTP'}</span></>}
           {editor && <><span>/</span><strong>{editor.tool?.display_name || '新建工具'}</strong></>}</div>
         {editor && <div className="tool-toolbar-actions"><Button size="sm" variant="outline" disabled={!canTest}
           onClick={() => document.getElementById('tool-test-panel')?.scrollIntoView({behavior:'smooth',block:'start'})}><Play size={14}/>测试运行</Button>
           <Button size="sm" variant="outline" disabled={Boolean(busy) || saveOutcomeUnknown || Boolean(savedToolAwaitingRead)}
             onClick={() => editDraft({...editor.draft,enabled:!editor.draft.enabled})}>
             {editor.draft.enabled ? <ToggleRight size={14}/> : <ToggleLeft size={14}/>}{editor.draft.enabled ? '禁用此工具' : '启用此工具'}</Button>
-          <Button size="sm" type="submit" form="tool-definition" disabled={!schema || Boolean(busy) || saveOutcomeUnknown || Boolean(savedToolAwaitingRead)}><FloppyDisk size={14}/>保存工具</Button>
+          <Button size="sm" type="submit" form="tool-definition" disabled={!schema || (editor.draft.kind === 'python' && !sourceValid) || Boolean(busy) || saveOutcomeUnknown || Boolean(savedToolAwaitingRead)}><FloppyDisk size={14}/>保存工具</Button>
           {editor.tool && <Button size="sm" variant="outline" aria-label="删除工具" disabled={Boolean(busy) || saveOutcomeUnknown || Boolean(savedToolAwaitingRead)} onClick={() => {setError(null);setConfirmDelete(true);}}><Trash size={14}/></Button>}
         </div>}
       </div>
@@ -287,21 +302,22 @@ export function ToolsWorkspace({ session, onView, onNavigation, ref }: {
           <ToolSummaryCard tool={editor.tool} initial={editor.draft} version={editor.version} dirty={dirty}/>
           <div className="tool-editor-layout">
             {schema && <ToolDefinitionForm key={editor.revision} schema={schema} initial={{...editor.initial}} formId="tool-definition" externalSubmit
+              onSourceAnalysis={setPythonAnalysis}
               suggestName={editor.tool ? undefined : suggestName} validateName={validateName} enabled={editor.draft.enabled}
               disabled={Boolean(busy) || saveOutcomeUnknown || Boolean(savedToolAwaitingRead)} onSave={save} onInvalid={diagnostic => setError(`保存前校验失败：${diagnostic}。请继续编辑并修正。`)} onEdited={value => {
                 editDraft(value as ToolDraft);
               }}/>}
             <div className="tool-test-column">
-              <section className="tool-panel" aria-label="快速测试调试" id="tool-test-panel"><header className="tool-panel-heading"><Play size={16}/><h2>快速测试调试</h2><span>{busy === 'testing' ? '测试中' : '真实 HTTP 请求'}</span></header>
+              <section className="tool-panel" aria-label="快速测试调试" id="tool-test-panel"><header className="tool-panel-heading"><Play size={16}/><h2>快速测试调试</h2><span>{busy === 'testing' ? '测试中' : editor.draft.kind === 'python' ? '本机 Python 子进程' : '真实 HTTP 请求'}</span></header>
                 <div className="tool-panel-body">
                   <p className="tool-muted">真实测试当前草稿；消费者使用已保存定义。禁用工具也可手动测试。</p>
                   {!validDraft && <p className="tool-muted">请补齐有效配置后开始测试。</p>}
                   {staleTest && <p role="status" className="tool-muted">修改前的测试结果</p>}
-                  <ToolInputForm key={editor.inputKey} draft schema={validDraft ? editor.draft.input_schema : editor.initial.input_schema} disabled={!canTest} onTest={runTest}/>
-                  {busy === 'testing' && <p role="status" className="tool-muted">测试中，正在请求接口并读取完整响应…</p>}
+                  <ToolInputForm key={editor.inputKey} draft schema={editor.draft.kind === 'python' ? currentPythonSchema ?? {} : editor.draft.input_schema} disabled={!canTest} onTest={runTest}/>
+                  {busy === 'testing' && <p role="status" className="tool-muted">测试中，正在执行并读取完整结果…</p>}
                   {busy === 'testing' && error && test && <Button size="sm" variant="outline" onClick={retryTest}>重新查询测试</Button>}
                   {test?.result ? <ToolTestResult key={test.test_id} result={test.result} inputs={inputs} onView={onView}/>
-                    : <div className="tool-result-placeholder"><span>响应结果</span><pre>{busy === 'testing' ? '正在等待接口响应…' : '执行测试后，完整响应将在这里显示。'}</pre></div>}
+                    : <div className="tool-result-placeholder"><span>响应结果</span><pre>{busy === 'testing' ? '正在等待执行结果…' : '执行测试后，完整结果将在这里显示。'}</pre></div>}
                 </div>
               </section>
               <section className="tool-panel tool-recent-test" aria-label="最近一次测试"><header className="tool-panel-heading"><ClockCounterClockwise size={16}/><h2>最近一次测试</h2><span>本页记录</span></header>
@@ -314,7 +330,7 @@ export function ToolsWorkspace({ session, onView, onNavigation, ref }: {
             </div>
           </div>
         </> : <div className="tool-detail-empty"><span className="tool-summary-icon"><Globe size={28}/></span><h1>{session ? '选择工具，查看配置与测试结果' : '连接后端后管理工具'}</h1>
-          <p>{session ? '从左侧工具库选择已有工具，或接入一个 HTTP 工具。' : '后端尚未连接，工具配置和测试暂不可用。'}</p><span><ArrowLeft size={14}/>工具库位于左侧</span></div>}
+          <p>{session ? '从左侧工具库选择已有工具，或接入一个 HTTP／Python 工具。' : '后端尚未连接，工具配置和测试暂不可用。'}</p><span><ArrowLeft size={14}/>工具库位于左侧</span></div>}
       </div>
     </section>
     {leaveAction && <Overlay title={savedToolAwaitingRead ? '工具已保存' : saveOutcomeUnknown ? '保存结果不确定' : '未保存的工具修改'} onClose={() => {if (!busy) {setLeaveAction(null);leaveAfterSave.current=false;}}} fallbackFocus=".tool-toolbar-actions button">

@@ -157,9 +157,9 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
       [binding["value"] for binding in saved["data"]["auth"]],
       [binding["value"] for binding in bindings],
     )
-    self.assertEqual(
-      load_app_config(self.path).tool_library.tools[0].auth[1].value, "$LITERAL_KEY"
-    )
+    stored_tool = load_app_config(self.path).tool_library.tools[0]
+    assert isinstance(stored_tool, HttpToolDefinition)
+    self.assertEqual(stored_tool.auth[1].value, "$LITERAL_KEY")
     listed = await self.client.get("/api/tools")
     self.assertEqual(listed.json()["data"][0]["auth"], saved["data"]["auth"])
     management = (await self.client.get("/api/tools/schema/http")).json()["data"]
@@ -366,7 +366,7 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
     saved = []
     variants = (
       (HttpToolDefinition, {"kind": "http", "url": "http://localhost/"}),
-      (PythonToolDefinition, {"kind": "python", "code_path": "tools/example.py"}),
+      (PythonToolDefinition, {"kind": "python", "source": "def main(): return 1\n"}),
       (
         McpToolDefinition,
         {"kind": "mcp", "server_id": "local", "remote_name": "search"},
@@ -380,7 +380,7 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(created.status_code, 201, created.text)
         tool = (await self.read_created_tool(created))["data"]
-        saved.append(tool)
+        saved.append({key: value for key, value in tool.items() if key != "source"})
         for field, value in fields.items():
           self.assertEqual(tool[field], value)
         reread = await self.client.get(f"/api/tools/{tool['id']}")
@@ -410,9 +410,9 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
     edited = {
       key: value
       for key, value in python.items()
-      if key not in ("id", "kind", "created_at", "updated_at")
+      if key not in ("id", "created_at", "updated_at", "code_path")
     }
-    edited["code_path"] = "tools/updated.py"
+    edited["source"] = "def main(): return 2\n"
     version = (await self.client.get("/api/tools")).json()["version"]
     updated = await self.client.put(
       f"/api/tools/{python['id']}", json={"definition": edited, "version": version}
@@ -422,7 +422,8 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(updated_tool["kind"], "python")
     self.assertEqual(updated_tool["id"], python["id"])
     self.assertEqual(updated_tool["created_at"], python["created_at"])
-    self.assertEqual(updated_tool["code_path"], "tools/updated.py")
+    self.assertNotEqual(updated_tool["code_path"], python["code_path"])
+    self.assertEqual(updated_tool.pop("source"), "def main(): return 2\n")
     saved[1] = updated_tool
     raw = json.loads(self.path.read_text(encoding="utf-8"))
     self.assertEqual(raw["tool_library"]["tools"], saved)
@@ -450,7 +451,10 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
           "/api/tools", json={"display_name": "无效定义", "name": "invalid", **fields}
         )
         self.assertEqual(response.status_code, 422, response.text)
-        self.assertEqual(response.json()["detail"]["code"], "definition_invalid")
+        self.assertIn(
+          response.json()["detail"]["code"],
+          ("definition_invalid", "read_only", "python_source_empty"),
+        )
         self.assertEqual(self.path.read_bytes(), before)
 
   async def test_edit_cannot_change_tool_kind(self):
@@ -460,7 +464,7 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
         "kind": "python",
         "display_name": "固定类型",
         "name": "fixed_kind",
-        "code_path": "tools/example.py",
+        "source": "def main(): return 1\n",
       },
     )
     self.assertEqual(created.status_code, 201, created.text)
@@ -485,10 +489,7 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.path.read_bytes(), before)
 
   async def test_unregistered_tool_adapters_fail_explicitly_after_successful_save(self):
-    for fields in (
-      {"kind": "python", "code_path": "tools/example.py"},
-      {"kind": "mcp", "server_id": "local", "remote_name": "search"},
-    ):
+    for fields in ({"kind": "mcp", "server_id": "local", "remote_name": "search"},):
       with self.subTest(kind=fields["kind"]):
         created = await self.client.post(
           "/api/tools",
@@ -654,7 +655,7 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
         "kind": "python",
         "display_name": "禁用工具",
         "name": "occupied",
-        "code_path": "tools/example.py",
+        "source": "def main(): return 1\n",
         "enabled": False,
       },
     )

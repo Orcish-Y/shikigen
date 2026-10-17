@@ -1,12 +1,13 @@
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, JsonValue
-from shikigen.contracts.tool_definitions import HttpToolDefinition
+from shikigen.contracts.python_source import PythonSourceError
+from shikigen.contracts.tool_definitions import HttpToolDefinition, PythonToolDefinition
 from shikigen.runtime.tool_library import ToolLibraryError
 
 router = APIRouter(prefix="/api/tools", tags=["tools"])
 
 
-def fail(error: ToolLibraryError):
+def fail(error: ToolLibraryError | PythonSourceError):
   raise HTTPException(
     error.status, {"code": error.code, "message": str(error)}
   ) from None
@@ -51,6 +52,42 @@ async def parameters_schema():
   return {"data": schema}
 
 
+@router.get("/schema/python")
+async def python_parameters_schema():
+  schema = PythonToolDefinition.model_json_schema()
+  for field in ("id", "created_at", "updated_at", "code_path"):
+    del schema["properties"][field]
+  schema["required"] = [
+    field for field in schema["required"] if field in schema["properties"]
+  ] + ["source"]
+  schema["properties"]["source"] = {
+    "type": "string",
+    "minLength": 1,
+    "title": "Python 源码",
+  }
+  titles = {
+    "display_name": "页面名称",
+    "name": "调用名称",
+    "description": "说明",
+    "kind": "工具类型",
+    "enabled": "启用",
+    "timeout_seconds": "超时（秒）",
+    "input_schema": "源码参数（只读）",
+    "output_schema": "输出结构（可选）",
+  }
+  for field, title in titles.items():
+    schema["properties"][field]["title"] = title
+  schema["properties"]["input_schema"] = {
+    "type": "object",
+    "title": titles["input_schema"],
+  }
+  schema["properties"]["output_schema"] = {
+    "type": ["object", "null"],
+    "title": titles["output_schema"],
+  }
+  return {"data": schema}
+
+
 @router.get("/validate-name")
 async def validate_name(
   request: Request, response: Response, name: str, tool_id: str | None = None
@@ -58,7 +95,7 @@ async def validate_name(
   response.headers["Cache-Control"] = "no-store"
   try:
     return {"data": await request.app.state.runtime.tools.validate_name(name, tool_id)}
-  except ToolLibraryError as error:
+  except (ToolLibraryError, PythonSourceError) as error:
     fail(error)
 
 
@@ -72,7 +109,7 @@ async def list_tools(request: Request, response: Response):
       "version": version,
       "reserved_names": request.app.state.runtime.tools.reserved_names,
     }
-  except ToolLibraryError as error:
+  except (ToolLibraryError, PythonSourceError) as error:
     fail(error)
 
 
@@ -80,9 +117,9 @@ async def list_tools(request: Request, response: Response):
 async def get_tool(tool_id: str, request: Request, response: Response):
   response.headers["Cache-Control"] = "no-store"
   try:
-    tool, version = await request.app.state.runtime.tools.get_tool(tool_id)
+    tool, version = await request.app.state.runtime.tools.get_tool_detail(tool_id)
     return {"data": tool, "version": version}
-  except ToolLibraryError as error:
+  except (ToolLibraryError, PythonSourceError) as error:
     fail(error)
 
 
@@ -95,7 +132,7 @@ async def create_tool(payload: dict, request: Request):
       request.app.state.runtime.tools.save_tool(definition)
     )
     return {"data": {"id": tool.id}}
-  except ToolLibraryError as error:
+  except (ToolLibraryError, PythonSourceError) as error:
     fail(error)
 
 
@@ -117,7 +154,7 @@ async def delete_tool(tool_id: str, payload: ToolDelete, request: Request):
       request.app.state.runtime.tools.delete_tool(tool_id, payload.version)
     )
     return Response(status_code=204)
-  except ToolLibraryError as error:
+  except (ToolLibraryError, PythonSourceError) as error:
     fail(error)
 
 
@@ -132,7 +169,7 @@ async def update_tool(tool_id: str, payload: ToolUpdate, request: Request):
       )
     )
     return Response(status_code=204)
-  except ToolLibraryError as error:
+  except (ToolLibraryError, PythonSourceError) as error:
     fail(error)
 
 
@@ -155,7 +192,7 @@ async def start_draft_test(payload: ToolDraftTest, request: Request):
       )
     )
     return {"data": snapshot}
-  except ToolLibraryError as error:
+  except (ToolLibraryError, PythonSourceError) as error:
     fail(error)
 
 
@@ -173,7 +210,7 @@ async def start_test(tool_id: str, payload: ToolInputs, request: Request):
       request.app.state.runtime.tools.start_test(tool_id, payload.inputs)
     )
     return {"data": snapshot}
-  except ToolLibraryError as error:
+  except (ToolLibraryError, PythonSourceError) as error:
     fail(error)
 
 
@@ -182,5 +219,5 @@ async def get_test(test_id: str, request: Request, response: Response):
   response.headers["Cache-Control"] = "no-store"
   try:
     return {"data": request.app.state.runtime.tools.get_test(test_id)}
-  except ToolLibraryError as error:
+  except (ToolLibraryError, PythonSourceError) as error:
     fail(error)

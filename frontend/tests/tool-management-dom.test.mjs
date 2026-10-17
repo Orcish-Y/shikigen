@@ -3,7 +3,7 @@ import test, {afterEach} from 'node:test';
 import {JSDOM} from 'jsdom';
 
 const browser = new JSDOM('<!doctype html><html><body></body></html>', {url:'http://localhost/'});
-for (const name of ['window','document','navigator','HTMLElement','Element','MutationObserver','Event','KeyboardEvent','MouseEvent']) {
+for (const name of ['window','document','navigator','Window','HTMLElement','Element','Node','Text','MutationObserver','Event','KeyboardEvent','MouseEvent']) {
   Object.defineProperty(globalThis, name, {configurable:true, value:name === 'window' ? browser.window : browser.window[name]});
 }
 globalThis.getComputedStyle = browser.window.getComputedStyle.bind(browser.window);
@@ -12,6 +12,8 @@ browser.window.requestAnimationFrame = callback => setTimeout(callback, 0);
 browser.window.cancelAnimationFrame = clearTimeout;
 globalThis.requestAnimationFrame = browser.window.requestAnimationFrame;
 globalThis.cancelAnimationFrame = clearTimeout;
+browser.window.Range.prototype.getClientRects = () => [];
+browser.window.Range.prototype.getBoundingClientRect = () => new browser.window.DOMRect();
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 browser.window.HTMLDialogElement.prototype.showModal = function () {this.setAttribute('open','');};
 browser.window.HTMLDialogElement.prototype.close = function () {this.removeAttribute('open');};
@@ -23,7 +25,121 @@ const {ToolInputForm} = await import('../src/components/tools/ToolInputForm.tsx'
 const {ToolTestResult} = await import('../src/components/tools/ToolTestResult.tsx');
 const {ToolsWorkspace} = await import('../src/components/tools/ToolsWorkspace.tsx');
 const {BackendSession} = await import('../src/backend-client.ts');
+const {EditorView} = await import('@codemirror/view');
+const {EditorState} = await import('@codemirror/state');
+const {forEachDiagnostic} = await import('@codemirror/lint');
+const {undo,redo,indentMore} = await import('@codemirror/commands');
+const {PythonSourceEditor} = await import('../src/components/tools/PythonSourceEditor.tsx');
+
+function replacePythonSource(source) {
+  const view=EditorView.findFromDOM(screen.getByRole('textbox',{name:'Python 源码'}));
+  assert.ok(view);
+  act(() => view.dispatch({changes:{from:0,to:view.state.doc.length,insert:source}}));
+  return view;
+}
 afterEach(cleanup);
+
+test('Python 本地预览不改写草稿，源码错误立即清除旧结构，默认值不注入实际输入', async () => {
+  const user=userEvent.setup({document:browser.window.document,delay:null});
+  const inputSchema={type:'object',properties:{quantity:{type:'integer'},price:{type:'number',default:2.5}},required:['quantity'],additionalProperties:false};
+  const pythonSchema={type:'object',required:['display_name','name','source'],properties:{
+    display_name:{type:'string',title:'页面名称'},name:{type:'string',title:'调用名称'},
+    source:{type:'string',title:'Python 源码'},input_schema:{type:'object'},
+  }};
+  const edited=[],states=[],submittedDrafts=[];
+  const source='def main(quantity: int, price: float = 2.5):\n  return quantity * price\n';
+  render(React.createElement(ToolDefinitionForm,{schema:pythonSchema,initial:{kind:'python',display_name:'计算',name:'calculate',source,input_schema:inputSchema},
+    onSave:value => submittedDrafts.push(value),onEdited:value => edited.push(value),onSourceAnalysis:analysis => states.push(analysis)}));
+  await waitFor(() => assert.ok(states.at(-1)?.input_schema));
+  assert.equal(edited.length,0);
+  assert.equal(document.querySelector('.tool-field-source textarea'),null);
+  const preview=screen.getByRole('region',{name:'源码参数预览'});
+  assert.match(preview.textContent,/quantity/);
+  assert.match(preview.textContent,/可省略/);
+  assert.equal(preview.querySelectorAll('input,textarea,select').length,0);
+  replacePythonSource('def main(:');
+  assert.equal(states.at(-1).input_schema,null);
+  assert.match(preview.textContent,/python_syntax/);
+  assert.doesNotMatch(preview.textContent,/quantity/);
+  assert.equal(edited.at(-1).source,'def main(:');
+  assert.equal(screen.getByRole('button',{name:'保存工具'}).disabled,true);
+  replacePythonSource(source);
+  assert.ok(states.at(-1).input_schema);
+  await user.click(screen.getByRole('button',{name:'保存工具'}));
+  assert.equal(submittedDrafts[0].source,source);
+  assert.equal(Object.hasOwn(submittedDrafts[0],'input_schema'),false);
+  cleanup();
+  const submitted=[];
+  render(React.createElement(ToolInputForm,{schema:inputSchema,disabled:false,onTest:value => submitted.push(value)}));
+  assert.equal(screen.getByLabelText('price').value,'');
+  fireEvent.change(screen.getByLabelText(/quantity/),{target:{value:'3'}});
+  await user.click(screen.getByRole('button',{name:'测试已保存工具'}));
+  assert.deepEqual(JSON.parse(JSON.stringify(submitted)),[{quantity:3}]);
+});
+
+test('CodeMirror 保持光标和撤销历史，外部重读不触发编辑，禁用与只读可更新', () => {
+  const changes=[],focus=[],blur=[];
+  const props={id:'source-editor',label:'Python 源码',value:'def main(): pass',schema:{type:'string'},
+    registry:{formContext:{}},onChange:value => changes.push(value),onFocus:(...args) => focus.push(args),onBlur:(...args) => blur.push(args)};
+  const form=render(React.createElement(PythonSourceEditor,props));
+  const content=screen.getByRole('textbox',{name:'Python 源码'});
+  const view=EditorView.findFromDOM(content);
+  act(() => {view.focus();view.dispatch({changes:{from:view.state.doc.length,insert:' # 中文'},selection:{anchor:5}});});
+  assert.deepEqual(changes,['def main(): pass # 中文']);
+  form.rerender(React.createElement(PythonSourceEditor,{...props,value:changes.at(-1)}));
+  assert.equal(EditorView.findFromDOM(content),view);
+  assert.equal(view.state.selection.main.anchor,5);
+  act(() => {assert.equal(undo(view),true);assert.equal(redo(view),true);});
+  assert.equal(view.state.doc.toString(),'def main(): pass # 中文');
+  const count=changes.length;
+  form.rerender(React.createElement(PythonSourceEditor,{...props,value:'def main(): return 1',readonly:true}));
+  assert.equal(view.state.doc.toString(),'def main(): return 1');
+  assert.equal(changes.length,count);
+  assert.equal(view.state.facet(EditorState.readOnly),true);
+  assert.equal(indentMore(view),false);
+  assert.equal(content.getAttribute('aria-readonly'),'true');
+  form.rerender(React.createElement(PythonSourceEditor,{...props,disabled:true}));
+  assert.equal(view.state.facet(EditorView.editable),false);
+  assert.equal(content.getAttribute('aria-disabled'),'true');
+  assert.equal(content.getAttribute('tabindex'),'-1');
+  assert.equal(changes.length,count);
+  form.rerender(React.createElement(PythonSourceEditor,props));
+  assert.equal(EditorView.findFromDOM(content),view);
+  assert.equal(view.state.facet(EditorState.readOnly),false);
+  act(() => view.focus());
+  fireEvent.blur(content);
+  assert.ok(focus.length);
+  assert.equal(blur.at(-1)[0],'source-editor');
+  assert.ok(content.getAttribute('aria-describedby').includes('source-editor__help'));
+  const multiline='def helper(): pass\r\nbroken\r\n';
+  const from=multiline.indexOf('broken');
+  form.rerender(React.createElement(PythonSourceEditor,{...props,value:multiline,registry:{formContext:{pythonAnalysis:{
+    diagnostics:[{from,to:from+6,severity:'warning',code:'python_syntax',message:'测试诊断'}],
+  }}}}));
+  const marked=[];
+  forEachDiagnostic(view.state,(_diagnostic,start,end) => marked.push(view.state.doc.sliceString(start,end)));
+  assert.deepEqual(marked,['broken']);
+  assert.equal(changes.length,count);
+});
+
+test('本地不能识别的源码可显式交给后端，不复用旧 schema，也不修改草稿', async () => {
+  const user=userEvent.setup({document:browser.window.document,delay:null});
+  const states=[],edited=[],submitted=[];
+  const source="def main(a: '\\x69nt'): return a\n";
+  render(React.createElement(ToolDefinitionForm,{schema:{type:'object',properties:{source:{type:'string',title:'Python 源码'},input_schema:{type:'object'}}},
+    initial:{kind:'python',source},onSourceAnalysis:value => states.push(value),onEdited:value => edited.push(value),onSave:value => submitted.push(value)}));
+  assert.equal(states.at(-1).input_schema,null);
+  assert.equal(screen.getByRole('button',{name:'保存工具'}).disabled,true);
+  await user.click(screen.getByRole('button',{name:'交给后端校验'}));
+  assert.deepEqual(states.at(-1).input_schema,{});
+  assert.equal(edited.length,0);
+  await user.click(screen.getByRole('button',{name:'保存工具'}));
+  assert.equal(submitted[0].source,source);
+  assert.equal(Object.hasOwn(submitted[0],'input_schema'),false);
+  replacePythonSource(source+'# changed');
+  assert.equal(states.at(-1).input_schema,null);
+  assert.equal(screen.getByRole('button',{name:'保存工具'}).disabled,true);
+});
 
 test('真实 rjsf 测试表单不注入业务值，JSON 与表单切换保留实际 inputs 和无效原文', async () => {
   const user = userEvent.setup({document:browser.window.document,delay:null});
@@ -236,6 +352,78 @@ function toolSession(fetcher, id='tool-session') {
   return new BackendSession(id, 'http://test', new AbortController().signal, fetcher);
 }
 const response = data => new Response(JSON.stringify(data), {headers:{'Content-Type':'application/json'}});
+
+test('Python 工作区本地更新表单，提交不带派生 schema，保存与重读失败状态分别保留', async () => {
+  const user=userEvent.setup({document:browser.window.document,delay:null});
+  const source='def main(quantity: int, price: float = 2.5):\n    return quantity * price\n';
+  const management={type:'object',required:['display_name','name','source'],properties:{
+    display_name:{type:'string',title:'页面名称'},name:{type:'string',title:'调用名称'},
+    kind:{type:'string',const:'python'},source:{type:'string',title:'Python 源码'},
+    enabled:{type:'boolean'},input_schema:{type:'object'},output_schema:{type:['object','null']},
+  }};
+  let saved={kind:'python',id:'local-python',display_name:'本地 Python',name:'local_python',description:'',enabled:true,timeout_seconds:30,
+    source,code_path:'tools/code.py',created_at:'2026-10-15T00:00:00Z',updated_at:'2026-10-15T00:00:00Z',output_schema:null,
+    input_schema:{type:'object',properties:{quantity:{type:'integer'},price:{type:'number',default:2.5}},required:['quantity'],additionalProperties:false}};
+  const requests=[],writes=[],tests=[];
+  let failDetail=false;
+  const session=toolSession(async (url,init) => {
+    requests.push(url);
+    if (url.endsWith('/schema/http')) return response({data:schema});
+    if (url.endsWith('/schema/python')) return response({data:management});
+    if (url.includes('/validate-name?')) return response({data:{valid:true,code:null,message:null}});
+    if (url.endsWith('/api/tools/tests')) {
+      tests.push(JSON.parse(init.body));
+      return response({data:{test_id:'local-test',tool_id:saved.id,status:'success',created_at:saved.created_at,
+        result:{status:'success',data:14,error:null,duration_ms:1,details:{}}}});
+    }
+    if (init?.method === 'PUT') {
+      const payload=JSON.parse(init.body);
+      writes.push(payload);
+      if (payload.definition.source.startsWith('return '))
+        return new Response(JSON.stringify({detail:{code:'python_syntax',message:'return outside function'}}),{status:422});
+      saved={...saved,...payload.definition};failDetail=true;
+      return new Response(null,{status:204});
+    }
+    if (url.endsWith('/api/tools')) return response({data:[saved],version:'read-version'});
+    assert.ok(url.endsWith('/api/tools/local-python'),url);
+    if (failDetail) {failDetail=false;throw new Error('details unavailable');}
+    return response({data:saved,version:'saved-version'});
+  });
+  render(React.createElement(ToolsWorkspace,{session,onView:() => {}}));
+  await user.click(await screen.findByRole('tab',{name:'Python (1)'}));
+  await user.click(screen.getByRole('button',{name:/local_python.*本地 Python/}));
+  await waitFor(() => assert.equal(screen.getByRole('button',{name:'测试当前草稿'}).disabled,false));
+  assert.equal(screen.queryByText('未保存修改'),null);
+  assert.equal(screen.getByLabelText('price').value,'');
+  fireEvent.change(screen.getByLabelText(/quantity/),{target:{value:'4'}});
+  replacePythonSource('def main(:');
+  assert.equal(screen.getByRole('button',{name:'测试当前草稿'}).disabled,true);
+  assert.equal(screen.queryByLabelText(/quantity/),null);
+  replacePythonSource(source.replace('2.5','3.5'));
+  assert.equal(screen.getByLabelText(/quantity/).value,'4');
+  await user.click(screen.getByRole('button',{name:'测试当前草稿'}));
+  await screen.findAllByText('测试成功');
+  assert.deepEqual(tests[0].inputs,{quantity:4});
+  assert.equal(Object.hasOwn(tests[0].definition,'input_schema'),false);
+  replacePythonSource('return 1\n'+source);
+  await user.click(screen.getByRole('button',{name:'保存工具'}));
+  await screen.findByText(/保存失败/);
+  assert.match(EditorView.findFromDOM(screen.getByRole('textbox',{name:'Python 源码'})).state.doc.toString(),/^return 1/);
+  replacePythonSource(source.replace('2.5','3.5'));
+  await user.click(screen.getByRole('button',{name:'保存工具'}));
+  await screen.findByText(/工具已保存，详情读取失败/);
+  assert.equal(screen.getByRole('button',{name:'保存工具'}).disabled,true);
+  assert.equal(screen.queryByText(/保存结果不确定/),null);
+  await user.click(screen.getByRole('button',{name:'重新读取工具详情'}));
+  await waitFor(() => assert.equal(screen.getByRole('button',{name:'保存工具'}).disabled,false));
+  assert.equal(screen.queryByText('未保存修改'),null);
+  assert.equal(screen.queryByText('修改前的测试结果'),null);
+  assert.equal(screen.getByLabelText('price').value,'');
+  assert.equal(screen.getByLabelText(/quantity/).value,'4');
+  assert.equal(writes.length,2);
+  assert.ok(writes.every(payload => !Object.hasOwn(payload.definition,'input_schema')));
+  assert.ok(requests.every(url => !url.includes('/python/parse')));
+});
 
 test('认证保存响应丢失保留不确定状态，明确放弃后只重读工具库', async () => {
   const user=userEvent.setup({document:browser.window.document,delay:null});

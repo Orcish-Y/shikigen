@@ -17,6 +17,8 @@
 
 ## 新增调查
 
+- [Python 源码编辑与前端静态分析](python-editor-static-analysis.md)（2026-10-15）：比较 CodeMirror／Lezer、Monaco／Pyright、Pyodide 和 Tree-sitter，附 19 个隔离源码样例；建议本地编辑与参数预览、后端保存／测试复核，方案尚未实施。
+
 - [工具配置字段与适配器调查](tool-configuration-fields.md)（2026-10-12）：对照 LangChain、Dify、AutoGen、Claude Code 与 MCP/OpenAPI，区分共有定义、连接配置、自动发现与导入字段；包括 MCP、Python、HTTP 和 OpenAPI 导入的首版建议。首版产品取舍见已定稿的[工具模块决策地图](../wayfinder/tools-workflow/map.md)，调查报告及规划完成不代表应用已实现。
 
 [返回文档导航](../README.md)

@@ -25,6 +25,9 @@ todo
 
 config.json
 
+# Local generated Python tools; share examples outside this managed directory.
+config/tools/
+
 # agent
 skills-lock.json
 .agents/skills/

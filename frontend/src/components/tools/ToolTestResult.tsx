@@ -16,7 +16,11 @@ export function ToolTestResult({result, inputs, onView}: {
       <details><summary>实际输入</summary><pre>{formatToolValue(inputs)}</pre></details>
       <h3>返回数据</h3><ToolOutput value={result.data}/>
       {result.error !== null && <div role="alert"><p>{result.error.code}：{result.error.message}</p><pre>{formatToolValue(result.error)}</pre></div>}
-      <details><summary>HTTP 详情</summary><pre>{formatToolValue(result.details)}</pre></details>
+      {'stdout' in result.details ? <section aria-label="Python 调试输出"><h3>调试输出</h3>
+        <p>退出码：{String(result.details.exit_code)}{(result.details.stdout_truncated || result.details.stderr_truncated) ? ' · 调试输出已截断，保留最后 64 KiB' : ''}</p>
+        <details open><summary>stdout</summary><pre>{String(result.details.stdout)}</pre></details>
+        <details open><summary>stderr</summary><pre>{String(result.details.stderr)}</pre></details>
+      </section> : <details><summary>HTTP 详情</summary><pre>{formatToolValue(result.details)}</pre></details>}
       <div className="tool-actions">
         <Button variant="outline" type="button" onClick={() => onView({title:'完整工具结果',text})}>查看完整结果</Button>
         <Button variant="outline" type="button" onClick={async () => {
