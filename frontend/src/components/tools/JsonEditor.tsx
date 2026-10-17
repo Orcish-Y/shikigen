@@ -24,7 +24,12 @@ export function JsonEditor({id,label,value,disabled,onChange,emptyIsNull=false}:
   const [text,setText] = useState(() => serialize(value,emptyIsNull));
   const emitted = useRef(value);
   useEffect(() => {
-    if (value !== emitted.current) {setText(serialize(value,emptyIsNull)); emitted.current=value;}
+    if (value !== emitted.current) {
+      // RJSF can clone unchanged values when another field changes. Keep the
+      // user's JSON text and error context until its actual content changes.
+      if (JSON.stringify(value) !== JSON.stringify(emitted.current)) setText(serialize(value,emptyIsNull));
+      emitted.current=value;
+    }
   }, [value,emptyIsNull]);
   const parsed = emptyIsNull && text.trim() === '' ? {value:null} : parseJson(text);
   return <div className="schema-editor">

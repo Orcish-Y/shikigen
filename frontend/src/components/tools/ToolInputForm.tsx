@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { RJSFSchema } from '@rjsf/utils';
-import { SchemaForm, schemaValidatorFor } from './SchemaForm';
+import { SchemaForm } from './SchemaForm';
+import { schemaValidatorFor } from '../../schema-validation';
 import type { ErrorObject } from 'ajv';
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
@@ -30,11 +31,11 @@ export function ToolInputForm({schema, disabled, onTest, draft=false}: {
   const [jsonMode,setJsonMode] = useState(false);
   const [error,setError] = useState<string | null>(null);
   let reason = advancedReason(schema);
+  const validation=schemaValidatorFor(schema).rawValidation<ErrorObject>(schema,inputs);
   if (!reason) {
-    const validation=schemaValidatorFor(schema).rawValidation<ErrorObject>(schema,inputs);
     if (validation.validationError) reason='此 schema 无法在当前表单校验，使用 JSON 参数并由后端诊断。';
-    else if (validation.errors?.some(error => ['type','enum','const'].includes(error.keyword)))
-      reason='原输入与当前类型、枚举或常量不匹配；保留原输入，使用 JSON 参数并查看后端诊断。';
+    else if (validation.errors?.some(error => ['type','enum','const','additionalProperties'].includes(error.keyword)))
+      reason='原输入与当前类型、枚举、常量或附加属性约束不匹配；保留原输入，使用 JSON 参数并查看后端诊断。';
   }
   const advanced = jsonMode || Boolean(reason);
   const actions = <div className="tool-input-actions"><span>{draft ? '使用当前草稿 · 测试不会保存' : '使用已保存的配置'}</span><Button size="sm" type="submit" aria-label={draft ? '测试当前草稿' : '测试已保存工具'} disabled={disabled || Boolean(error)}><Play size={14}/>执行测试</Button></div>;
@@ -44,6 +45,10 @@ export function ToolInputForm({schema, disabled, onTest, draft=false}: {
       <Button size="sm" variant="outline" disabled={disabled || Boolean(error)} aria-pressed={advanced} onClick={() => setJsonMode(true)}>JSON 参数</Button>
     </div>
     {reason && <p className="tool-muted">{reason}</p>}
+    {Object.keys(inputs).length > 0 && Boolean(validation.errors?.length) && <div aria-label="测试参数诊断" role="status" className="tool-muted">
+      <p>当前输入与结构不匹配，原值已保留：</p>
+      <ul>{validation.errors?.map((diagnostic,index) => <li key={index}>{diagnostic.instancePath || 'inputs'}：{diagnostic.message}</li>)}</ul>
+    </div>}
     {advanced ? <form className="tool-input-form" onSubmit={event => {event.preventDefault(); if (!disabled && !error) onTest(inputs);}}>
       <label htmlFor="tool-input-json">测试参数 JSON</label>
       <Textarea id="tool-input-json" rows={9} value={raw} disabled={disabled} aria-invalid={Boolean(error)} onChange={event => {

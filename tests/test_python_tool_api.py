@@ -109,6 +109,227 @@ class PythonToolApiTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(result["details"]["stdout"].splitlines(), ["debug output"])
     self.assertEqual(result["details"]["exit_code"], 0)
 
+  async def test_unknown_type_requires_completion_and_keeps_business_constraints(
+    self,
+  ):
+    source = "def main(value): return value\n"
+    incomplete = await self.client.post("/api/tools", json=self.payload(source))
+    self.assertEqual(incomplete.status_code, 422, incomplete.text)
+    schema = {
+      "type": "object",
+      "properties": {
+        "value": {"type": "integer", "minimum": 2, "description": "至少两个"}
+      },
+      "required": ["value"],
+      "additionalProperties": False,
+    }
+    saved = await self.create(source, input_schema=schema)
+    self.assertEqual(saved["data"]["input_schema"], schema)
+    self.assertEqual((await self.execute(saved, {"value": 3}))["data"], 3)
+    self.assertEqual(
+      (await self.execute(saved, {"value": 1}))["error"]["code"], "input_validation"
+    )
+
+  async def test_nested_containers_nullable_keyword_only_and_declared_extra_inputs(
+    self,
+  ):
+    source = (
+      "from typing import Optional\n"
+      "def main(rows: list[dict[str, Optional[int]]], *, "
+      "label: str = 'ok', **extras):\n"
+      "  return {'rows': rows, 'label': label, 'extras': extras}\n"
+    )
+    schema = {
+      "type": "object",
+      "properties": {
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": {"type": ["integer", "null"], "minimum": 0},
+          },
+        },
+        "label": {"type": "string"},
+        "flag": {"type": "boolean"},
+      },
+      "required": ["rows", "flag"],
+      "additionalProperties": False,
+    }
+    saved = await self.create(source, input_schema=schema)
+    result = await self.execute(saved, {"rows": [{"x": None, "y": 2}], "flag": True})
+    self.assertEqual(result["status"], "success", result)
+    self.assertEqual(
+      result["data"],
+      {"rows": [{"x": None, "y": 2}], "label": "ok", "extras": {"flag": True}},
+    )
+    for inputs in (
+      {"rows": [], "flag": True, "unknown": 3},
+      {"rows": [{"x": -1}], "flag": False},
+      {"rows": []},
+    ):
+      self.assertEqual(
+        (await self.execute(saved, inputs))["error"]["code"], "input_validation"
+      )
+
+  async def test_plain_containers_must_be_completed_or_explicitly_opened(self):
+    source = "def main(rows: list, options: dict): return [rows, options]\n"
+    pending = await self.client.post("/api/tools", json=self.payload(source))
+    self.assertEqual(pending.status_code, 422, pending.text)
+    schema = {
+      "type": "object",
+      "properties": {
+        "rows": {"type": "array", "items": True},
+        "options": {"type": "object", "additionalProperties": True},
+      },
+      "required": ["rows", "options"],
+      "additionalProperties": False,
+    }
+    saved = await self.create(source, input_schema=schema)
+    self.assertEqual(
+      (await self.execute(saved, {"rows": [None, {"a": 1}], "options": {"x": []}}))[
+        "data"
+      ],
+      [[None, {"a": 1}], {"x": []}],
+    )
+
+  async def test_source_contract_is_protected_in_save_draft_and_saved_execution(self):
+    from copy import deepcopy
+
+    source = "def main(value: list[int], *, label: str | None): return [value, label]\n"
+    saved = await self.create(source)
+    schema = saved["data"]["input_schema"]
+    cases = []
+    for change in (
+      lambda s: s["properties"].pop("value"),
+      lambda s: s.update(required=["value"]),
+      lambda s: s.update(additionalProperties=True),
+      lambda s: s["properties"]["value"].update(type="string"),
+      lambda s: s["properties"]["value"].update(items=True),
+      lambda s: s["properties"]["value"]["items"].update(type="number"),
+      lambda s: s["properties"]["label"].update(type="string"),
+      lambda s: s.update(properties={**s["properties"], "renamed": {"type": "string"}}),
+    ):
+      candidate = deepcopy(schema)
+      change(candidate)
+      cases.append(candidate)
+    cases.extend(
+      [
+        None,
+        "{broken",
+        {
+          "$ref": "#/definitions/hidden",
+          "type": "object",
+          "definitions": {"hidden": schema},
+        },
+      ]
+    )
+    for candidate in cases:
+      definition = self.payload(source, input_schema=candidate)
+      for method, url, body in (
+        (
+          "PUT",
+          f"/api/tools/{saved['data']['id']}",
+          {"definition": definition, "version": saved["version"]},
+        ),
+        (
+          "POST",
+          "/api/tools/tests",
+          {
+            "definition": definition,
+            "tool_id": saved["data"]["id"],
+            "inputs": {"value": [], "label": None},
+          },
+        ),
+      ):
+        with self.subTest(candidate=candidate, method=method):
+          rejected = await self.client.request(method, url, json=body)
+          self.assertEqual(rejected.status_code, 422, rejected.text)
+      self.assertEqual(
+        (await self.client.get(f"/api/tools/{saved['data']['id']}")).json(), saved
+      )
+    path = self.path.parent / saved["data"]["code_path"]
+    path.write_text(source.replace("list[int]", "list[str]"), encoding="utf-8")
+    self.assertEqual(
+      (await self.execute(saved, {"value": [1], "label": None}))["error"]["code"],
+      "python_schema",
+    )
+
+  async def test_typed_kwargs_apply_to_declared_and_arbitrary_business_fields(self):
+    source = (
+      "def main(*, active: bool = True, **extras: int): return [active, extras]\n"
+    )
+    saved = await self.create(source)
+    self.assertEqual(
+      (await self.execute(saved, {"count": 2}))["data"], [True, {"count": 2}]
+    )
+    self.assertEqual(
+      (await self.execute(saved, {"count": "2"}))["error"]["code"], "input_validation"
+    )
+    schema = saved["data"]["input_schema"]
+    schema["properties"]["count"] = {"type": "string"}
+    rejected = await self.client.post(
+      "/api/tools/tests",
+      json={
+        "definition": self.payload(source, input_schema=schema),
+        "inputs": {"count": "2"},
+      },
+    )
+    self.assertEqual(rejected.status_code, 422, rejected.text)
+
+  async def test_compatible_source_and_schema_supplements_can_test_without_saving(self):
+    schema = {
+      "type": "object",
+      "properties": {
+        "value": {"type": ["integer", "null"], "minimum": 2, "examples": [2, None]},
+      },
+      "required": ["value"],
+      "additionalProperties": False,
+    }
+    source = (
+      "from typing import Optional\n"
+      "def main(value: Optional['Unknown']): return value\n"
+    )
+    saved = await self.create(source, input_schema=schema)
+    for inputs, status in (
+      ({}, "error"),
+      ({"value": None}, "success"),
+      ({"value": 1}, "error"),
+    ):
+      self.assertEqual((await self.execute(saved, inputs))["status"], status)
+    current = source.replace("return value", "return value + 1")
+    draft = await self.client.post(
+      "/api/tools/tests",
+      json={
+        "definition": self.payload(current, input_schema=schema),
+        "tool_id": saved["data"]["id"],
+        "inputs": {"value": 2},
+      },
+    )
+    self.assertEqual(draft.status_code, 202, draft.text)
+    result = await self.wait_test(draft.json()["data"]["test_id"])
+    self.assertEqual(result["data"], 3, result)
+    self.assertEqual(
+      (await self.client.get(f"/api/tools/{saved['data']['id']}")).json(), saved
+    )
+    # 明确的新注解可接受兼容补充，不能沿用与新注解冲突的旧类型。
+    for annotation, status in (("int", 202), ("str", 422)):
+      definition = self.payload(
+        current.replace("'Unknown'", annotation), input_schema=schema
+      )
+      tested = await self.client.post(
+        "/api/tools/tests",
+        json={
+          "definition": definition,
+          "tool_id": saved["data"]["id"],
+          "inputs": {"value": 2},
+        },
+      )
+      self.assertEqual(tested.status_code, status, tested.text)
+      if status == 202:
+        self.assertEqual(
+          (await self.wait_test(tested.json()["data"]["test_id"]))["data"], 3
+        )
+
   async def test_parse_and_save_do_not_run_imports_annotations_or_default_calls(self):
     marker = self.path.parent / "side-effect.txt"
     source = (
@@ -148,11 +369,10 @@ class PythonToolApiTests(unittest.IsolatedAsyncioTestCase):
       ("@wrapper\ndef main(): pass", "python_entry"),
       ("def main(a: int, /): pass", "python_signature"),
       ("def main(*args): pass", "python_signature"),
-      ("def main(*, a: int): pass", "python_signature"),
-      ("def main(**kwargs): pass", "python_signature"),
+      ("def main(**kwargs): pass", "python_annotation"),
       ("def main(a): pass", "python_annotation"),
-      ("def main(a: list[int]): pass", "python_annotation"),
-      ("def main(a: int | None): pass", "python_annotation"),
+      ("def main(a: list): pass", "python_annotation"),
+      ("def main(a: dict[int, str]): pass", "python_annotation"),
     ]
     for source, code in cases:
       with self.subTest(source=source):

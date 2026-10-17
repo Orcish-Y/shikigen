@@ -72,7 +72,7 @@ async def python_parameters_schema():
     "kind": "工具类型",
     "enabled": "启用",
     "timeout_seconds": "超时（秒）",
-    "input_schema": "源码参数（只读）",
+    "input_schema": "源码参数与类型补齐",
     "output_schema": "输出结构（可选）",
   }
   for field, title in titles.items():

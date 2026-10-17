@@ -9,7 +9,7 @@ import tempfile
 from collections import deque
 from pathlib import Path
 
-from shikigen.contracts.python_source import parse_python_source
+from shikigen.contracts.python_schema import prepare_python_input_schema
 from shikigen.contracts.tool_execution import (
   PythonToolExecution,
   ToolExecution,
@@ -33,9 +33,7 @@ class PythonAdapter:
     definition = execution.definition
     source = execution.source
     details = context.details
-    parsed = parse_python_source(source)
-    if parsed["input_schema"] != definition.input_schema:
-      return failure("python_schema", "源码参数已变化，请重新解析并保存后执行")
+    prepare_python_input_schema(source, definition.input_schema)
     with tempfile.TemporaryDirectory(prefix="shikigen-python-") as directory:
       work = Path(directory)
       (work / "source.py").write_text(source, encoding="utf-8")

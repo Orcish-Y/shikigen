@@ -199,6 +199,9 @@
 .tool-python-preview { overflow-x: auto; }
 .tool-python-preview table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .tool-python-preview th, .tool-python-preview td { padding: 8px; text-align: left; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.tool-python-changes { margin: 12px 0; padding: 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--sidebar); font-size: 12px; }
+.tool-python-changes pre { max-height: 180px; overflow: auto; white-space: pre; font: 11px/1.6 'JetBrains Mono', monospace; }
+.tool-python-changes summary { cursor: pointer; color: var(--secondary); }
 .tool-create-actions { display: flex; position: relative; flex-shrink: 0; }
 .tool-create-menu { position: absolute; z-index: 5; top: 32px; right: 0; min-width: 150px; padding: 4px; border: 1px solid var(--border); border-radius: 6px; background: var(--sidebar); box-shadow: 0 8px 24px #0002; }
 .tool-create-menu button { width: 100%; justify-content: flex-start; }

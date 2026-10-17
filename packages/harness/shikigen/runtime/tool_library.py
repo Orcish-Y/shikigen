@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from pydantic import TypeAdapter, ValidationError
 
-from shikigen.contracts.python_source import PythonSourceError, parse_python_source
+from shikigen.contracts.python_schema import prepare_python_input_schema
 from shikigen.contracts.tool_definitions import (
   AnyToolDefinition,
   ToolLibraryConfig,
@@ -285,14 +285,9 @@ class ToolLibrary:
     if "code_path" in payload:
       raise ToolLibraryError("read_only", "代码路径由系统管理，请提交 source")
     source = payload.get("source")
-    parsed = parse_python_source(source)
-    if "input_schema" in payload and payload["input_schema"] != parsed["input_schema"]:
-      raise PythonSourceError(
-        "python_schema",
-        "参数结构须与源码解析结果一致，不能改写名称、类型、必填性或默认值",
-      )
+    schema = prepare_python_input_schema(source, payload.get("input_schema", ...))
     definition = {key: value for key, value in payload.items() if key != "source"}
-    definition["input_schema"] = parsed["input_schema"]
+    definition["input_schema"] = schema
     return definition, source
 
   def _check_tool_edit_permissions(

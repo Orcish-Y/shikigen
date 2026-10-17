@@ -56,7 +56,7 @@ test('Python 本地预览不改写草稿，源码错误立即清除旧结构，�
   const preview=screen.getByRole('region',{name:'源码参数预览'});
   assert.match(preview.textContent,/quantity/);
   assert.match(preview.textContent,/可省略/);
-  assert.equal(preview.querySelectorAll('input,textarea,select').length,0);
+  assert.equal(within(preview).getByRole('combobox',{name:'quantity 类型'}).disabled,true);
   replacePythonSource('def main(:');
   assert.equal(states.at(-1).input_schema,null);
   assert.match(preview.textContent,/python_syntax/);
@@ -67,14 +67,123 @@ test('Python 本地预览不改写草稿，源码错误立即清除旧结构，�
   assert.ok(states.at(-1).input_schema);
   await user.click(screen.getByRole('button',{name:'保存工具'}));
   assert.equal(submittedDrafts[0].source,source);
-  assert.equal(Object.hasOwn(submittedDrafts[0],'input_schema'),false);
+  assert.deepEqual(submittedDrafts[0].input_schema,inputSchema);
   cleanup();
   const submitted=[];
   render(React.createElement(ToolInputForm,{schema:inputSchema,disabled:false,onTest:value => submitted.push(value)}));
   assert.equal(screen.getByLabelText('price').value,'');
-  fireEvent.change(screen.getByLabelText(/quantity/),{target:{value:'3'}});
+  fireEvent.change(screen.getByRole('textbox',{name:/^quantity\*?$/}),{target:{value:'3'}});
   await user.click(screen.getByRole('button',{name:'测试已保存工具'}));
   assert.deepEqual(JSON.parse(JSON.stringify(submitted)),[{quantity:3}]);
+});
+
+test('Python 待补类型通过下拉补齐，高级约束随兼容源码保留，冲突必须确认', async () => {
+  const user=userEvent.setup({document:browser.window.document,delay:null});
+  const states=[],submitted=[];
+  render(React.createElement(ToolDefinitionForm,{schema:{type:'object',properties:{
+    source:{type:'string',title:'Python 源码'},input_schema:{type:'object'},
+  }},initial:{kind:'python',source:'def main(value): return value\n'},
+    onSourceAnalysis:value => states.push(value),onSave:value => submitted.push(value)}));
+  assert.equal(screen.getByRole('button',{name:'保存工具'}).disabled,true);
+  await user.selectOptions(screen.getByRole('combobox',{name:'value 类型'}),'integer');
+  assert.equal(screen.getByRole('button',{name:'保存工具'}).disabled,false);
+  await user.click(screen.getByRole('button',{name:'高级输入 JSON'}));
+  const schema=states.at(-1).input_schema;
+  schema.properties.value.minimum=2;
+  fireEvent.change(screen.getByLabelText('Python 输入结构 JSON'),{target:{value:JSON.stringify(schema)}});
+  replacePythonSource('def main(value): return value + 1\n');
+  assert.equal(states.at(-1).input_schema.properties.value.minimum,2);
+  replacePythonSource('def main(value: str): return value\n');
+  assert.match(screen.getByLabelText('源码参数预览').textContent,/类型变化/);
+  assert.equal(screen.getByRole('button',{name:'保存工具'}).disabled,true);
+  await user.click(screen.getByRole('button',{name:'确认源码变更'}));
+  await user.click(screen.getByRole('button',{name:'保存工具'}));
+  assert.equal(submitted.at(-1).input_schema.properties.value.type,'string');
+  assert.equal(Object.hasOwn(submitted.at(-1).input_schema.properties.value,'minimum'),false);
+});
+
+test('Python 高级 JSON 和源码错误保留原文，删除和必填变化明确提示且不能执行旧结构', async () => {
+  const user=userEvent.setup({document:browser.window.document,delay:null});
+  const states=[];
+  render(React.createElement(ToolDefinitionForm,{schema:{type:'object',properties:{
+    source:{type:'string',title:'Python 源码'},input_schema:{type:'object'},
+  }},initial:{kind:'python',source:'def main(a: int, b: str): return a\n'},
+    onSourceAnalysis:value => states.push(value),onSave:() => assert.fail('invalid schema saved')}));
+  await user.click(screen.getByRole('button',{name:'高级输入 JSON'}));
+  fireEvent.change(screen.getByLabelText('Python 输入结构 JSON'),{target:{value:'{original broken JSON'}});
+  assert.equal(screen.getByRole('button',{name:'保存工具'}).disabled,true);
+  replacePythonSource('def main(:');
+  assert.equal(states.at(-1).input_schema,null);
+  replacePythonSource('def main(a: int = 2, *, renamed): return a\n');
+  assert.equal(screen.getByLabelText('Python 输入结构 JSON').value,'{original broken JSON');
+  assert.match(screen.getByLabelText('源码变更').textContent,/删除参数/);
+  assert.match(screen.getByLabelText('源码变更').textContent,/必填变化/);
+  assert.equal(states.at(-1).input_schema,null);
+  assert.equal(screen.getByRole('button',{name:'保存工具'}).disabled,true);
+});
+
+test('Python 普通容器需明确开放，已知容器类型只读，新增未知参数待补', async () => {
+  const user=userEvent.setup({document:browser.window.document,delay:null});
+  const states=[];
+  render(React.createElement(ToolDefinitionForm,{schema:{type:'object',properties:{
+    source:{type:'string',title:'Python 源码'},input_schema:{type:'object'},
+  }},initial:{kind:'python',source:'def main(rows: list, options: dict): return rows\n'},
+    onSourceAnalysis:value => states.push(value),onSave:() => {}}));
+  assert.equal(screen.getByRole('combobox',{name:'rows 类型'}).disabled,true);
+  assert.equal(screen.getByRole('button',{name:'保存工具'}).disabled,true);
+  await user.click(screen.getByRole('button',{name:'开放 rows 元素'}));
+  await user.click(screen.getByRole('button',{name:'开放 options 属性'}));
+  assert.equal(screen.getByRole('button',{name:'保存工具'}).disabled,false);
+  replacePythonSource('def main(rows: list, options: dict, value): return rows\n');
+  assert.equal(screen.getByRole('button',{name:'保存工具'}).disabled,true);
+  assert.equal(screen.getByRole('combobox',{name:'value 类型'}).value,'');
+  await user.selectOptions(screen.getByRole('combobox',{name:'value 类型'}),'boolean');
+  assert.equal(states.at(-1).input_schema.properties.rows.items,true);
+  assert.equal(screen.getByRole('button',{name:'保存工具'}).disabled,false);
+});
+
+test('Python 引用与嵌套约束随兼容修改保留，字典值类型变化展示冲突', async () => {
+  const user=userEvent.setup({document:browser.window.document,delay:null});
+  const states=[];
+  const input={type:'object',properties:{value:{$ref:'#/definitions/values'}},required:['value'],additionalProperties:false,
+    definitions:{values:{type:'object',properties:{count:{type:'integer',minimum:2}},additionalProperties:false}}};
+  render(React.createElement(ToolDefinitionForm,{schema:{type:'object',properties:{source:{type:'string',title:'Python 源码'},input_schema:{type:'object'}}},
+    initial:{kind:'python',source:'def main(value: dict[str, int]): return value\n',input_schema:input},
+    onSourceAnalysis:value => states.push(value),onSave:() => {}}));
+  assert.ok(states.at(-1).input_schema);
+  assert.equal(screen.getByRole('combobox',{name:'value 类型'}).value,'object');
+  replacePythonSource('def main(value: dict[str, int]): return dict(value)\n');
+  assert.deepEqual(states.at(-1).input_schema,input);
+  replacePythonSource('def main(value: dict[str, str]): return dict(value)\n');
+  assert.equal(screen.getByRole('button',{name:'保存工具'}).disabled,true);
+  assert.match(screen.getByLabelText('源码变更').textContent,/类型变化/);
+  await user.click(screen.getByRole('button',{name:'确认源码变更'}));
+  assert.equal(screen.getByRole('button',{name:'保存工具'}).disabled,false);
+});
+
+test('Python 显式开放的 kwargs 和未知元素在函数体变化后保持原样', async () => {
+  const states=[];
+  const schema={type:'object',properties:{rows:{type:'array',items:true}},required:['rows'],additionalProperties:true};
+  render(React.createElement(ToolDefinitionForm,{schema:{type:'object',properties:{source:{type:'string',title:'Python 源码'},input_schema:{type:'object'}}},
+    initial:{kind:'python',source:'def main(rows: list[Unknown], **extras): return rows\n',input_schema:schema},
+    onSourceAnalysis:value => states.push(value),onSave:() => {}}));
+  replacePythonSource('def main(rows: list[Unknown], **extras): return [rows, extras]\n');
+  assert.deepEqual(states.at(-1).input_schema,schema);
+  assert.equal(screen.getByRole('button',{name:'保存工具'}).disabled,false);
+});
+
+test('Python 有效 JSON 中的无效 schema 保留原文，源码变更不能崩溃或自动修正它', async () => {
+  const user=userEvent.setup({document:browser.window.document,delay:null});
+  const states=[];
+  render(React.createElement(ToolDefinitionForm,{schema:{type:'object',properties:{source:{type:'string',title:'Python 源码'},input_schema:{type:'object'}}},
+    initial:{kind:'python',source:'def main(value: int): return value\n'},onSourceAnalysis:value => states.push(value),onSave:() => assert.fail('invalid schema saved')}));
+  await user.click(screen.getByRole('button',{name:'高级输入 JSON'}));
+  const original=JSON.stringify({type:'object',properties:{value:{type:'integer'}},required:2,additionalProperties:false});
+  fireEvent.change(screen.getByLabelText('Python 输入结构 JSON'),{target:{value:original}});
+  replacePythonSource('def main(value: int, **extras): return value\n');
+  assert.equal(screen.getByLabelText('Python 输入结构 JSON').value,original);
+  assert.equal(states.at(-1).input_schema,null);
+  assert.equal(screen.getByRole('button',{name:'保存工具'}).disabled,true);
 });
 
 test('CodeMirror 保持光标和撤销历史，外部重读不触发编辑，禁用与只读可更新', () => {
@@ -353,7 +462,7 @@ function toolSession(fetcher, id='tool-session') {
 }
 const response = data => new Response(JSON.stringify(data), {headers:{'Content-Type':'application/json'}});
 
-test('Python 工作区本地更新表单，提交不带派生 schema，保存与重读失败状态分别保留', async () => {
+test('Python 工作区更新测试表单并提交最终 schema，保存与重读失败状态分别保留', async () => {
   const user=userEvent.setup({document:browser.window.document,delay:null});
   const source='def main(quantity: int, price: float = 2.5):\n    return quantity * price\n';
   const management={type:'object',required:['display_name','name','source'],properties:{
@@ -395,16 +504,22 @@ test('Python 工作区本地更新表单，提交不带派生 schema，保存与
   await waitFor(() => assert.equal(screen.getByRole('button',{name:'测试当前草稿'}).disabled,false));
   assert.equal(screen.queryByText('未保存修改'),null);
   assert.equal(screen.getByLabelText('price').value,'');
-  fireEvent.change(screen.getByLabelText(/quantity/),{target:{value:'4'}});
+  fireEvent.change(screen.getByRole('textbox',{name:/^quantity\*?$/}),{target:{value:'4'}});
   replacePythonSource('def main(:');
   assert.equal(screen.getByRole('button',{name:'测试当前草稿'}).disabled,true);
-  assert.equal(screen.queryByLabelText(/quantity/),null);
+  assert.equal(screen.queryByRole('textbox',{name:/^quantity\*?$/}),null);
   replacePythonSource(source.replace('2.5','3.5'));
-  assert.equal(screen.getByLabelText(/quantity/).value,'4');
+  assert.equal(screen.getByRole('textbox',{name:/^quantity\*?$/}).value,'4');
   await user.click(screen.getByRole('button',{name:'测试当前草稿'}));
   await screen.findAllByText('测试成功');
   assert.deepEqual(tests[0].inputs,{quantity:4});
-  assert.equal(Object.hasOwn(tests[0].definition,'input_schema'),false);
+  assert.deepEqual(tests[0].definition.input_schema.properties.quantity,{type:'integer'});
+  replacePythonSource(source.replace('quantity: int',"quantity: '\\x69nt'"));
+  await user.click(screen.getByRole('button',{name:'交给后端校验'}));
+  await user.click(screen.getByRole('button',{name:'测试当前草稿'}));
+  assert.equal(Object.hasOwn(tests.at(-1).definition,'input_schema'),false);
+  replacePythonSource(source.replace('2.5','3.5'));
+  await user.click(screen.getByRole('button',{name:'测试当前草稿'}));
   replacePythonSource('return 1\n'+source);
   await user.click(screen.getByRole('button',{name:'保存工具'}));
   await screen.findByText(/保存失败/);
@@ -419,9 +534,9 @@ test('Python 工作区本地更新表单，提交不带派生 schema，保存与
   assert.equal(screen.queryByText('未保存修改'),null);
   assert.equal(screen.queryByText('修改前的测试结果'),null);
   assert.equal(screen.getByLabelText('price').value,'');
-  assert.equal(screen.getByLabelText(/quantity/).value,'4');
+  assert.equal(screen.getByRole('textbox',{name:/^quantity\*?$/}).value,'4');
   assert.equal(writes.length,2);
-  assert.ok(writes.every(payload => !Object.hasOwn(payload.definition,'input_schema')));
+  assert.ok(writes.every(payload => payload.definition.input_schema.type === 'object'));
   assert.ok(requests.every(url => !url.includes('/python/parse')));
 });
 

@@ -5,7 +5,7 @@ import { BackendRequestError, type BackendSession } from '../../backend-client';
 import type { ContentView } from '../MessageBody';
 import { Button } from '../ui/button';
 import { Overlay } from '../Overlay';
-import { schemaValidatorFor } from './SchemaForm';
+import { schemaValidatorFor } from '../../schema-validation';
 import { hasNonFiniteNumber } from './JsonEditor';
 import { ToolDefinitionForm } from './ToolDefinitionForm';
 import { ToolInputForm } from './ToolInputForm';
@@ -211,7 +211,10 @@ export function ToolsWorkspace({ session, onView, onNavigation, ref }: {
     setBusy('testing'); setError(null); setNotice(null); setInputs(value);setTest(null);
     setTestDefinition(toolDraftFingerprint(editor.draft));
     try {
-      const started = await session.startToolDraftTest(editor.draft, value, editor.tool?.id);
+      const definition={...editor.draft};
+      if (definition.kind === 'python' && pythonAnalysis?.source === definition.source && pythonAnalysis.backendValidationRequested)
+        delete definition.input_schema;
+      const started = await session.startToolDraftTest(definition, value, editor.tool?.id);
       if (request === selection.current) {setTest(started.data);if (started.data.status !== 'running') setBusy(null);}
     } catch (failure) {if (request === selection.current) {setError(`无法开始草稿测试：${message(failure)}`); setBusy(null);}}
   }

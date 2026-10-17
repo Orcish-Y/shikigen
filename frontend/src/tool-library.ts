@@ -19,7 +19,7 @@ export interface HttpParameterMapping {
   style?:'simple' | 'form' | null; explode?:boolean | null;
 }
 export type HttpToolDraft = Omit<HttpToolDefinition, 'id' | 'created_at' | 'updated_at'>;
-export type PythonToolDraft = Omit<PythonToolDefinition, 'id' | 'created_at' | 'updated_at' | 'code_path' | 'source' | 'input_schema'> & {source:string};
+export type PythonToolDraft = Omit<PythonToolDefinition, 'id' | 'created_at' | 'updated_at' | 'code_path' | 'source' | 'input_schema'> & {source:string; input_schema?:RJSFSchema};
 export type ToolDraft = HttpToolDraft | PythonToolDraft;
 export interface ToolNameValidation {
   valid: boolean; code: 'name_invalid' | 'name_conflict' | null; message: string | null;
@@ -50,6 +50,7 @@ export const emptyToolDraft: HttpToolDraft = {
 export const emptyPythonToolDraft:PythonToolDraft = {
   kind:'python',display_name:'',name:'tool',description:'',enabled:true,timeout_seconds:30,
   source:'def main(quantity: int, price: float = 2.5):\n    return {"total": quantity * price}\n',
+  input_schema:{type:'object',properties:{quantity:{type:'integer'},price:{type:'number'}},required:['quantity'],additionalProperties:false},
   output_schema:null,
 };
 export function syncHttpMappings(schema:RJSFSchema, mappings:HttpParameterMapping[]):HttpParameterMapping[] {
@@ -75,7 +76,7 @@ export function suggestToolName(displayName: string, occupiedNames: Iterable<str
 }
 export function editTool(tool: HttpToolDefinition | PythonToolDefinition): ToolDraft {
   if (tool.kind === 'python') {
-    const {id, created_at, updated_at, code_path, source, input_schema, ...draft} = tool;
+    const {id, created_at, updated_at, code_path, source, ...draft} = tool;
     return {...draft,source:source ?? ''};
   }
   const {id, created_at, updated_at, ...draft} = tool;

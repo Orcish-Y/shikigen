@@ -204,6 +204,103 @@ class ToolLibraryAcceptance(WindowAcceptance):
     )
     self.record(tool_id=saved["id"], source=saved["code_path"], pid=host.pid)
 
+  def test_python_type_completion_schema_sync_and_retained_inputs(self):
+    host = self.launch()
+    self.connect()
+    base = self.state("ready")["base_url"]
+    wait_until(lambda: "新建会话开始对话" in self.body())
+    self.evaluate("document.querySelector('[aria-label=工具]').click()")
+    wait_until(lambda: "工具库为空" in self.body())
+    self.evaluate("document.querySelector('[aria-label=选择接入类型]').click()")
+    self.click("新建 Python 工具")
+    wait_until(
+      lambda: self.evaluate("Boolean(document.getElementById('tool-config_source'))")
+    )
+    self.fill("tool-config_display_name", "类型补齐与同步")
+    source = (
+      "def main(value, *, label: str | None = None): "
+      "return {'value': value, 'label': label}\n"
+    )
+    self.replace("tool-config_source", source)
+    save_disabled = "document.querySelector('button[form=tool-definition]').disabled"
+    wait_until(lambda: "类型待补" in self.body())
+    self.assertTrue(self.evaluate(save_disabled))
+    self.click("确认源码变更")
+    self.evaluate("""(() => {
+      const select=document.querySelector('[aria-label="value 类型"]');
+      select.value='integer'; select.dispatchEvent(new Event('change',{bubbles:true}));
+    })()""")
+    wait_until(lambda: not self.evaluate(save_disabled))
+    self.assertTrue(
+      self.evaluate("document.querySelector('[aria-label=\"label 类型\"]').disabled")
+    )
+    self.click("高级输入 JSON")
+    schema = {
+      "type": "object",
+      "properties": {
+        "value": {"type": "integer", "minimum": 2, "description": "至少两个"},
+        "label": {"type": ["string", "null"]},
+      },
+      "required": ["value"],
+      "additionalProperties": False,
+    }
+    self.replace("tool-config_input_schema", json.dumps(schema, ensure_ascii=False))
+    self.replace("tool-input-json", '{"value": 3}')
+    self.click("执行测试")
+    wait_until(lambda: "测试成功" in self.body())
+    self.assertIn('"value": 3', self.body())
+    self.assertEqual(self.client.get(base + "/api/tools").json()["data"], [])
+    self.replace(
+      "tool-config_source", source.replace("return {", "# body changed\n    return {")
+    )
+    wait_until(lambda: not self.evaluate(save_disabled))
+    self.assertEqual(
+      self.evaluate(
+        "JSON.parse(document.getElementById('tool-config_input_schema').value).properties.value.minimum"
+      ),
+      2,
+    )
+    self.click("保存工具")
+    wait_until(lambda: "工具已保存" in self.body())
+    saved = self.client.get(base + "/api/tools").json()["data"][0]
+    self.assertEqual(saved["input_schema"], schema)
+    for width, height in ((1440, 900), (390, 844)):
+      self.call(
+        "Emulation.setDeviceMetricsOverride",
+        width=width,
+        height=height,
+        deviceScaleFactor=1,
+        mobile=False,
+      )
+      self.evaluate(
+        "document.querySelector('.tool-python-preview').scrollIntoView({block:'center'})"
+      )
+      self.assertFalse(
+        self.evaluate("document.documentElement.scrollWidth > window.innerWidth")
+      )
+      data = self.call("Page.captureScreenshot", format="png")["data"]
+      (self.artifacts / f"python-schema-{width}.png").write_bytes(
+        base64.b64decode(data)
+      )
+    self.call("Emulation.clearDeviceMetricsOverride")
+    self.replace("tool-config_source", source.replace("value,", "value: str,", 1))
+    wait_until(lambda: "类型变化" in self.body())
+    self.assertTrue(self.evaluate(save_disabled))
+    self.click("确认源码变更")
+    wait_until(lambda: not self.evaluate(save_disabled))
+    self.assertEqual(
+      self.evaluate("document.getElementById('tool-input-json').value"), '{"value": 3}'
+    )
+    self.assertIn("当前输入与结构不匹配", self.body())
+    self.click("执行测试")
+    wait_until(lambda: "input_validation" in self.body())
+    current = self.client.get(base + f"/api/tools/{saved['id']}").json()["data"]
+    self.assertEqual(current["input_schema"], schema)
+    self.assertEqual(current["code_path"], saved["code_path"])
+    self.record(tool_id=saved["id"], schema=schema, pid=host.pid)
+    self.quit(host)
+    self.assertEqual(host.wait(timeout=10), 0)
+
   def test_http_auth_password_reads_replaces_and_clears_direct_value(self):
     requests = []
     token = "ticket04-native-secret"

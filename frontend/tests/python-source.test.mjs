@@ -20,14 +20,14 @@ for (const sample of cases) test(`Python 本地分析：${sample.id}`, () => {
     assert.deepEqual(result.diagnostics,[]);
     assert.deepEqual(result.parameters.map(({name,type,required,default_expression}) =>
       default_expression === undefined ? [name,type,required] : [name,type,required,default_expression]),sample.parameters);
-    assert.deepEqual(result.input_schema,{
+    assert.deepEqual(result.input_schema,sample.schema ?? {
       type:'object',properties:Object.fromEntries(sample.parameters.map(([name,type]) => [name,{type}])),
       required:sample.parameters.filter(([, ,required]) => required).map(([name]) => name),additionalProperties:false,
     });
   }
 });
 
-test('分析整个模块，源码和默认表达式始终作为数据，派生结构不进入草稿', () => {
+test('分析整个模块不执行表达式，草稿保留最终 schema，分析不修改补充', () => {
   const source=`${'value = 1\n'.repeat(500)}def main(count: int = __import__('os').system('echo side_effect')): return count\n`;
   const result=analyzePythonSource(source);
   assert.ok(result.input_schema);
@@ -38,7 +38,7 @@ test('分析整个模块，源码和默认表达式始终作为数据，派生�
   const fingerprint=toolDraftFingerprint(draft);
   analyzePythonSource(draft.source);
   assert.equal(toolDraftFingerprint(draft),fingerprint);
-  assert.equal(Object.hasOwn(draft,'input_schema'),false);
+  assert.deepEqual(draft.input_schema,saved.input_schema);
   assert.equal(Object.hasOwn(draft,'code_path'),false);
   assert.notEqual(toolDraftFingerprint({...draft,source:source+'\n'}),fingerprint);
 });

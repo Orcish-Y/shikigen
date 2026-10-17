@@ -1,6 +1,6 @@
 # Python 工具：源码、参数与本机执行
 
-2026-10-15，ticket 05。页面继续参照[工具页面原型](../../../frontend/design.md#工具页面原型)，执行依据[执行决议](tickets/003-execution-test-contract.resolution.md)。
+2026-10-15，ticket 05；2026-10-18 已由 ticket 06 扩展[类型补齐与源码变更同步](python-schema-sync.md)。页面继续参照[工具页面原型](../../../frontend/design.md#工具页面原型)，执行依据[执行决议](tickets/003-execution-test-contract.resolution.md)。以下实现与历史验证记录按各自日期阅读，当前 schema 补充和同步规则以 ticket 06 记录为准。
 
 工具页「接入工具」旁的类型菜单可新建 Python 工具。配置卡片使用 CodeMirror 6 编辑源码，提供 Python 高亮、行号、四空格缩进、撤销重做和错误标记；结构卡片展示只读参数预览，右侧 rjsf 按当前有效 schema 收集实际输入。Tab 缩进，Esc 后按 Tab 可以离开编辑器。布局继续参照原型，不改变类型 tab、隐藏禁用工具、草稿离开确认和保存后读取详情的行为。
 

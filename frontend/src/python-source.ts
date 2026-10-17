@@ -12,7 +12,8 @@ export interface PythonDiagnostic {
 
 export interface PythonParameter {
   name:string;
-  type:'string' | 'integer' | 'number' | 'boolean';
+  type:RJSFSchema['type'] | null;
+  schema:RJSFSchema;
   type_expression:string;
   required:boolean;
   default_expression?:string;
@@ -26,9 +27,11 @@ export interface PythonSourceAnalysis {
   parameters:PythonParameter[];
   diagnostics:PythonDiagnostic[];
   canAskBackend:boolean;
+  extra_schema:RJSFSchema | null;
+  backendValidationRequested:boolean;
 }
 
-const scalarTypes:Record<string, PythonParameter['type']> = {str:'string', int:'integer', float:'number', bool:'boolean'};
+const annotationTypes:Record<string, RJSFSchema['type']> = {str:'string', int:'integer', float:'number', bool:'boolean', list:'array', List:'array', dict:'object', Dict:'object'};
 
 function children(node:SyntaxNode):SyntaxNode[] {
   const result:SyntaxNode[] = [];
@@ -39,10 +42,51 @@ function children(node:SyntaxNode):SyntaxNode[] {
 /** Analyze the whole module. Never execute source, annotations, or defaults. */
 export function analyzePythonSource(source:string):PythonSourceAnalysis {
   const diagnostics:PythonDiagnostic[] = [];
-  const result:PythonSourceAnalysis = {source, input_schema:null, parameters:[], diagnostics, canAskBackend:false};
+  const result:PythonSourceAnalysis = {source, input_schema:null, parameters:[], diagnostics, canAskBackend:false, extra_schema:null, backendValidationRequested:false};
   const text = (node:SyntaxNode) => source.slice(node.from, node.to);
   function diagnose(node:SyntaxNode | null, code:string, message:string, severity:'error' | 'warning' = 'error') {
     diagnostics.push({from:node?.from ?? 0, to:node?.to ?? source.length, code, message, severity});
+  }
+  function annotationSchema(node:SyntaxNode | undefined, depth=0):RJSFSchema {
+    if (!node || depth > 30) return {};
+    const expression=text(node);
+    if (node.name === 'String') {
+      const quoted=/^(?:[rRuU])?(?:'([^'\\\n]*)'|"([^"\\\n]*)")$/.exec(expression);
+      if (!quoted) {
+        diagnose(node,'python_annotation','本地无法解析转义注解，可交给后端校验','warning');
+        result.canAskBackend=true;
+        return {};
+      }
+      const content=quoted[1] ?? quoted[2];
+      const quotedSource=`def main(value: ${content}): pass`;
+      const annotation=parser.parse(quotedSource).topNode.getChild('FunctionDefinition')?.getChild('ParamList')?.getChild('TypeDef');
+      // Analyze quoted expressions in their own source coordinate system.
+      const nested=analyzePythonSource(quotedSource);
+      return annotation && nested.parameters[0]?.schema || {};
+    }
+    if (expression === 'None') return {type:'null'};
+    const name=expression.replace(/^typing\./,'').normalize('NFKC');
+    if (Object.hasOwn(annotationTypes,name)) return {type:annotationTypes[name]};
+    const parts=children(node);
+    let members:RJSFSchema[] | null=null;
+    if (node.name === 'BinaryExpression' && parts[1] && text(parts[1]) === '|')
+      members=[annotationSchema(parts[0],depth+1),annotationSchema(parts[2],depth+1)];
+    if (node.name === 'MemberExpression' && parts.some(part => part.name === '[')) {
+      const base=text(parts[0]).replace(/^typing\./,'');
+      const args=parts.slice(2,-1).filter(part => part.name !== ',');
+      if (['list','List'].includes(base) && args.length === 1) return {type:'array',items:annotationSchema(args[0],depth+1)};
+      if (['dict','Dict'].includes(base) && args.length === 2) {
+        if (annotationSchema(args[0],depth+1).type !== 'string') diagnose(node,'python_annotation','字典注解仅支持 dict[str, T]');
+        return {type:'object',additionalProperties:annotationSchema(args[1],depth+1)};
+      }
+      if (base === 'Optional' && args.length === 1) members=[annotationSchema(args[0],depth+1),{type:'null'}];
+      if (base === 'Union' && args.length === 2) members=args.map(arg => annotationSchema(arg,depth+1));
+    }
+    if (members) {
+      const nonNull=members.filter(member => member.type !== 'null');
+      if (nonNull.length === 1) return {...nonNull[0],type:[...new Set([...(Array.isArray(nonNull[0].type) ? nonNull[0].type : nonNull[0].type ? [nonNull[0].type] : []),'null' as const])]};
+    }
+    return {};
   }
   if (!source.trim()) {
     diagnose(null, 'python_source_empty', 'Python 源码不能为空');
@@ -111,11 +155,19 @@ export function analyzePythonSource(source:string):PythonSourceAnalysis {
   const parameters:PythonParameter[] = [];
   const names = new Set<string>();
   let hasDefault = false;
+  let keywordOnly=false;
+  let seenKwargs=false;
   for (const group of groups.filter(parts => parts.length)) {
-    const [nameNode, annotation, assignment, defaultNode] = group;
-    if (nameNode.name !== 'VariableName' || group.length > 4
-      || assignment && (assignment.name !== 'AssignOp' || !defaultNode)) {
-      diagnose(nameNode, 'python_signature', '当前仅支持普通具名参数，不支持 /、*args、仅关键字参数或 **kwargs');
+    if (group[0].name === '*' && group.length === 1) {keywordOnly=true;continue;}
+    const kwargs=group[0].name === '**';
+    const parts=kwargs ? group.slice(1) : group;
+    const nameNode=parts[0];
+    const annotation=parts.find(part => part.name === 'TypeDef');
+    const assignment=parts.findIndex(part => part.name === 'AssignOp');
+    const defaultNode=assignment >= 0 ? parts[assignment+1] : undefined;
+    if (nameNode?.name !== 'VariableName' || parts.length > 4 || seenKwargs
+      || assignment >= 0 && !defaultNode) {
+      diagnose(nameNode, 'python_signature', '不支持仅位置参数、*args 或此参数声明');
       continue;
     }
     const name = text(nameNode).normalize('NFKC');
@@ -123,20 +175,12 @@ export function analyzePythonSource(source:string):PythonSourceAnalysis {
     names.add(name);
     const typeNode = annotation?.name === 'TypeDef' ? children(annotation).find(node => node.name !== ':') : undefined;
     const expression = typeNode ? text(typeNode) : '';
-    // Simple string annotations are accepted without interpreting Python escapes.
-    // More complex quoted annotations remain a backend decision.
-    const quoted = /^(?:[rRuU])?(?:'([^'\\\n]*)'|"([^"\\\n]*)")$/.exec(expression);
-    const typeName = typeNode?.name === 'VariableName' ? expression.normalize('NFKC') : quoted?.[1] ?? quoted?.[2];
-    const type = typeName && Object.hasOwn(scalarTypes, typeName) ? scalarTypes[typeName] : undefined;
-    if (!type) {
-      const quotedUnknown = typeNode && ['String', 'ContinuedString'].includes(typeNode.name);
-      diagnose(typeNode ?? nameNode, 'python_annotation', `参数 ${name} 的类型待补；当前支持 str、int、float、bool`, quotedUnknown ? 'warning' : 'error');
-      if (quotedUnknown) result.canAskBackend = true;
-      continue;
-    }
-    if (hasDefault && !defaultNode) diagnose(nameNode, 'python_signature', '有默认值的参数后不能声明必填参数');
+    const schema=annotationSchema(typeNode);
+    const type=schema.type ?? null;
+    if (kwargs) {result.extra_schema=schema;seenKwargs=true;continue;}
+    if (!keywordOnly && hasDefault && !defaultNode) diagnose(nameNode, 'python_signature', '有默认值的参数后不能声明必填参数');
     if (defaultNode) hasDefault = true;
-    parameters.push({name, type, type_expression:expression, required:!defaultNode,
+    parameters.push({name, type, schema, type_expression:expression, required:!defaultNode,
       ...(defaultNode ? {default_expression:text(defaultNode)} : {}), from:nameNode.from, to:nameNode.to});
   }
   if (diagnostics.length) {
@@ -146,9 +190,9 @@ export function analyzePythonSource(source:string):PythonSourceAnalysis {
   result.parameters = parameters;
   result.input_schema = {
     type:'object',
-    properties:Object.fromEntries(parameters.map(parameter => [parameter.name, {type:parameter.type}])),
+    properties:Object.fromEntries(parameters.map(parameter => [parameter.name, parameter.schema])),
     required:parameters.filter(parameter => parameter.required).map(parameter => parameter.name),
-    additionalProperties:false,
+    ...(result.extra_schema === null ? {additionalProperties:false} : Object.keys(result.extra_schema).length ? {additionalProperties:result.extra_schema} : {}),
   };
   return result;
 }
