@@ -79,7 +79,7 @@ export function Navigation({
   page?: WorkspacePage;
   onNavigate?: (page: WorkspacePage) => void;
 }) {
-  const compactToolsRail = page === 'tools' && isCollapsed;
+  const compactToolsRail = page !== 'chat' && isCollapsed;
   const destinations = [
     { icon: ChatCircle, label: "会话与对话", page:'chat' as WorkspacePage },
     ...(compactToolsRail ? [{icon:PuzzlePiece,label:'工具',page:'tools' as WorkspacePage}] : []),

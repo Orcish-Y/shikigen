@@ -5,7 +5,12 @@ from typing import Protocol
 
 from pydantic import JsonValue
 
-from shikigen.contracts.tool_definitions import PythonToolDefinition, ToolDefinition
+from shikigen.contracts.mcp_connections import McpStdioConnection
+from shikigen.contracts.tool_definitions import (
+  McpToolDefinition,
+  PythonToolDefinition,
+  ToolDefinition,
+)
 from shikigen.contracts.tool_results import ToolResult
 
 
@@ -22,6 +27,12 @@ class PythonToolExecution(ToolExecution):
 
   definition: PythonToolDefinition
   source: str
+
+
+@dataclass(frozen=True, slots=True)
+class McpToolExecution(ToolExecution):
+  definition: McpToolDefinition
+  connection: McpStdioConnection
 
 
 @dataclass(frozen=True, slots=True)

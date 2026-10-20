@@ -20,7 +20,7 @@ export function ToolTestResult({result, inputs, onView}: {
         <p>退出码：{String(result.details.exit_code)}{(result.details.stdout_truncated || result.details.stderr_truncated) ? ' · 调试输出已截断，保留最后 64 KiB' : ''}</p>
         <details open><summary>stdout</summary><pre>{String(result.details.stdout)}</pre></details>
         <details open><summary>stderr</summary><pre>{String(result.details.stderr)}</pre></details>
-      </section> : <details><summary>HTTP 详情</summary><pre>{formatToolValue(result.details)}</pre></details>}
+      </section> : <details><summary>{'remote_name' in result.details ? 'MCP 原始返回与来源' : 'HTTP 详情'}</summary><pre>{formatToolValue(result.details)}</pre></details>}
       <div className="tool-actions">
         <Button variant="outline" type="button" onClick={() => onView({title:'完整工具结果',text})}>查看完整结果</Button>
         <Button variant="outline" type="button" onClick={async () => {

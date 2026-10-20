@@ -211,3 +211,18 @@
 .tool-auth-binding legend { padding: 0 4px; font-size: 12px; color: var(--muted); }
 .tool-auth-editor .tool-muted { margin: 0; }
 .tool-auth-editor button { align-self: flex-start; }
+.tool-field-source_tool, .tool-field-connection_id { grid-column: 1 / -1; }
+.mcp-source-json { max-width: 100%; max-height: 320px; overflow: auto; font: 11px/1.7 'JetBrains Mono', monospace; white-space: pre; }
+.mcp-discovery-list { display: grid; gap: 16px; }
+.mcp-discovery-item { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; min-width: 0; }
+.mcp-discovery-item > label:first-child { display: flex; align-items: center; gap: 6px; overflow-wrap: anywhere; }
+.mcp-discovery-item input[type='checkbox'] { width: 15px; height: 15px; }
+.mcp-workspace .form-group { margin-bottom: 16px; min-width: 0; }
+.mcp-workspace details { min-width: 0; font-size: 12px; }
+.mcp-workspace summary { cursor: pointer; color: var(--secondary); }
+.mcp-workspace .tool-panel-body input, .mcp-workspace .tool-panel-body textarea { max-width: 100%; }
+.mcp-workspace .tool-toolbar-actions button { display: inline-flex; }
+@media (max-width: 767px) {
+  .mcp-workspace .tool-breadcrumb { max-width: 60px; }
+  .mcp-workspace .tool-toolbar-actions { margin-left: auto; }
+}

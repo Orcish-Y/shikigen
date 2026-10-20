@@ -5,27 +5,46 @@ import hashlib
 import json
 import os
 import tempfile
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
 from pydantic import TypeAdapter, ValidationError
 
+from shikigen.contracts.mcp_connections import McpStdioConnection, McpStdioSettings
 from shikigen.contracts.python_schema import prepare_python_input_schema
 from shikigen.contracts.tool_definitions import (
   AnyToolDefinition,
   ToolLibraryConfig,
   ToolName,
 )
-from shikigen.contracts.tool_execution import PythonToolExecution, ToolExecution
+from shikigen.contracts.tool_execution import (
+  McpToolExecution,
+  PythonToolExecution,
+  ToolExecution,
+)
 from shikigen.persistence.python_source_store import PythonSourceStore
 from shikigen.tools.adapter.http_execution import HttpAdapter
+from shikigen.tools.adapter.mcp_execution import McpAdapter
 from shikigen.tools.adapter.python_execution import PythonAdapter
 from shikigen.tools.library_execution import ToolExecutor
+from shikigen.tools.mcp_sessions import (
+  McpStdioSessionProvider,
+  list_mcp_session_tools,
+  mcp_exception_message,
+)
 from shikigen.tools.tool_registry import create_builtin_registry
 
 definition_adapter = TypeAdapter(AnyToolDefinition)
 name_adapter = TypeAdapter(ToolName)
+MCP_SOURCE_FIELDS = (
+  "connection_id",
+  "remote_name",
+  "input_schema",
+  "output_schema",
+  "source_tool",
+)
 
 
 class ToolLibraryError(ValueError):
@@ -41,14 +60,19 @@ class ToolLibrary:
     self.python_source_store = PythonSourceStore(self.source_path)
     self._lock = asyncio.Lock()
     self._reserved_names = set(create_builtin_registry().names) | {"task"}
+    self.mcp_session_provider = McpStdioSessionProvider(
+      self.source_path.parent if self.source_path else Path.cwd()
+    )
     self.executor = ToolExecutor(
       adapters={
         "http": HttpAdapter(),
         "python": PythonAdapter(),
+        "mcp": McpAdapter(self.mcp_session_provider),
       }
     )
     self._tests: dict[str, dict] = {}
     self._tasks: dict[str, asyncio.Task] = {}
+    self._discoveries: dict[str, dict] = {}
 
   def _read(self) -> tuple[dict, ToolLibraryConfig, str]:
     """读取原始配置、工具库和配置文件内容的 SHA-256 版本标识。"""
@@ -79,6 +103,176 @@ class ToolLibrary:
     async with self._lock:
       _, library, version = await asyncio.to_thread(self._read)
       return library.tools, version
+
+  async def list_mcp_connections(self):
+    async with self._lock:
+      _, library, version = await asyncio.to_thread(self._read)
+      return list(library.mcp_connections.values()), version
+
+  async def get_mcp_connection(self, connection_id: str):
+    connections, version = await self.list_mcp_connections()
+    for connection in connections:
+      if connection.id == connection_id:
+        return connection, version
+    raise ToolLibraryError("not_found", "MCP connection does not exist", 404)
+
+  async def inspect_mcp_connection(self, connection_id: str, *, discover: bool):
+    connection, version = await self.get_mcp_connection(connection_id)
+    budget = (
+      connection.discovery_timeout_seconds
+      if discover
+      else connection.test_timeout_seconds
+    )
+    started = time.monotonic()
+    try:
+      async with asyncio.timeout(budget):
+        async with self.mcp_session_provider.open_mcp_session(
+          connection
+        ) as mcp_session:
+          initialized = await mcp_session.initialize()
+          tools = await list_mcp_session_tools(mcp_session) if discover else []
+      observation = {
+        "status": "success",
+        "connection_id": connection_id,
+        "server": initialized.model_dump(mode="json", by_alias=True),
+        "duration_ms": (time.monotonic() - started) * 1000,
+        "error": None,
+      }
+      if discover:
+        discovery_id = str(uuid4())
+        # 发现凭证只驻留当前后端进程，过期/重启后必须重新读取真实来源。
+        self._discoveries = {
+          key: value
+          for key, value in self._discoveries.items()
+          if started - value["created"] < 600
+        }
+        if len(self._discoveries) >= 100:
+          self._discoveries.pop(next(iter(self._discoveries)))
+        self._discoveries[discovery_id] = {
+          "connection_id": connection_id,
+          "version": version,
+          "tools": tools,
+          "created": started,
+        }
+        observation.update(discovery_id=discovery_id, version=version, tools=tools)
+      return observation
+    except TimeoutError:
+      return {
+        "status": "timeout",
+        "connection_id": connection_id,
+        "duration_ms": (time.monotonic() - started) * 1000,
+        "error": {"code": "timeout", "message": "MCP operation budget exceeded"},
+      }
+    except Exception as error:
+      return {
+        "status": "error",
+        "connection_id": connection_id,
+        "duration_ms": (time.monotonic() - started) * 1000,
+        "error": {"code": "mcp_connection", "message": mcp_exception_message(error)},
+      }
+
+  async def import_mcp_tools(
+    self, connection_id: str, discovery_id: str, selections: list[dict]
+  ):
+    async with self._lock:
+      raw, library, current_version = await asyncio.to_thread(self._read)
+      discovery = self._discoveries.get(discovery_id)
+      if (
+        not discovery
+        or discovery["connection_id"] != connection_id
+        or time.monotonic() - discovery["created"] >= 600
+      ):
+        raise ToolLibraryError(
+          "discovery_expired", "Discover this connection again before importing", 409
+        )
+      if discovery["version"] != current_version:
+        raise ToolLibraryError(
+          "version_conflict",
+          "Configuration changed; discover again before importing",
+          409,
+        )
+      discovered_tools = {tool["name"]: tool for tool in discovery["tools"]}
+      selected_names = [selection["remote_name"] for selection in selections]
+      if not selections or len(set(selected_names)) != len(selected_names):
+        raise ToolLibraryError("selection_invalid", "Select distinct discovered tools")
+      imported = []
+      for selection in selections:
+        remote_name = selection["remote_name"]
+        if remote_name not in discovered_tools:
+          raise ToolLibraryError(
+            "selection_invalid", "Selected tool is not in this discovery"
+          )
+        previous = next(
+          (
+            tool
+            for tool in library.tools
+            if tool.kind == "mcp"
+            and tool.connection_id == connection_id
+            and tool.remote_name == remote_name
+          ),
+          None,
+        )
+        if previous:
+          # 07 只识别既有来源，09 负责来源差异的预览/确认和未发现处理。
+          imported.append(
+            {"id": previous.id, "remote_name": remote_name, "existing": True}
+          )
+          continue
+        source_tool = discovered_tools[remote_name]
+        tool = self._prepare_tool(
+          {
+            "kind": "mcp",
+            "connection_id": connection_id,
+            "remote_name": remote_name,
+            "source_tool": source_tool,
+            "name": selection["name"],
+            "display_name": source_tool.get("title") or remote_name,
+            "description": source_tool.get("description") or "",
+            "input_schema": source_tool["inputSchema"],
+            "output_schema": source_tool.get("outputSchema"),
+          },
+          library,
+          None,
+        )
+        library.tools.append(tool)
+        imported.append({"id": tool.id, "remote_name": remote_name, "existing": False})
+      raw["tool_library"] = library.model_dump(mode="json")
+      await asyncio.to_thread(self._commit, raw, current_version)
+      return imported
+
+  async def save_mcp_connection(
+    self,
+    payload: dict,
+    *,
+    connection_id: str | None = None,
+    version: str | None = None,
+  ):
+    try:
+      settings = McpStdioSettings.model_validate(payload)
+    except ValidationError:
+      raise ToolLibraryError(
+        "connection_invalid", "Invalid stdio connection settings"
+      ) from None
+    async with self._lock:
+      raw, library, current_version = await asyncio.to_thread(self._read)
+      previous = library.mcp_connections.get(connection_id) if connection_id else None
+      if connection_id and previous is None:
+        raise ToolLibraryError("not_found", "MCP connection does not exist", 404)
+      if connection_id and version != current_version:
+        raise ToolLibraryError(
+          "version_conflict", "Configuration changed; reload before saving", 409
+        )
+      now = datetime.now(UTC)
+      connection = McpStdioConnection(
+        **settings.model_dump(),
+        id=connection_id or str(uuid4()),
+        created_at=previous.created_at if previous else now,
+        updated_at=now,
+      )
+      library.mcp_connections[connection.id] = connection
+      raw["tool_library"] = library.model_dump(mode="json")
+      await asyncio.to_thread(self._commit, raw, current_version)
+      return connection.id
 
   async def get_tool(self, tool_id: str) -> tuple[AnyToolDefinition, str]:
     tools, version = await self.list_tools()
@@ -128,6 +322,9 @@ class ToolLibrary:
     if tool.kind == "python":
       source = await asyncio.to_thread(self.python_source_store.read, tool.code_path)
       return PythonToolExecution(definition=tool, source=source)
+    if tool.kind == "mcp":
+      connection, _ = await self.get_mcp_connection(tool.connection_id)
+      return McpToolExecution(definition=tool, connection=connection)
     return ToolExecution(definition=tool)
 
   async def get_tool_detail(self, tool_id: str):
@@ -198,6 +395,11 @@ class ToolLibrary:
       if tool.kind == "python":
         assert source is not None
         execution = PythonToolExecution(definition=tool, source=source)
+      elif tool.kind == "mcp":
+        connection = library.mcp_connections.get(tool.connection_id)
+        if connection is None:
+          raise ToolLibraryError("not_found", "MCP connection does not exist", 404)
+        execution = McpToolExecution(definition=tool, connection=connection)
       else:
         execution = ToolExecution(definition=tool)
     return self._start_test(execution, inputs, tool_id)
@@ -294,6 +496,8 @@ class ToolLibrary:
     self, payload: dict, previous: AnyToolDefinition | None
   ) -> None:
     """普通保存和草稿测试的编辑限制；发现更新使用自己的来源核对。"""
+    if previous is None and payload.get("kind") == "mcp":
+      raise ToolLibraryError("read_only", "MCP tools must be selected from discovery")
     if {"id", "created_at", "updated_at"} & payload.keys():
       raise ToolLibraryError(
         "read_only", "ID and timestamps are maintained by the system"
@@ -301,7 +505,7 @@ class ToolLibrary:
     if previous and payload.get("kind", previous.kind) != previous.kind:
       raise ToolLibraryError("read_only", "Tool type cannot be changed")
     if previous and previous.kind == "mcp":
-      for field in ("server_id", "remote_name", "input_schema", "output_schema"):
+      for field in MCP_SOURCE_FIELDS:
         if payload.get(field, getattr(previous, field)) != getattr(previous, field):
           raise ToolLibraryError(
             "read_only", "MCP source fields require discovery updates"
@@ -335,7 +539,7 @@ class ToolLibrary:
       if previous.kind != "python":
         definition.setdefault("kind", previous.kind)
       if previous.kind == "mcp":
-        for field in ("server_id", "remote_name", "input_schema", "output_schema"):
+        for field in MCP_SOURCE_FIELDS:
           definition.setdefault(field, getattr(previous, field))
     try:
       if previous and previous.kind == "http":

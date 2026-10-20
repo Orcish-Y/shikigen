@@ -3,6 +3,7 @@ import { RunProtocolError, validStatus, validateEvent, validateFrame, validateMe
 import type { ApprovalResponses } from './approval-decisions.ts';
 import type { AnyToolDefinition, ToolDraft, ToolLibraryRead, ToolNameValidation, ToolRead, ToolTest } from './tool-library';
 import type { RJSFSchema } from '@rjsf/utils';
+import type { McpStdioDraft, McpStdioConnection, McpObservation, McpDiscovery, McpSelection, McpImportedTool } from './mcp-connections';
 
 export interface Thread {
   id: string;
@@ -168,6 +169,40 @@ export class BackendSession {
   }
   getPythonToolManagementSchema(signal?: AbortSignal) {
     return this.json<{data:RJSFSchema}>('/api/tools/schema/python', {cache:'no-store'}, signal);
+  }
+  getMcpToolManagementSchema(signal?:AbortSignal) {
+    return this.json<{data:RJSFSchema}>('/api/tools/schema/mcp',{cache:'no-store'},signal);
+  }
+  getMcpConnectionSchema(signal?:AbortSignal) {
+    return this.json<{data:RJSFSchema}>('/api/mcp/schema/stdio',{cache:'no-store'},signal);
+  }
+  listMcpConnections(signal?:AbortSignal) {
+    return this.json<ToolRead<McpStdioConnection[]>>('/api/mcp/connections',{cache:'no-store'},signal);
+  }
+  getMcpConnection(id:string,signal?:AbortSignal) {
+    return this.json<ToolRead<McpStdioConnection>>(`/api/mcp/connections/${encodeURIComponent(id)}`,{cache:'no-store'},signal);
+  }
+  async saveMcpConnection(definition:McpStdioDraft,saved?:{id:string;version:string}):Promise<string> {
+    const init={method:saved ? 'PUT' : 'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(saved ? {definition,version:saved.version} : definition)};
+    if (saved) {
+      await this.request(`/api/mcp/connections/${encodeURIComponent(saved.id)}`,init);
+      return saved.id;
+    }
+    const {data}=await this.json<{data:{id:string}}>('/api/mcp/connections',init);
+    if (!data?.id || typeof data.id !== 'string') throw new Error('创建响应缺少连接 ID');
+    return data.id;
+  }
+  testMcpConnection(id:string) {
+    return this.json<{data:McpObservation}>(`/api/mcp/connections/${encodeURIComponent(id)}/test`,{method:'POST'});
+  }
+  discoverMcpTools(id:string) {
+    return this.json<{data:McpDiscovery}>(`/api/mcp/connections/${encodeURIComponent(id)}/discover`,{method:'POST'});
+  }
+  importMcpTools(id:string,discoveryId:string,tools:McpSelection[]) {
+    return this.json<{data:McpImportedTool[]}>(`/api/mcp/connections/${encodeURIComponent(id)}/imports`,{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({discovery_id:discoveryId,tools}),
+    });
   }
   listTools(signal?: AbortSignal) {
     return this.json<ToolLibraryRead>('/api/tools', {cache:'no-store'}, signal);

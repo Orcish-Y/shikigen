@@ -13,6 +13,8 @@ from pydantic import (
   model_validator,
 )
 
+from shikigen.contracts.mcp_connections import McpStdioConnection
+
 ToolName = Annotated[
   str, Field(min_length=1, max_length=64, pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
 ]
@@ -22,11 +24,11 @@ def empty_input_schema() -> dict[str, JsonValue]:
   return {"type": "object", "properties": {}, "additionalProperties": False}
 
 
-class ToolDefinition(BaseModel):
+class ToolDefinition[ToolKindT: str](BaseModel):
   model_config = ConfigDict(extra="forbid", strict=True, allow_inf_nan=False)
 
   id: str
-  kind: str
+  kind: ToolKindT
   display_name: str = Field(min_length=1)
   name: ToolName
   description: str = ""
@@ -68,7 +70,7 @@ class HttpAuthBinding(BaseModel):
   value: str = Field(default="", repr=False)
 
 
-class HttpToolDefinition(ToolDefinition):
+class HttpToolDefinition(ToolDefinition[Literal["http"]]):
   kind: Literal["http"] = "http"
   method: Literal["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"] = "GET"
   url: str
@@ -104,15 +106,16 @@ class HttpToolDefinition(ToolDefinition):
     return self
 
 
-class PythonToolDefinition(ToolDefinition):
+class PythonToolDefinition(ToolDefinition[Literal["python"]]):
   kind: Literal["python"] = "python"
   code_path: str = Field(min_length=1)
 
 
-class McpToolDefinition(ToolDefinition):
+class McpToolDefinition(ToolDefinition[Literal["mcp"]]):
   kind: Literal["mcp"] = "mcp"
-  server_id: str = Field(min_length=1)
+  connection_id: str = Field(min_length=1)
   remote_name: str = Field(min_length=1)
+  source_tool: dict[str, JsonValue] = Field(default_factory=dict)
 
 
 AnyToolDefinition = Annotated[
@@ -125,4 +128,17 @@ class ToolLibraryConfig(BaseModel):
   model_config = ConfigDict(extra="forbid")
 
   tools: list[AnyToolDefinition] = Field(default_factory=list)
-  mcp_connections: dict[str, JsonValue] = Field(default_factory=dict)
+  mcp_connections: dict[str, McpStdioConnection] = Field(default_factory=dict)
+
+  @model_validator(mode="after")
+  def validate_mcp_identities(self):
+    if any(key != connection.id for key, connection in self.mcp_connections.items()):
+      raise ValueError("MCP connection key must match its stable ID")
+    sources = [
+      (tool.connection_id, tool.remote_name)
+      for tool in self.tools
+      if tool.kind == "mcp"
+    ]
+    if len(set(sources)) != len(sources):
+      raise ValueError("Duplicate MCP source identity")
+    return self

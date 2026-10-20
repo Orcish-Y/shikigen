@@ -1,7 +1,7 @@
 import { Globe } from '@phosphor-icons/react';
-import type { HttpToolDefinition, PythonToolDefinition, ToolDraft } from '../../tool-library';
+import type { AnyToolDefinition, ToolDraft } from '../../tool-library';
 
-export function ToolSummaryCard({tool, initial, dirty, version}: {tool:HttpToolDefinition | PythonToolDefinition | null; initial:ToolDraft; dirty:boolean; version:string}) {
+export function ToolSummaryCard({tool, initial, dirty, version}: {tool:AnyToolDefinition | null; initial:ToolDraft; dirty:boolean; version:string}) {
   return <section className="tool-summary-card" aria-label="工具概览">
     <div className="tool-summary-icon"><Globe size={25}/></div>
     <div className="tool-summary-information">
@@ -10,8 +10,8 @@ export function ToolSummaryCard({tool, initial, dirty, version}: {tool:HttpToolD
         <span className={`tool-meta-tag ${initial.enabled ? 'enabled' : ''}`}>{initial.enabled ? '已启用' : '已禁用'}{dirty && '（草稿）'}</span>
         {dirty && <span className="tool-meta-tag unsaved">未保存修改</span>}
       </div>
-      <p>{initial.description || (initial.kind === 'python' ? '编辑 main 源码，预览参数并在本机子进程测试。' : '配置 HTTP 请求，测试当前草稿并查看真实响应。')}</p>
-      <div className="tool-summary-tags"><span className="tool-meta-tag">{initial.kind === 'python' ? 'Python · main' : 'HTTP 请求'}</span>{initial.kind === 'http' && <span className="tool-meta-tag">{initial.method}</span>}
+      <p>{initial.description || (initial.kind === 'python' ? '编辑 main 源码，预览参数并在本机子进程测试。' : initial.kind === 'mcp' ? '调用所选 MCP 服务的远端工具，并查看完整返回。' : '配置 HTTP 请求，测试当前草稿并查看真实响应。')}</p>
+      <div className="tool-summary-tags"><span className="tool-meta-tag">{initial.kind === 'python' ? 'Python · main' : initial.kind === 'mcp' ? `MCP · ${initial.remote_name}` : 'HTTP 请求'}</span>{initial.kind === 'http' && <span className="tool-meta-tag">{initial.method}</span>}
         {initial.kind === 'http' && initial.input_schema?.properties?.body && <span className="tool-meta-tag">JSON 请求体</span>}<span className="tool-meta-tag">超时 {initial.timeout_seconds} 秒</span></div>
       {tool && <div className="tool-summary-id"><span>ID</span><code>{tool.id}</code></div>}
     </div>

@@ -72,6 +72,132 @@ class ToolLibraryAcceptance(WindowAcceptance):
       self.evaluate(f"document.getElementById({json.dumps(field)}).select()")
     self.fill(field, value)
 
+  def test_mcp_stdio_discover_select_call_and_source_navigation(self):
+    host = self.launch()
+    self.connect()
+    base = self.state("ready")["base_url"]
+    wait_until(lambda: "新建会话开始对话" in self.body())
+    self.evaluate("document.querySelector('[aria-label=工具]').click()")
+    wait_until(lambda: "工具库为空" in self.body())
+    self.evaluate("document.querySelector('[aria-label=选择接入类型]').click()")
+    self.click("接入 MCP 服务")
+    wait_until(lambda: "暂无 MCP 连接" in self.body())
+    self.evaluate("document.querySelector('[aria-label=\"新建 stdio 连接\"]').click()")
+    wait_until(
+      lambda: self.evaluate("Boolean(document.getElementById('mcp-config_command'))")
+    )
+    self.fill("mcp-config_display_name", "本地 MCP 验收")
+    self.fill("mcp-config_command", sys.executable)
+    self.replace(
+      "mcp-config_args", json.dumps([str(REPO / "tests/fixtures/mcp_stdio_server.py")])
+    )
+    self.click("保存连接")
+    wait_until(lambda: "连接已保存" in self.body())
+    wait_until(
+      lambda: self.evaluate(
+        "[...document.querySelectorAll('[aria-label=\"MCP 服务操作\"] button')]"
+        ".some(button => button.textContent === '测试连接' && !button.disabled)"
+      )
+    )
+    self.click("测试连接")
+    wait_until(lambda: "连接测试成功" in self.body())
+    self.assertEqual(self.client.get(base + "/api/tools").json()["data"], [])
+    self.click("发现工具")
+    wait_until(lambda: "发现工具预览" in self.body())
+    for name in ("search", "blocks"):
+      self.evaluate(f"document.querySelector('[aria-label=\"选择 {name}\"]').click()")
+    self.click("导入所选工具")
+    wait_until(lambda: "所选工具已入库" in self.body())
+    tools = self.client.get(base + "/api/tools").json()["data"]
+    self.assertEqual({tool["remote_name"] for tool in tools}, {"search", "blocks"})
+    selected = next(tool for tool in tools if tool["remote_name"] == "search")
+    wait_until(
+      lambda: self.evaluate(
+        "Boolean(document.querySelector("
+        "'[aria-label=\"打开工具 search\"]:not([disabled])'))"
+      )
+    )
+    for width, height in ((1440, 900), (390, 844)):
+      self.call(
+        "Emulation.setDeviceMetricsOverride",
+        width=width,
+        height=height,
+        deviceScaleFactor=1,
+        mobile=False,
+      )
+      wait_until(lambda width=width: self.evaluate("window.innerWidth") == width)
+      self.assertFalse(
+        self.evaluate("document.documentElement.scrollWidth > window.innerWidth")
+      )
+      for text in ("测试连接", "发现工具", "保存连接"):
+        self.assertTrue(
+          self.evaluate(
+            "[...document.querySelectorAll('button')].some(button => "
+            f"button.textContent === {json.dumps(text)} && "
+            "button.getBoundingClientRect().width > 0)"
+          )
+        )
+      data = self.call("Page.captureScreenshot", format="png")["data"]
+      (self.artifacts / f"mcp-services-{width}.png").write_bytes(base64.b64decode(data))
+    self.call(
+      "Emulation.setDeviceMetricsOverride",
+      width=1440,
+      height=900,
+      deviceScaleFactor=1,
+      mobile=False,
+    )
+    self.evaluate("document.querySelector('[aria-label=\"打开工具 search\"]').click()")
+    wait_until(
+      lambda: self.evaluate("Boolean(document.getElementById('tool-input_query'))")
+    )
+    self.assertTrue(
+      self.evaluate("document.getElementById('tool-config_connection_id').readOnly")
+    )
+    self.assertTrue(
+      self.evaluate("document.getElementById('tool-config_input_schema').disabled")
+    )
+    self.fill("tool-input_query", "native MCP")
+    self.click("执行测试")
+    wait_until(lambda: "测试成功" in self.body())
+    self.assertIn('"query": "native MCP"', self.body())
+    self.evaluate(
+      "[...document.querySelectorAll('summary')].find(item => "
+      "item.textContent === 'MCP 原始返回与来源').click()"
+    )
+    self.assertIn('"vendor"', self.body())
+    self.assertIn('"complete": true', self.body())
+    self.assertEqual(len(self.client.get(base + "/api/tools").json()["data"]), 2)
+    for width, height in ((1440, 900), (390, 844)):
+      self.call(
+        "Emulation.setDeviceMetricsOverride",
+        width=width,
+        height=height,
+        deviceScaleFactor=1,
+        mobile=False,
+      )
+      wait_until(lambda width=width: self.evaluate("window.innerWidth") == width)
+      self.assertFalse(
+        self.evaluate("document.documentElement.scrollWidth > window.innerWidth")
+      )
+      data = self.call("Page.captureScreenshot", format="png")["data"]
+      (self.artifacts / f"mcp-tool-{width}.png").write_bytes(base64.b64decode(data))
+    self.evaluate(
+      "document.querySelector('[aria-label=\"打开所属 MCP 服务\"]').click()"
+    )
+    wait_until(
+      lambda: self.evaluate("Boolean(document.getElementById('mcp-config_command'))")
+    )
+    self.assertEqual(
+      self.evaluate("document.getElementById('mcp-config_command').value"),
+      sys.executable,
+    )
+    self.assertEqual(
+      self.client.get(base + f"/api/tools/{selected['id']}").json()["data"]["id"],
+      selected["id"],
+    )
+    self.quit(host)
+    self.assertEqual(host.wait(timeout=10), 0)
+
   def test_python_source_preview_named_inputs_and_separate_debug_output(self):
     host = self.launch()
     self.connect()
@@ -501,7 +627,7 @@ class ToolLibraryAcceptance(WindowAcceptance):
         name="repository_search",
         display_name="仓库搜索",
         description="检索代码仓库中的内容",
-        server_id="repository",
+        connection_id="repository",
         remote_name="search",
       ),
       dict(
@@ -509,7 +635,7 @@ class ToolLibraryAcceptance(WindowAcceptance):
         name="database_query",
         display_name="数据库查询",
         description="连接恢复后可重新启用",
-        server_id="database",
+        connection_id="database",
         remote_name="query",
         enabled=False,
       ),

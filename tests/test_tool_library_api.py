@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import sys
 import tempfile
 import time
 import unittest
@@ -24,6 +25,43 @@ from app.server import create_app
 
 
 class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
+  async def discovered_mcp_tool(self, payload):
+    source = {
+      "name": payload["remote_name"],
+      "title": payload["display_name"],
+      "inputSchema": payload.get(
+        "input_schema",
+        {"type": "object", "properties": {}, "additionalProperties": False},
+      ),
+    }
+    if payload.get("output_schema") is not None:
+      source["outputSchema"] = payload["output_schema"]
+    connection = await self.client.post(
+      "/api/mcp/connections",
+      json={
+        "display_name": "fixture",
+        "command": sys.executable,
+        "args": [str(Path(__file__).parent / "fixtures/mcp_stdio_server.py")],
+        "env": {"MCP_FIXTURE_TOOLS": json.dumps([source])},
+      },
+    )
+    self.assertEqual(connection.status_code, 201, connection.text)
+    connection_id = connection.json()["data"]["id"]
+    preview = (
+      await self.client.post(f"/api/mcp/connections/{connection_id}/discover")
+    ).json()["data"]
+    response = await self.client.post(
+      f"/api/mcp/connections/{connection_id}/imports",
+      json={
+        "discovery_id": preview["discovery_id"],
+        "tools": [{"remote_name": payload["remote_name"], "name": payload["name"]}],
+      },
+    )
+    self.assertEqual(response.status_code, 200, response.text)
+    return (
+      await self.client.get("/api/tools/" + response.json()["data"][0]["id"])
+    ).json()
+
   async def asyncSetUp(self):
     self.directory = tempfile.TemporaryDirectory()
     self.addCleanup(self.directory.cleanup)
@@ -369,17 +407,19 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
       (PythonToolDefinition, {"kind": "python", "source": "def main(): return 1\n"}),
       (
         McpToolDefinition,
-        {"kind": "mcp", "server_id": "local", "remote_name": "search"},
+        {"kind": "mcp", "connection_id": "local", "remote_name": "search"},
       ),
     )
     for _, fields in variants:
       with self.subTest(kind=fields["kind"]):
-        created = await self.client.post(
-          "/api/tools",
-          json={"display_name": "工具", "name": f"tool_{fields['kind']}", **fields},
-        )
-        self.assertEqual(created.status_code, 201, created.text)
-        tool = (await self.read_created_tool(created))["data"]
+        payload = {"display_name": "工具", "name": f"tool_{fields['kind']}", **fields}
+        if fields["kind"] == "mcp":
+          tool = (await self.discovered_mcp_tool(payload))["data"]
+          fields = {**fields, "connection_id": tool["connection_id"]}
+        else:
+          created = await self.client.post("/api/tools", json=payload)
+          self.assertEqual(created.status_code, 201, created.text)
+          tool = (await self.read_created_tool(created))["data"]
         saved.append({key: value for key, value in tool.items() if key != "source"})
         for field, value in fields.items():
           self.assertEqual(tool[field], value)
@@ -443,8 +483,8 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
       {"kind": "python", "code_path": ""},
       {"kind": "python", "code_path": "tools/example.py", "url": "http://localhost/"},
       {"kind": "mcp", "url": "http://localhost/"},
-      {"kind": "mcp", "server_id": "local", "remote_name": ""},
-      {"kind": "mcp", "server_id": "local", "remote_name": 1},
+      {"kind": "mcp", "connection_id": "local", "remote_name": ""},
+      {"kind": "mcp", "connection_id": "local", "remote_name": 1},
     ):
       with self.subTest(fields=fields):
         response = await self.client.post(
@@ -478,7 +518,7 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
           "kind": "mcp",
           "display_name": tool["display_name"],
           "name": tool["name"],
-          "server_id": "local",
+          "connection_id": "local",
           "remote_name": "search",
         },
         "version": created_snapshot["version"],
@@ -488,8 +528,8 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(response.json()["detail"]["code"], "read_only")
     self.assertEqual(self.path.read_bytes(), before)
 
-  async def test_unregistered_tool_adapters_fail_explicitly_after_successful_save(self):
-    for fields in ({"kind": "mcp", "server_id": "local", "remote_name": "search"},):
+  async def test_mcp_manual_creation_requires_discovery(self):
+    for fields in ({"kind": "mcp", "connection_id": "local", "remote_name": "search"},):
       with self.subTest(kind=fields["kind"]):
         created = await self.client.post(
           "/api/tools",
@@ -499,14 +539,8 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
             **fields,
           },
         )
-        self.assertEqual(created.status_code, 201, created.text)
-        response = await self.client.post(
-          f"/api/tools/{created.json()['data']['id']}/execute", json={"inputs": {}}
-        )
-        result = response.json()["data"]
-        self.assertEqual(result["status"], "error")
-        self.assertEqual(result["error"]["code"], "unsupported_kind")
-        self.assertIsNone(result["data"])
+        self.assertEqual(created.status_code, 422, created.text)
+        self.assertEqual(created.json()["detail"]["code"], "read_only")
 
   async def test_saved_tool_test_observes_real_http_json_without_agent(self):
     class Handler(BaseHTTPRequestHandler):
@@ -882,18 +916,17 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
       "kind": "mcp",
       "display_name": "MCP 搜索",
       "name": "mcp_search",
-      "server_id": "local",
+      "connection_id": "local",
       "remote_name": "search",
       "input_schema": {"type": "object", "properties": {"query": {"type": "string"}}},
       "output_schema": {"type": "object", "properties": {"count": {"type": "integer"}}},
     }
-    created = await self.client.post("/api/tools", json=payload)
-    self.assertEqual(created.status_code, 201, created.text)
-    saved = await self.read_created_tool(created)
+    saved = await self.discovered_mcp_tool(payload)
+    payload["connection_id"] = saved["data"]["connection_id"]
     tool_id = saved["data"]["id"]
     changed_schema = {"type": "object", "properties": {"limit": {"type": "integer"}}}
     for change in (
-      {"server_id": "another_server"},
+      {"connection_id": "another_server"},
       {"remote_name": "another_tool"},
       {"input_schema": changed_schema},
       {"output_schema": {"type": "string"}},
@@ -931,7 +964,7 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(updated.status_code, 204, updated.text)
     updated_saved = (await self.client.get(f"/api/tools/{tool_id}")).json()
     for field in (
-      "server_id",
+      "connection_id",
       "remote_name",
       "input_schema",
       "output_schema",
@@ -1498,9 +1531,17 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(requests, [])
 
   async def test_failed_replace_preserves_original_and_literal_library(self):
+    connection = {
+      "id": "reserved",
+      "display_name": "保留",
+      "command": "missing",
+      "env": {"MODE": "$LITERAL"},
+      "created_at": "2026-10-18T00:00:00Z",
+      "updated_at": "2026-10-18T00:00:00Z",
+    }
     original = {
       **self.original,
-      "tool_library": {"tools": [], "mcp_connections": {"reserved": "$LITERAL"}},
+      "tool_library": {"tools": [], "mcp_connections": {"reserved": connection}},
     }
     self.path.write_text(json.dumps(original), encoding="utf-8")
     before = self.path.read_bytes()
@@ -1517,8 +1558,10 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
     )
     self.assertEqual(saved.status_code, 201)
     self.assertEqual(
-      json.loads(self.path.read_text())["tool_library"]["mcp_connections"],
-      {"reserved": "$LITERAL"},
+      json.loads(self.path.read_text())["tool_library"]["mcp_connections"]["reserved"][
+        "env"
+      ],
+      {"MODE": "$LITERAL"},
     )
 
   async def test_commit_is_reported_even_if_external_change_prevents_reread(self):

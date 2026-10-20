@@ -31,6 +31,46 @@ const {forEachDiagnostic} = await import('@codemirror/lint');
 const {undo,redo,indentMore} = await import('@codemirror/commands');
 const {PythonSourceEditor} = await import('../src/components/tools/PythonSourceEditor.tsx');
 
+test('MCP 工具页面来源只读，动态输入直接发送并呈现完整原始结果',async () => {
+  const sourceSchema={type:'object',properties:{query:{type:'string'}},required:['query']};
+  const tool={id:'mcp-1',kind:'mcp',display_name:'MCP 查找',name:'remote_search',description:'查找',enabled:true,
+    timeout_seconds:30,input_schema:sourceSchema,output_schema:null,connection_id:'connection-1',remote_name:'search',source_tool:{name:'search',inputSchema:sourceSchema},
+    created_at:'2026-10-18T00:00:00Z',updated_at:'2026-10-18T00:00:00Z'};
+  const management={type:'object',required:['display_name','name'],properties:{
+    display_name:{type:'string',title:'页面名称'},name:{type:'string',title:'调用名称'},description:{type:'string',title:'说明'},
+    kind:{type:'string'},enabled:{type:'boolean'},timeout_seconds:{type:'number'},
+    connection_id:{type:'string',readOnly:true,title:'所属连接'},remote_name:{type:'string',readOnly:true,title:'远端工具名'},
+    source_tool:{type:'object',readOnly:true,title:'完整来源'},input_schema:{type:'object',readOnly:true,title:'输入结构'},output_schema:{type:['object','null'],readOnly:true,title:'输出结构'},
+  }};
+  const requests=[],opened=[];
+  const result={status:'success',data:{count:2},duration_ms:12,error:null,details:{raw_result:{content:[{type:'text',text:'one'},{type:'text',text:'two'}],structuredContent:{count:2},vendor:{keep:true}}}};
+  const session=toolSession(async (url,init) => {
+    requests.push({url,...init});
+    if (url.endsWith('/schema/http')) return response({data:schema});
+    if (url.endsWith('/schema/mcp')) return response({data:management});
+    if (url.includes('/validate-name?')) return response({data:{valid:true,code:null,message:null}});
+    if (url.endsWith('/api/tools')) return response({data:[tool],version:'v1',reserved_names:[]});
+    if (url.endsWith('/api/tools/tests')) return response({data:{test_id:'t1',tool_id:'mcp-1',status:'success',created_at:'2026-10-18T00:00:00Z',result}});
+    return response({data:tool,version:'v1'});
+  });
+  const user=userEvent.setup({document:browser.window.document,delay:null});
+  render(React.createElement(ToolsWorkspace,{session,onView:() => {},onOpenMcp:id => opened.push(id)}));
+  await user.click(await screen.findByRole('button',{name:/MCP 查找/}));
+  await screen.findByLabelText('所属连接');
+  assert.equal(screen.getByLabelText('所属连接').readOnly,true);
+  assert.equal(screen.getByLabelText('远端工具名').readOnly,true);
+  assert.equal(screen.getByLabelText('输入结构').disabled,true);
+  await user.click(screen.getByRole('button',{name:'打开所属 MCP 服务'}));
+  assert.deepEqual(opened,['connection-1']);
+  fireEvent.change(screen.getByLabelText(/^query/),{target:{value:'hello'}});
+  await user.click(screen.getByRole('button',{name:'测试当前草稿'}));
+  await waitFor(() => assert.match(document.body.textContent,/测试成功/));
+  const payload=JSON.parse(requests.find(request => request.url.endsWith('/api/tools/tests')).body);
+  assert.deepEqual(payload.inputs,{query:'hello'});
+  assert.equal(payload.definition.remote_name,'search');
+  assert.match(document.body.textContent,/vendor/);
+});
+
 function replacePythonSource(source) {
   const view=EditorView.findFromDOM(screen.getByRole('textbox',{name:'Python 源码'}));
   assert.ok(view);
@@ -955,7 +995,7 @@ test('工具类型 tab 支持数量、键盘切换，并与搜索和隐藏禁用
   const user=userEvent.setup({document:browser.window.document,delay:null});
   const http={...initial,kind:'http',method:'GET',description:'读取天气',id:'http',display_name:'HTTP 查询',name:'http_query',url:'http://localhost/weather',created_at:'2026-10-14T00:00:00Z',updated_at:'2026-10-14T00:00:00Z'};
   const python={...http,id:'python',kind:'python',display_name:'Python 计算',name:'python_calc',code_path:'tools/calc.py',enabled:false};
-  const mcp={...http,id:'mcp',kind:'mcp',display_name:'MCP 搜索',name:'mcp_search',server_id:'local-server',remote_name:'search'};
+  const mcp={...http,id:'mcp',kind:'mcp',display_name:'MCP 搜索',name:'mcp_search',connection_id:'local-server',remote_name:'search'};
   const session=toolSession(async url => response(url.endsWith('/schema/http') ? {data:schema} : {data:[http,python,mcp],version:'version'}));
   render(React.createElement(ToolsWorkspace,{session,onView:() => {}}));
   const sidebar=await screen.findByRole('complementary',{name:'工具库'});

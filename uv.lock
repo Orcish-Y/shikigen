@@ -1475,10 +1475,12 @@ dependencies = [
     { name = "langgraph" },
     { name = "langgraph-checkpoint-sqlite" },
     { name = "markdownify" },
+    { name = "mcp" },
     { name = "portalocker" },
     { name = "pydantic" },
     { name = "pywin32", marker = "sys_platform == 'win32'" },
     { name = "readabilipy" },
+    { name = "referencing" },
     { name = "tzdata" },
 ]
 
@@ -1494,10 +1496,12 @@ requires-dist = [
     { name = "langgraph", specifier = ">=1.2.9" },
     { name = "langgraph-checkpoint-sqlite", specifier = ">=3.0.0" },
     { name = "markdownify", specifier = ">=1.2.0" },
+    { name = "mcp", specifier = ">=1.29.0,<2" },
     { name = "portalocker", specifier = "==3.2.0" },
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "pywin32", marker = "sys_platform == 'win32'", specifier = ">=306" },
     { name = "readabilipy", specifier = ">=0.3.0" },
+    { name = "referencing", specifier = ">=0.37.0" },
     { name = "tzdata", specifier = ">=2025.2" },
 ]
 

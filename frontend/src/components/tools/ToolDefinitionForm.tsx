@@ -16,7 +16,7 @@ import type { ToolNameValidation } from '../../tool-library';
 function DefinitionSections({properties, registry}: ObjectFieldTemplateProps) {
   const structureFields = new Set(['input_schema','output_schema']);
   return <div className="tool-definition-sections">
-    <section className="tool-panel" aria-label="工具配置"><header className="tool-panel-heading"><GearSix size={16}/><h2>工具配置</h2><span>{registry.formContext?.python ? 'Python' : 'HTTP'}</span></header>
+    <section className="tool-panel" aria-label="工具配置"><header className="tool-panel-heading"><GearSix size={16}/><h2>工具配置</h2><span>{registry.formContext?.python ? 'Python' : registry.formContext?.mcp ? 'MCP' : 'HTTP'}</span></header>
       <div className="tool-config-fields">{properties.filter(property => !structureFields.has(property.name)).map(property =>
         <div key={property.name} className={`tool-config-field tool-field-${property.name}`}>{property.content}</div>)}</div>
     </section>
@@ -37,6 +37,7 @@ export function ToolDefinitionForm({schema, initial, enabled, disabled = false, 
   onSourceAnalysis?:(analysis:PythonSourceAnalysis) => void;
 }) {
   const python=initial.kind === 'python';
+  const mcp=initial.kind === 'mcp';
   const [value, setValue] = useState(() => python && initial.input_schema === undefined
     ? {...initial,input_schema:analyzePythonSource(typeof initial.source === 'string' ? initial.source : '').input_schema ?? {}} : initial);
   const [changes,setChanges]=useState<PythonSchemaChange[]>([]);
@@ -79,13 +80,14 @@ export function ToolDefinitionForm({schema, initial, enabled, disabled = false, 
   return <SchemaForm className="tool-definition-form" id={formId} idPrefix="tool-config" schema={schema}
     fields={{InputSchema:InputSchemaEditor,HttpAuth:HttpAuthEditor,PythonParameters}}
     widgets={{PythonSource:PythonSourceEditor}}
-    formContext={{python,pythonAnalysis:analysis,localPythonAnalysis:localAnalysis,backendOnly,onBackendValidation:() => setBackendSource(source),
+    formContext={{python,mcp,pythonAnalysis:analysis,localPythonAnalysis:localAnalysis,backendOnly,onBackendValidation:() => setBackendSource(source),
       pythonChanges:changes,onConfirmPythonChanges:() => setChanges(current => current.map(change => ({...change,review:false})))}}
     templates={{ObjectFieldTemplate:DefinitionSections}}
     extraErrors={nameError ? {name:{__errors:[nameError]}} : undefined} extraErrorsBlockSubmit
     formData={enabled === undefined ? value : {...value,enabled}} disabled={disabled} uiSchema={{
       'ui:submitButtonOptions':{norender:externalSubmit},
       'ui:order':(python ? ['display_name','name','description','kind','source','timeout_seconds','enabled','input_schema','output_schema']
+        : mcp ? ['display_name','name','description','kind','connection_id','remote_name','timeout_seconds','enabled','input_schema','output_schema','source_tool']
         : ['display_name','name','description','kind','method','url','headers','parameters','auth','timeout_seconds','enabled','input_schema','output_schema']).filter(field => schema.properties?.[field]),
       kind:{'ui:widget':'hidden'}, description:{'ui:widget':'textarea'},
       source:{'ui:widget':'PythonSource','ui:help':'顶层同步 main，支持普通具名、仅关键字和 **kwargs；未知类型请在参数区补齐。Tab 缩进，Esc 后按 Tab 离开编辑器。仅测试或执行时以本机权限运行。'},
@@ -94,7 +96,8 @@ export function ToolDefinitionForm({schema, initial, enabled, disabled = false, 
       auth:{'ui:field':'HttpAuth'},
       name:{'ui:help':nameCheck?.name === name && nameCheck.error ? nameCheck.error
         : '1–64 个英文字母、数字或下划线，以字母或下划线开头；手动修改后保留。'},
-      input_schema:{'ui:field':python ? 'PythonParameters' : 'InputSchema'}, output_schema:{'ui:field':'JsonSchema'},
+      connection_id:{'ui:readonly':true},remote_name:{'ui:readonly':true},source_tool:{'ui:field':'JsonSchema','ui:readonly':true},
+      input_schema:{'ui:field':python ? 'PythonParameters' : mcp ? 'JsonSchema' : 'InputSchema','ui:readonly':mcp}, output_schema:{'ui:field':'JsonSchema','ui:readonly':mcp},
     }} onChange={event => {
       const next = {...event.formData};
       if (python && next.source !== value.source) {

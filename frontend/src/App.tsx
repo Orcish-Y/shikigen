@@ -11,6 +11,7 @@ import {
 } from "@phosphor-icons/react";
 import { Navigation, History, type WorkspacePage } from "./components/Sidebar";
 import { ToolsWorkspace, type ToolsWorkspaceHandle } from './components/tools/ToolsWorkspace';
+import { McpWorkspace } from './components/tools/McpWorkspace';
 import { Conversation, Composer, type ConversationActions } from "./components/Conversation";
 import { Overlay } from "./components/Overlay";
 import { ContentViewer } from './components/ContentViewer';
@@ -98,6 +99,9 @@ function Workspace({ session, conversations }: {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState<WorkspacePage>('chat');
   const toolsWorkspace = useRef<ToolsWorkspaceHandle>(null);
+  const mcpWorkspace=useRef<ToolsWorkspaceHandle>(null);
+  const [requestedTool,setRequestedTool]=useState<string | undefined>(undefined);
+  const [requestedMcp,setRequestedMcp]=useState<string | undefined>(undefined);
   const [mobilePanel, setMobilePanel] = useState<SidebarView | null>(null);
   const layout = useNavigationLayout(() => setMobilePanel(null));
   const historyReadingPosition = useRef(0);
@@ -182,12 +186,14 @@ function Workspace({ session, conversations }: {
   function leaveTools(action:() => void) {
     if (page === 'tools' && toolsWorkspace.current) {
       setMobilePanel(null);setOverlay(null);toolsWorkspace.current.requestLeave(action);
+    } else if (page === 'mcp' && mcpWorkspace.current) {
+      setMobilePanel(null);setOverlay(null);mcpWorkspace.current.requestLeave(action);
     } else action();
   }
 
   function toggleNavigation() {
     setOverlay(null); setCancelTarget(null); closeFileOpen();
-    if (page === 'tools') {setMobilePanel(current => current === 'navigation' ? null : 'navigation');return;}
+    if (page !== 'chat') {setMobilePanel(current => current === 'navigation' ? null : 'navigation');return;}
     if (layout.isDesktop) layout.toggleDesktopNavigation();
     else setMobilePanel('navigation');
   }
@@ -246,7 +252,7 @@ function Workspace({ session, conversations }: {
   }
   useWorkspaceShortcuts(fileOpening.view.phase !== 'idle' || cancelTarget ? 'other'
     : overlay === 'commands' ? 'commands' : overlay ? 'other'
-    : (!layout.isDesktop || page === 'tools') && mobilePanel ? mobilePanel === 'navigation' ? 'navigation' : 'other' : 'none', action => {
+    : (!layout.isDesktop || page !== 'chat') && mobilePanel ? mobilePanel === 'navigation' ? 'navigation' : 'other' : 'none', action => {
     switch (action) {
       case 'open-commands': openCommands(); break;
       case 'create-conversation': createSession(); break;
@@ -259,7 +265,7 @@ function Workspace({ session, conversations }: {
   const navigation = <Navigation backendReady={backendReady}
     page={page} onNavigate={navigate}
     observationLabel={conversations.observationLabel}
-    isCollapsed={(layout.isCollapsed || page === 'tools') && mobilePanel !== 'navigation'}
+    isCollapsed={(layout.isCollapsed || page !== 'chat') && mobilePanel !== 'navigation'}
     onToggle={mobilePanel ? () => setMobilePanel(null) : toggleNavigation} onCommands={openCommands}/>;
   const history = <History sessions={sessions} activeId={activeId} query={query} onQuery={setQuery}
     readingPosition={historyReadingPosition} isVisible={layout.isDesktop || mobilePanel === 'history'}
@@ -274,7 +280,7 @@ function Workspace({ session, conversations }: {
     <WorkspaceImageProvider session={session} threadId={activeId} isVisible={conversations.visible}>
     <IconContext.Provider value={{ weight: "regular", size: 18 }}>
       <div
-        className={`app ${layout.isCollapsed || page === 'tools' ? "is-collapsed" : ""} ${page === 'tools' ? 'tools-layout' : ''}`}
+        className={`app ${layout.isCollapsed || page !== 'chat' ? "is-collapsed" : ""} ${page !== 'chat' ? 'tools-layout' : ''}`}
         data-navigation-breakpoint={layout.breakpoint}
       >
         <TitleBar isPreview={!session}
@@ -288,12 +294,10 @@ function Workspace({ session, conversations }: {
             onToggle={() => openSidebar('navigation')} onCommands={openCommands}/>}
           {page === 'chat' && layout.isDesktop && history}
           {page !== 'chat' && <main className="tools-workspace" tabIndex={-1}>
-            {page !== 'tools' && <div className="chat-toolbar">
-              {!layout.isDesktop && <button className="icon-button" aria-label="打开主导航" onClick={() => openSidebar('navigation')}><SidebarSimple/></button>}
-              <h1>MCP 服务</h1>
-            </div>}
-            {page === 'tools' ? <ToolsWorkspace ref={toolsWorkspace} session={session} onView={openContent} onNavigation={() => openSidebar('navigation')}/>
-              : <div className="tools-page"><p>MCP 服务连接管理将在后续开放。</p><p>工具库连接与启动时的 MCP 配置独立保存。</p></div>}
+            {page === 'tools' ? <ToolsWorkspace ref={toolsWorkspace} session={session} onView={openContent} initialToolId={requestedTool}
+              onOpenMcp={id => {setRequestedMcp(id);setPage('mcp');}} onNavigation={() => openSidebar('navigation')}/>
+              : <McpWorkspace ref={mcpWorkspace} session={session} initialConnectionId={requestedMcp}
+                onOpenTool={id => {setRequestedTool(id);setPage('tools');}} onNavigation={() => openSidebar('navigation')}/>}
           </main>}
           <main className="chat-workspace" tabIndex={-1} hidden={page !== 'chat'}>
             <div className="chat-toolbar">
@@ -451,7 +455,7 @@ function Workspace({ session, conversations }: {
             />
           </main>
         </div>
-        {fileOpening.view.phase === 'idle' && !cancelTarget && !overlay && (!layout.isDesktop || page === 'tools') && mobilePanel &&
+        {fileOpening.view.phase === 'idle' && !cancelTarget && !overlay && (!layout.isDesktop || page !== 'chat') && mobilePanel &&
           <SidebarPanel view={mobilePanel} onSwitch={setMobilePanel} onClose={() => setMobilePanel(null)}
             navigation={navigation} history={page === 'chat' ? history : null} chatHistory={page === 'chat'}/>}
         {fileOpening.view.phase !== 'idle' && <Overlay title="打开本地文件？" initialFocus="#cancel-file-open" onClose={closeFileOpen}>
@@ -476,7 +480,7 @@ function Workspace({ session, conversations }: {
         </Overlay>}
         {fileOpening.view.phase === 'idle' && overlay === "commands" && (
           <CommandPanel shortcut={shortcut} onExecute={executeCommand} onClose={() => setOverlay(null)}
-            context={{conversations:sessions, isDesktop:layout.isDesktop, isNavigationCollapsed:layout.isCollapsed || page === 'tools',
+            context={{conversations:sessions, isDesktop:layout.isDesktop, isNavigationCollapsed:layout.isCollapsed || page !== 'chat',
               createUnavailableReason:conversations.canCreate ? null : conversations.createAvailability,
               detailsUnavailableReason:conversations.detailsAvailable ? null : conversations.detailsAvailability}}/>
         )}

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
 import { ArrowLeft, ClockCounterClockwise, Globe, Play, SidebarSimple, FloppyDisk, Trash, ToggleLeft, ToggleRight } from '@phosphor-icons/react';
 import type { RJSFSchema } from '@rjsf/utils';
-import { BackendRequestError, type BackendSession } from '../../backend-client';
+import type { BackendSession } from '../../backend-client';
+import { saveWasRejected } from '../../tool-save-errors';
 import type { ContentView } from '../MessageBody';
 import { Button } from '../ui/button';
 import { Overlay } from '../Overlay';
@@ -12,32 +13,26 @@ import { ToolInputForm } from './ToolInputForm';
 import { ToolTestResult } from './ToolTestResult';
 import { ToolLibrarySidebar } from './ToolLibrarySidebar';
 import { ToolSummaryCard } from './ToolSummaryCard';
-import { editTool, emptyToolDraft, emptyPythonToolDraft, suggestToolName, toolDraftFingerprint, toolTestStatus, type AnyToolDefinition, type HttpToolDefinition, type PythonToolDefinition, type RecentToolTest, type ToolDraft, type ToolTest } from '../../tool-library';
+import { editTool, emptyToolDraft, emptyPythonToolDraft, suggestToolName, toolDraftFingerprint, toolTestStatus, type AnyToolDefinition, type RecentToolTest, type ToolDraft, type ToolTest } from '../../tool-library';
 import type { PythonSourceAnalysis } from '../../python-source';
 
 const message = (error:unknown) => error instanceof Error ? error.message : String(error);
-interface Editor {tool:HttpToolDefinition | PythonToolDefinition | null; initial:ToolDraft; draft:ToolDraft; version:string; revision:number; inputKey:number}
+interface Editor {tool:AnyToolDefinition | null; initial:ToolDraft; draft:ToolDraft; version:string; revision:number; inputKey:number}
 export interface ToolsWorkspaceHandle {requestLeave:(action:() => void) => void}
-function rejectedSave(failure:unknown) {
-  if (!(failure instanceof BackendRequestError)) return false;
-  if (failure.status === 409 || failure.status === 422) return true;
-  try {
-    const code = JSON.parse(failure.detail).detail?.code;
-    return ['config_read','config_write','config_source','python_source_empty','python_source_read','python_source_write','not_found','definition_invalid','read_only'].includes(code);
-  } catch {return false;}
-}
 
-export function ToolsWorkspace({ session, onView, onNavigation, ref }: {
+export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initialToolId, ref }: {
   session: BackendSession | null; onView: (view: ContentView) => void;
   onNavigation?:() => void; ref?:Ref<ToolsWorkspaceHandle>;
+  onOpenMcp?:(serverId?:string) => void; initialToolId?:string;
 }) {
   const [httpSchema, setSchema] = useState<RJSFSchema | null>(null);
   const [pythonSchema, setPythonSchema] = useState<RJSFSchema | null>(null);
+  const [mcpSchema,setMcpSchema]=useState<RJSFSchema | null>(null);
   const [pythonAnalysis, setPythonAnalysis] = useState<PythonSourceAnalysis | null>(null);
   const [tools, setTools] = useState<AnyToolDefinition[] | null>(null);
   const [reservedNames, setReservedNames] = useState<string[]>([]);
   const [editor, setEditor] = useState<Editor | null>(null);
-  const schema=editor?.draft.kind === 'python' ? pythonSchema : httpSchema;
+  const schema=editor?.draft.kind === 'python' ? pythonSchema : editor?.draft.kind === 'mcp' ? mcpSchema : httpSchema;
   const currentPythonSchema=editor?.draft.kind === 'python' && pythonAnalysis?.source === editor.draft.source ? pythonAnalysis.input_schema : null;
   const sourceValid=Boolean(currentPythonSchema);
   const [dirty, setDirty] = useState(false);
@@ -55,7 +50,15 @@ export function ToolsWorkspace({ session, onView, onNavigation, ref }: {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const leaveAfterSave = useRef(false);
   const selection = useRef(0);
+  const openedInitial=useRef<string | undefined>(undefined);
   useEffect(() => {
+    if (tools && initialToolId && openedInitial.current !== initialToolId) {
+      const tool=tools.find(item => item.id === initialToolId);
+      if (tool) {openedInitial.current=initialToolId;void open(tool);}
+    }
+  },[tools,initialToolId]);
+  useEffect(() => {
+    setMcpSchema(null);openedInitial.current=undefined;
     setPythonSchema(null);setPythonAnalysis(null);setSchema(null); setTools(null); setReservedNames([]); setEditor(null); setTest(null); setVerified(false); setSaveOutcomeUnknown(false);
     setSavedToolAwaitingRead(null);
     setDirty(false);setNotice(null);setInputs({});
@@ -135,8 +138,16 @@ export function ToolsWorkspace({ session, onView, onNavigation, ref }: {
     try {
       const saved = await session.getTool(tool.id);
       if (request !== selection.current) return;
-      if (saved.data.kind === 'mcp') {closeEditor();setBusy(null);setVerified(true);setNotice('此类型的专属编辑与测试将在后续 ticket 接入。');return;}
-      if (saved.data.kind === 'python' && !pythonSchema) setPythonSchema((await session.getPythonToolManagementSchema()).data);
+      if (saved.data.kind === 'mcp' && !mcpSchema) {
+        const management=await session.getMcpToolManagementSchema();
+        if (request !== selection.current) return;
+        setMcpSchema(management.data);
+      }
+      if (saved.data.kind === 'python' && !pythonSchema) {
+        const management=await session.getPythonToolManagementSchema();
+        if (request !== selection.current) return;
+        setPythonSchema(management.data);
+      }
       setPythonAnalysis(null);
       const draft=editTool(saved.data);
       setEditor({tool:saved.data, initial:draft, draft, version:saved.version, revision:request, inputKey:request});
@@ -152,7 +163,6 @@ export function ToolsWorkspace({ session, onView, onNavigation, ref }: {
     try {
       const saved=await session.getTool(toolId);
       if (request !== selection.current) return;
-      if (saved.data.kind === 'mcp') throw new Error('保存后的工具类型与编辑页不一致');
       const draft=editTool(saved.data);
       setEditor({tool:saved.data,initial:draft,draft,version:saved.version,revision:request,inputKey:editor?.inputKey ?? request});
       setTools(current => [...(current ?? []).filter(tool => tool.id !== saved.data.id),saved.data]);
@@ -178,7 +188,7 @@ export function ToolsWorkspace({ session, onView, onNavigation, ref }: {
       savedToolId = await session.saveTool(value as ToolDraft, editor.tool ? {id:editor.tool.id,version:editor.version} : undefined);
     } catch (failure) {
       if (request !== selection.current) return;
-      if (rejectedSave(failure)) setError(`保存失败：${message(failure)}`);
+      if (saveWasRejected(failure)) setError(`保存失败：${message(failure)}`);
       else {
         setSaveOutcomeUnknown(true); setVerified(false);
         setError(`保存结果不确定：${message(failure)}。没有收到保存响应，请勿重复提交；可放弃草稿并重读工具库查看已保存配置。`);
@@ -275,13 +285,14 @@ export function ToolsWorkspace({ session, onView, onNavigation, ref }: {
   }
   return <div className="tool-registry">
     <ToolLibrarySidebar tools={tools} recent={recent} selectedId={editor?.tool?.id} busy={Boolean(busy)} verified={verified}
+      onOpenMcp={onOpenMcp ? () => requestLeave(() => onOpenMcp()) : undefined}
       connected={Boolean(session)} canCreate={Boolean(session && schema && verified && !busy && !saveOutcomeUnknown && !savedToolAwaitingRead)}
       onCreate={kind => requestLeave(() => void create(kind))} onOpen={tool => requestLeave(() => void open(tool))} onReload={() => void reload()}/>
     <section className="tool-detail-view" aria-label="工具详情">
       <div className="tool-detail-toolbar" role="toolbar" aria-label="工具操作">
         {onNavigation && <button className="icon-button tool-navigation-toggle" aria-label="打开主导航" onClick={onNavigation}><SidebarSimple/></button>}
         <div className="tool-breadcrumb"><button aria-label="返回工具列表" disabled={Boolean(busy) || saveOutcomeUnknown}
-          onClick={() => requestLeave(closeEditor)}>工具与技能</button>{editor && <><span>/</span><span>{editor.draft.kind === 'python' ? 'Python' : 'HTTP'}</span></>}
+          onClick={() => requestLeave(closeEditor)}>工具与技能</button>{editor && <><span>/</span><span>{editor.draft.kind.toUpperCase()}</span></>}
           {editor && <><span>/</span><strong>{editor.tool?.display_name || '新建工具'}</strong></>}</div>
         {editor && <div className="tool-toolbar-actions"><Button size="sm" variant="outline" disabled={!canTest}
           onClick={() => document.getElementById('tool-test-panel')?.scrollIntoView({behavior:'smooth',block:'start'})}><Play size={14}/>测试运行</Button>
@@ -303,6 +314,7 @@ export function ToolsWorkspace({ session, onView, onNavigation, ref }: {
         </div>
         {editor ? <>
           <ToolSummaryCard tool={editor.tool} initial={editor.draft} version={editor.version} dirty={dirty}/>
+          {editor.draft.kind === 'mcp' && onOpenMcp && <div className="tool-page-notices"><Button variant="outline" aria-label="打开所属 MCP 服务" disabled={Boolean(busy)} onClick={() => requestLeave(() => onOpenMcp(editor.draft.kind === 'mcp' ? editor.draft.connection_id : undefined))}>打开所属 MCP 服务</Button><p className="tool-muted">来源身份和结构只读；本地名称、说明、启用状态及超时可编辑。</p></div>}
           <div className="tool-editor-layout">
             {schema && <ToolDefinitionForm key={editor.revision} schema={schema} initial={{...editor.initial}} formId="tool-definition" externalSubmit
               onSourceAnalysis={setPythonAnalysis}
@@ -311,7 +323,7 @@ export function ToolsWorkspace({ session, onView, onNavigation, ref }: {
                 editDraft(value as ToolDraft);
               }}/>}
             <div className="tool-test-column">
-              <section className="tool-panel" aria-label="快速测试调试" id="tool-test-panel"><header className="tool-panel-heading"><Play size={16}/><h2>快速测试调试</h2><span>{busy === 'testing' ? '测试中' : editor.draft.kind === 'python' ? '本机 Python 子进程' : '真实 HTTP 请求'}</span></header>
+              <section className="tool-panel" aria-label="快速测试调试" id="tool-test-panel"><header className="tool-panel-heading"><Play size={16}/><h2>快速测试调试</h2><span>{busy === 'testing' ? '测试中' : editor.draft.kind === 'python' ? '本机 Python 子进程' : editor.draft.kind === 'mcp' ? '独立 MCP 会话' : '真实 HTTP 请求'}</span></header>
                 <div className="tool-panel-body">
                   <p className="tool-muted">真实测试当前草稿；消费者使用已保存定义。禁用工具也可手动测试。</p>
                   {!validDraft && <p className="tool-muted">请补齐有效配置后开始测试。</p>}

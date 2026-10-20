@@ -20,12 +20,13 @@ export interface HttpParameterMapping {
 }
 export type HttpToolDraft = Omit<HttpToolDefinition, 'id' | 'created_at' | 'updated_at'>;
 export type PythonToolDraft = Omit<PythonToolDefinition, 'id' | 'created_at' | 'updated_at' | 'code_path' | 'source' | 'input_schema'> & {source:string; input_schema?:RJSFSchema};
-export type ToolDraft = HttpToolDraft | PythonToolDraft;
+export type McpToolDraft = Omit<McpToolDefinition, 'id' | 'created_at' | 'updated_at'>;
+export type ToolDraft = HttpToolDraft | PythonToolDraft | McpToolDraft;
 export interface ToolNameValidation {
   valid: boolean; code: 'name_invalid' | 'name_conflict' | null; message: string | null;
 }
 export interface PythonToolDefinition extends ToolDefinition {kind:'python'; code_path:string; source?:string}
-export interface McpToolDefinition extends ToolDefinition {kind:'mcp'; server_id:string; remote_name:string}
+export interface McpToolDefinition extends ToolDefinition {kind:'mcp'; connection_id:string; remote_name:string; source_tool:Record<string,unknown>}
 export type AnyToolDefinition = HttpToolDefinition | PythonToolDefinition | McpToolDefinition;
 export type ToolLibraryRead = ToolRead<AnyToolDefinition[]> & {reserved_names: string[]};
 export interface ToolResult {
@@ -74,7 +75,7 @@ export function suggestToolName(displayName: string, occupiedNames: Iterable<str
   for (let suffix = 2; occupied.has(name); suffix++) name = `${stem}_${suffix}`;
   return name;
 }
-export function editTool(tool: HttpToolDefinition | PythonToolDefinition): ToolDraft {
+export function editTool(tool: AnyToolDefinition): ToolDraft {
   if (tool.kind === 'python') {
     const {id, created_at, updated_at, code_path, source, ...draft} = tool;
     return {...draft,source:source ?? ''};
@@ -83,7 +84,7 @@ export function editTool(tool: HttpToolDefinition | PythonToolDefinition): ToolD
   return draft;
 }
 export function toolDraftFingerprint(draft:ToolDraft):string {
-  const normalized=draft.kind === 'python' ? draft : {...draft,headers:draft.headers === undefined ? {} : draft.headers,
+  const normalized=draft.kind !== 'http' ? draft : {...draft,headers:draft.headers === undefined ? {} : draft.headers,
     auth:(draft.auth ?? []).map(binding => ({...binding,value:binding.value ?? ''})),
     parameters:Array.isArray(draft.parameters) ? draft.parameters.map(mapping => mapping && typeof mapping === 'object' && !Array.isArray(mapping)
       ? {...mapping,style:mapping.style ?? null,explode:mapping.explode ?? null} : mapping) : draft.parameters === undefined ? [] : draft.parameters};

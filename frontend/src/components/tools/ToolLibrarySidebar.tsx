@@ -9,9 +9,10 @@ const categories = [
   {value:'python',label:'Python'}, {value:'mcp',label:'MCP'},
 ] as const;
 
-export function ToolLibrarySidebar({tools, recent, selectedId, busy, verified, canCreate, connected, onCreate, onOpen, onReload}: {
+export function ToolLibrarySidebar({tools, recent, selectedId, busy, verified, canCreate, connected, onCreate, onOpen, onReload, onOpenMcp}: {
   tools:AnyToolDefinition[] | null; recent:Record<string,RecentToolTest>; selectedId?:string; busy:boolean; verified:boolean;
   canCreate:boolean; connected:boolean; onCreate:(kind:'http' | 'python') => void; onOpen:(tool:AnyToolDefinition) => void; onReload:() => void;
+  onOpenMcp?:() => void;
 }) {
   const [query, setQuery] = useState('');
   const [hideDisabled, setHideDisabled] = useState(false);
@@ -30,7 +31,8 @@ export function ToolLibrarySidebar({tools, recent, selectedId, busy, verified, c
         <div className="tool-create-actions"><Button size="xs" aria-label="创建 HTTP 工具" disabled={!canCreate} onClick={() => onCreate('http')}><Plus/>接入工具</Button>
           <Button size="xs" variant="outline" aria-label="选择接入类型" aria-expanded={createMenu} disabled={!canCreate} onClick={() => setCreateMenu(!createMenu)}>⌄</Button>
           {createMenu && <div className="tool-create-menu"><Button variant="ghost" onClick={() => {setCreateMenu(false);onCreate('http');}}>新建 HTTP 工具</Button>
-            <Button variant="ghost" onClick={() => {setCreateMenu(false);onCreate('python');}}>新建 Python 工具</Button></div>}
+            <Button variant="ghost" onClick={() => {setCreateMenu(false);onCreate('python');}}>新建 Python 工具</Button>
+            {onOpenMcp && <Button variant="ghost" onClick={() => {setCreateMenu(false);onOpenMcp();}}>接入 MCP 服务</Button>}</div>}
         </div>
       </div>
       <div className="tool-search"><MagnifyingGlass size={14}/><Input type="search" aria-label="搜索工具"
@@ -59,7 +61,7 @@ export function ToolLibrarySidebar({tools, recent, selectedId, busy, verified, c
       {tools?.length === 0 && verified && <p className="tool-list-message" role="status">工具库为空。接入 HTTP 或 Python 工具开始测试。</p>}
       {tools && tools.length > 0 && filtered?.length === 0 && <p className="tool-list-message">没有匹配的工具。{hideDisabled && '已隐藏禁用工具。'}</p>}
       {filtered && filtered.length > 0 && <ul className="tool-library-list">{filtered.map(tool => {
-        const source=tool.kind === 'http' ? tool.url : tool.kind === 'python' ? tool.code_path : `${tool.server_id} / ${tool.remote_name}`;
+        const source=tool.kind === 'http' ? tool.url : tool.kind === 'python' ? tool.code_path : `${tool.connection_id} / ${tool.remote_name}`;
         const description=[tool.display_name !== tool.name ? tool.display_name : '',tool.description].filter(Boolean).join(' · ') || '暂无说明';
         return <li key={tool.id}><button aria-current={selectedId === tool.id ? 'true' : undefined} disabled={busy} onClick={() => onOpen(tool)}>
           <span className="tool-list-name"><strong title={tool.name}>{tool.name}</strong><span className={`tool-status-dot ${tool.enabled ? 'enabled' : ''}`} aria-hidden="true"/>

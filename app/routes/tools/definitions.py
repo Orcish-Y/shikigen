@@ -1,16 +1,16 @@
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel, ConfigDict, JsonValue
 from shikigen.contracts.python_source import PythonSourceError
-from shikigen.contracts.tool_definitions import HttpToolDefinition, PythonToolDefinition
+from shikigen.contracts.tool_definitions import (
+  HttpToolDefinition,
+  McpToolDefinition,
+  PythonToolDefinition,
+)
 from shikigen.runtime.tool_library import ToolLibraryError
 
+from app.routes.tools.errors import fail
+
 router = APIRouter(prefix="/api/tools", tags=["tools"])
-
-
-def fail(error: ToolLibraryError | PythonSourceError):
-  raise HTTPException(
-    error.status, {"code": error.code, "message": str(error)}
-  ) from None
 
 
 @router.get("/schema/http")
@@ -84,6 +84,49 @@ async def python_parameters_schema():
   schema["properties"]["output_schema"] = {
     "type": ["object", "null"],
     "title": titles["output_schema"],
+  }
+  return {"data": schema}
+
+
+@router.get("/schema/mcp")
+async def mcp_parameters_schema():
+  schema = McpToolDefinition.model_json_schema()
+  for field in ("id", "created_at", "updated_at"):
+    del schema["properties"][field]
+  schema["required"] = [
+    field for field in schema["required"] if field in schema["properties"]
+  ]
+  titles = {
+    "display_name": "页面名称",
+    "name": "调用名称",
+    "description": "说明",
+    "enabled": "启用",
+    "timeout_seconds": "超时（秒）",
+    "connection_id": "所属连接",
+    "remote_name": "远端工具名",
+    "source_tool": "完整来源",
+    "input_schema": "输入结构",
+    "output_schema": "输出结构（可选）",
+  }
+  for field, title in titles.items():
+    schema["properties"][field]["title"] = title
+  for field in (
+    "connection_id",
+    "remote_name",
+    "source_tool",
+    "input_schema",
+    "output_schema",
+  ):
+    schema["properties"][field]["readOnly"] = True
+  schema["properties"]["input_schema"] = {
+    "type": "object",
+    "title": "输入结构",
+    "readOnly": True,
+  }
+  schema["properties"]["output_schema"] = {
+    "type": ["object", "null"],
+    "title": "输出结构（可选）",
+    "readOnly": True,
   }
   return {"data": schema}
 
