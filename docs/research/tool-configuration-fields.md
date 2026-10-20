@@ -91,7 +91,7 @@ SDK 字段与必需键依据 [adapters 0.3.2 sessions.py](https://github.com/lan
 | 启用选项 | 用户勾选 | 保存选择，不把未勾选工具注册给使用方 |
 | 名称前缀 / 本地调用名 | 项目生成 | 避免两个服务工具同名；当前 loader 已开启服务名前缀 |
 
-上游定义见上述 [MCP Tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools)；生成与选择规则是建议。现有 [mcp_loader.py](../../packages/harness/shikigen/tools/mcp_loader.py)可按服务发现工具，并隔离发现失败。建议完整取完分页再展示；重新发现时按稳定服务关联匹配，保留已有选择。工具被远端移除或 schema 变化，应在页面提示，具体生效策略待决策。
+上游定义见上述 [MCP Tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools)；生成与选择规则是建议。现有 [mcp_loader.py](../../packages/harness/shikigen/core/mcp_loader.py)可按服务发现工具，并隔离发现失败。建议完整取完分页再展示；重新发现时按稳定服务关联匹配，保留已有选择。工具被远端移除或 schema 变化，应在页面提示，具体生效策略待决策。
 
 建议测试面板保留真实结果的类型、结构化数据和错误状态；初期无需完整呈现所有多媒体，但不能把不支持的结果伪装成成功文本。尤其当前 adapter 的音频转换限制与 MCP 协议允许音频是两回事，见上面的固定版本 `tools.py`。
 
@@ -183,7 +183,7 @@ OpenAPI 文档 → importer → HTTP 草稿 ────┼→ 类型适配器 �
 MCP 服务连接 → 发现 → 选择的工具定义 ───┘
 ```
 
-importer 只在导入/更新定义时运行；HTTP adapter 在每次调用时构造请求。MCP adapter 负责根据连接调用远程工具；Python adapter 负责约定入口、参数和执行进程。管理页和后续工作流/Agent 使用稳定 tool ID；调用时由服务解析定义、选择 adapter、生成当前运行所需的 BaseTool 集合。这是项目设计建议；依据现有 [Registry](../../packages/harness/shikigen/tools/tool_registry.py)与 [MCP loader](../../packages/harness/shikigen/tools/mcp_loader.py)，不需要另造通用插件平台。
+importer 只在导入/更新定义时运行；HTTP adapter 在每次调用时构造请求。MCP adapter 负责根据连接调用远程工具；Python adapter 负责约定入口、参数和执行进程。管理页和后续工作流/Agent 使用稳定 tool ID；调用时由服务解析定义、选择 adapter、生成当前运行所需的 BaseTool 集合。这是项目设计建议；依据现有 [Registry](../../packages/harness/shikigen/core/tool_registry.py)与 [MCP loader](../../packages/harness/shikigen/core/mcp_loader.py)，不需要另造通用插件平台。
 
 首版可从一个 `kind -> adapter` 映射和很小的构建接口开始；不必提前设计多级工厂、继承树或让各 adapter 自己持久化配置。工具管理服务负责保存、引用与输入校验，adapter 负责各类型转换和执行细节。MCP 服务发现一组工具是来源层行为，而对外每个 BaseTool 仍是一项可调用工具。
 

@@ -14,7 +14,9 @@ from shikigen.app_config import (
   SubagentsConfig,
 )
 from shikigen.core.agent import create_lead_agent
-from shikigen.tools import ToolRegistry, build_task_tool, create_builtin_registry
+from shikigen.core.subagents import build_task_tool
+from shikigen.core.tool_assembly import create_builtin_registry
+from shikigen.core.tool_registry import ToolRegistry
 
 
 class AgentFactoryTests(unittest.IsolatedAsyncioTestCase):
@@ -37,7 +39,7 @@ class AgentFactoryTests(unittest.IsolatedAsyncioTestCase):
       child = AsyncMock()
       child.ainvoke.return_value = {"messages": [AIMessage(content="done")]}
       with patch(
-        "shikigen.tools.task_tool.create_agent", return_value=child
+        "shikigen.core.subagents.create_agent", return_value=child
       ) as make_child:
         await tools["task"].ainvoke({"description": "inspect workspace"})
       child_tools = {t.name: t for t in make_child.call_args.kwargs["tools"]}
@@ -54,7 +56,9 @@ class AgentFactoryTests(unittest.IsolatedAsyncioTestCase):
           "shikigen.core.agent.load_app_config", side_effect=AppConfigError(message)
         ),
         patch("shikigen.core.agent.create_chat_model") as make_model,
-        patch("shikigen.core.agent.load_mcp_tools", new=AsyncMock()) as load_tools,
+        patch(
+          "shikigen.core.tool_assembly.load_mcp_tools", new=AsyncMock()
+        ) as load_tools,
       ):
         with self.assertRaisesRegex(AppConfigError, message):
           await create_lead_agent()
@@ -73,9 +77,12 @@ class AgentFactoryTests(unittest.IsolatedAsyncioTestCase):
     with (
       patch("shikigen.core.agent.load_app_config", return_value=config) as load_config,
       patch("shikigen.core.agent.create_chat_model", return_value=model) as make_model,
-      patch("shikigen.core.agent.create_builtin_registry", return_value=registry),
       patch(
-        "shikigen.core.agent.load_mcp_tools", new=AsyncMock(return_value=[mcp_tool])
+        "shikigen.core.tool_assembly.create_builtin_registry", return_value=registry
+      ),
+      patch(
+        "shikigen.core.tool_assembly.load_mcp_tools",
+        new=AsyncMock(return_value=[mcp_tool]),
       ) as load_tools,
       patch("shikigen.core.agent.build_task_tool", wraps=build_task_tool) as make_task,
       patch("shikigen.core.agent.create_agent") as make_agent,
@@ -103,8 +110,10 @@ class AgentFactoryTests(unittest.IsolatedAsyncioTestCase):
         side_effect=AssertionError("Unexpected file read"),
       ) as load_config,
       patch("shikigen.core.agent.create_chat_model") as make_model,
-      patch("shikigen.core.agent.create_builtin_registry") as make_builtin,
-      patch("shikigen.core.agent.load_mcp_tools", new=AsyncMock()) as load_tools,
+      patch("shikigen.core.tool_assembly.create_builtin_registry") as make_builtin,
+      patch(
+        "shikigen.core.tool_assembly.load_mcp_tools", new=AsyncMock()
+      ) as load_tools,
       patch("shikigen.core.agent.create_agent") as make_agent,
     ):
       await create_lead_agent(
@@ -136,7 +145,7 @@ class AgentFactoryTests(unittest.IsolatedAsyncioTestCase):
       with self.subTest(agent_type=agent_type):
         child = AsyncMock()
         child.ainvoke.return_value = {"messages": [AIMessage(content="done")]}
-        with patch("shikigen.tools.task_tool.create_agent", return_value=child) as make:
+        with patch("shikigen.core.subagents.create_agent", return_value=child) as make:
           await task.ainvoke({"description": "inspect", "agent_type": agent_type})
         self.assertEqual({t.name for t in make.call_args.kwargs["tools"]}, expected)
     self.assertEqual(registry.names, original)
@@ -144,7 +153,7 @@ class AgentFactoryTests(unittest.IsolatedAsyncioTestCase):
   async def test_unavailable_allowlist_does_not_fall_back_to_all_tools(self):
     registry = create_builtin_registry()
     model = FakeMessagesListChatModel(responses=[AIMessage(content="done")])
-    with self.assertLogs("shikigen.tools.task_tool", level="WARNING") as logs:
+    with self.assertLogs("shikigen.core.subagents", level="WARNING") as logs:
       task = build_task_tool(
         model,
         registry,
@@ -153,7 +162,7 @@ class AgentFactoryTests(unittest.IsolatedAsyncioTestCase):
     self.assertIn("missing_mcp_tool", " ".join(logs.output))
     child = AsyncMock()
     child.ainvoke.return_value = {"messages": [AIMessage(content="done")]}
-    with patch("shikigen.tools.task_tool.create_agent", return_value=child) as make:
+    with patch("shikigen.core.subagents.create_agent", return_value=child) as make:
       await task.ainvoke({"description": "inspect"})
     self.assertEqual(make.call_args.kwargs["tools"], [])
 

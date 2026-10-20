@@ -24,7 +24,7 @@
 
 ## MCP
 
-- 现有 loader 的发现路径新建会话、初始化、获取工具列表后关闭；生成工具每次调用另建会话。stdio 服务可能每次调用重启，不保证跨调用的进程内状态。见 [mcp_loader.py](../../../packages/harness/shikigen/tools/mcp_loader.py) 与锁定 adapter `client.py`、`tools.py`。
+- 现有 loader 的发现路径新建会话、初始化、获取工具列表后关闭；生成工具每次调用另建会话。stdio 服务可能每次调用重启，不保证跨调用的进程内状态。见 [mcp_loader.py](../../../packages/harness/shikigen/core/mcp_loader.py) 与锁定 adapter `client.py`、`tools.py`。
 - MCP Streamable HTTP 的默认客户端显式跟随重定向，与普通 HTTP 工具客户端默认不同；传输阶段超时也不等于全过程预算。见锁定 MCP `shared/_httpx_utils.py`、adapter `sessions.py`。
 - MCP stdio SDK 尝试进程树清理，但 Windows Job Object 创建/分配失败会降级；不能承诺进程树一定全部终止。客户端停止等待也不代表远端已停止或撤销。见锁定 SDK `client/stdio/__init__.py`、`os/win32/utilities.py`、`shared/session.py`。
 - adapter 成功返回保留转换后的内容块，`structuredContent` 放 artifact；错误分支未保留 `structuredContent`，音频块会抛未支持异常，资源块也不是完整原字段。因此完整结果需要在原始 MCP 返回层采集，不能仅依赖现有转换器。见锁定 adapter `tools.py`。

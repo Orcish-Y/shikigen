@@ -27,12 +27,58 @@ const connection={id:'server-1',display_name:'本地服务',command:'python',tra
   test_timeout_seconds:30,discovery_timeout_seconds:30,created_at:'2026-10-18T00:00:00Z',updated_at:'2026-10-18T00:00:00Z'};
 const source={name:'search',description:'查找',inputSchema:{type:'object',properties:{query:{type:'string'}},required:['query']}};
 const json=(data,status=200) => new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json'}});
+const httpSchema={type:'object',required:['display_name','url'],properties:{
+  display_name:{type:'string',minLength:1,title:'连接名称'},
+  transport:{type:'string',const:'streamable_http'},url:{type:'string',minLength:1,title:'远程 MCP URL'},
+  headers:{type:'object',additionalProperties:{type:'string'},title:'请求头'},
+  test_timeout_seconds:{type:'number',title:'连接测试预算（秒）'},discovery_timeout_seconds:{type:'number',title:'工具发现预算（秒）'},
+}};
+
+test('远程 MCP 连接使用专属动态表单，保存后重读，修改时禁止测试旧配置',async () => {
+  const requests=[];
+  const remote={id:'remote-1',display_name:'远程服务',transport:'streamable_http',url:'http://localhost:9000/mcp',
+    headers:{Authorization:'Bearer local-test'},test_timeout_seconds:30,discovery_timeout_seconds:30,
+    created_at:'2026-10-20T00:00:00Z',updated_at:'2026-10-20T00:00:00Z'};
+  const session=new BackendSession('test','http://backend',new AbortController().signal,async (url,init) => {
+    const path=new URL(url).pathname;requests.push({path,...init});
+    if (path === '/api/mcp/schema/stdio') return json({data:schema});
+    if (path === '/api/mcp/schema/streamable_http') return json({data:httpSchema});
+    if (path === '/api/tools') return json({data:[],reserved_names:[],version:'v1'});
+    if (path === '/api/mcp/connections' && init.method !== 'POST') return json({data:[connection],version:'v1'});
+    if (path === '/api/mcp/connections') return json({data:{id:'remote-1'}},201);
+    if (path === '/api/mcp/connections/remote-1') return json({data:remote,version:'v2'});
+    if (path.endsWith('/test')) return json({data:{status:'success',duration_ms:4,error:null,connection_id:'remote-1'}});
+    throw new Error('unexpected '+path);
+  });
+  const user=userEvent.setup({document:browser.window.document,delay:null});
+  render(React.createElement(McpWorkspace,{session,onOpenTool:() => {}}));
+  await waitFor(() => assert.equal(screen.getByRole('button',{name:'接入 MCP 服务'}).disabled,false));
+  await user.click(screen.getByRole('button',{name:'接入 MCP 服务'}));
+  await user.click(screen.getByRole('button',{name:'新建 Streamable HTTP 连接'}));
+  assert.equal(screen.queryByLabelText(/^启动命令/),null);
+  fireEvent.change(screen.getByLabelText(/^连接名称/),{target:{value:'远程服务'}});
+  fireEvent.change(screen.getByLabelText(/^远程 MCP URL/),{target:{value:remote.url}});
+  fireEvent.change(screen.getByLabelText('请求头'),{target:{value:JSON.stringify(remote.headers)}});
+  await user.click(screen.getByRole('button',{name:'保存连接'}));
+  await screen.findByText('连接已保存');
+  const created=JSON.parse(requests.find(request => request.path === '/api/mcp/connections' && request.method === 'POST').body);
+  assert.equal(created.transport,'streamable_http');assert.deepEqual(created.headers,remote.headers);
+  assert.equal(created.command,undefined);
+  assert.equal(screen.getByLabelText('请求头').value.includes('Bearer local-test'),true);
+  await user.click(screen.getByRole('button',{name:'测试连接'}));
+  await screen.findByText(/连接测试成功/);
+  fireEvent.change(screen.getByLabelText(/^远程 MCP URL/),{target:{value:remote.url+'-changed'}});
+  assert.equal(screen.getByRole('button',{name:'测试连接'}).disabled,true);
+  assert.equal(screen.getByRole('button',{name:'发现工具'}).disabled,true);
+  assert.equal(screen.getByLabelText('请求头').value.includes('Bearer local-test'),true);
+});
 
 test('MCP 动态表单保存后分别测试和发现，只导入勾选工具并可跳转到工具页',async () => {
   const requests=[],opened=[];
   const session=new BackendSession('test','http://backend',new AbortController().signal,async (url,init) => {
     const path=new URL(url).pathname;requests.push({path,...init});
     if (path === '/api/mcp/schema/stdio') return json({data:schema});
+    if (path === '/api/mcp/schema/streamable_http') return json({data:httpSchema});
     if (path === '/api/tools') return json({data:[],reserved_names:['add'],version:'v1'});
     if (path === '/api/mcp/connections' && init.method !== 'POST') return json({data:[],version:'v1'});
     if (path === '/api/mcp/connections') return json({data:{id:'server-1'}},201);
@@ -44,7 +90,8 @@ test('MCP 动态表单保存后分别测试和发现，只导入勾选工具并�
   });
   const user=userEvent.setup({document:browser.window.document,delay:null});
   render(React.createElement(McpWorkspace,{session,onOpenTool:id => opened.push(id)}));
-  await waitFor(() => assert.equal(screen.getByRole('button',{name:'新建 stdio 连接'}).disabled,false));
+  await waitFor(() => assert.equal(screen.getByRole('button',{name:'接入 MCP 服务'}).disabled,false));
+  await user.click(screen.getByRole('button',{name:'接入 MCP 服务'}));
   await user.click(screen.getByRole('button',{name:'新建 stdio 连接'}));
   fireEvent.change(screen.getByLabelText(/^连接名称/),{target:{value:'本地服务'}});
   fireEvent.change(screen.getByLabelText(/^启动命令/),{target:{value:'python'}});
@@ -72,6 +119,7 @@ test('MCP 保存成功但详情读取失败时只重读，错误 JSON 原文保�
   const session=new BackendSession('test','http://backend',new AbortController().signal,async (url,init) => {
     const path=new URL(url).pathname;
     if (path === '/api/mcp/schema/stdio') return json({data:schema});
+    if (path === '/api/mcp/schema/streamable_http') return json({data:httpSchema});
     if (path === '/api/tools') return json({data:[],reserved_names:[],version:'v1'});
     if (path === '/api/mcp/connections' && init.method !== 'POST') return json({data:[],version:'v1'});
     if (path === '/api/mcp/connections') {creates++;return json({data:{id:'server-1'}},201);}
@@ -83,7 +131,8 @@ test('MCP 保存成功但详情读取失败时只重读，错误 JSON 原文保�
   });
   const user=userEvent.setup({document:browser.window.document,delay:null});
   render(React.createElement(McpWorkspace,{session,onOpenTool:() => {}}));
-  await waitFor(() => assert.equal(screen.getByRole('button',{name:'新建 stdio 连接'}).disabled,false));
+  await waitFor(() => assert.equal(screen.getByRole('button',{name:'接入 MCP 服务'}).disabled,false));
+  await user.click(screen.getByRole('button',{name:'接入 MCP 服务'}));
   await user.click(screen.getByRole('button',{name:'新建 stdio 连接'}));
   fireEvent.change(screen.getByLabelText(/^连接名称/),{target:{value:'本地服务'}});
   fireEvent.change(screen.getByLabelText(/^启动命令/),{target:{value:'python'}});
@@ -108,6 +157,7 @@ test('MCP 未知 503 保存结果保持不确定，锁定重复提交并允许�
   const session=new BackendSession('test','http://backend',new AbortController().signal,async (url,init) => {
     const path=new URL(url).pathname;
     if (path === '/api/mcp/schema/stdio') return json({data:schema});
+    if (path === '/api/mcp/schema/streamable_http') return json({data:httpSchema});
     if (path === '/api/tools') return json({data:[],reserved_names:[],version:'v1'});
     if (path === '/api/mcp/connections' && init.method !== 'POST') return json({data:creates ? [connection] : [],version:'v2'});
     if (path === '/api/mcp/connections') {creates++;return json({detail:'proxy unavailable'},503);}
@@ -115,7 +165,8 @@ test('MCP 未知 503 保存结果保持不确定，锁定重复提交并允许�
   });
   const user=userEvent.setup({document:browser.window.document,delay:null});
   render(React.createElement(McpWorkspace,{session,onOpenTool:() => {}}));
-  await waitFor(() => assert.equal(screen.getByRole('button',{name:'新建 stdio 连接'}).disabled,false));
+  await waitFor(() => assert.equal(screen.getByRole('button',{name:'接入 MCP 服务'}).disabled,false));
+  await user.click(screen.getByRole('button',{name:'接入 MCP 服务'}));
   await user.click(screen.getByRole('button',{name:'新建 stdio 连接'}));
   fireEvent.change(screen.getByLabelText(/^连接名称/),{target:{value:'本地服务'}});
   fireEvent.change(screen.getByLabelText(/^启动命令/),{target:{value:'python'}});
@@ -125,6 +176,6 @@ test('MCP 未知 503 保存结果保持不确定，锁定重复提交并允许�
   assert.equal(screen.getByRole('button',{name:'测试连接'}).disabled,true);
   await user.click(screen.getByRole('button',{name:'放弃草稿并重读连接列表'}));
   await screen.findByText(/此前保存结果仍不确定/);
-  assert.equal(screen.getByRole('button',{name:'新建 stdio 连接'}).disabled,false);
+  assert.equal(screen.getByRole('button',{name:'接入 MCP 服务'}).disabled,false);
   assert.equal(creates,1);
 });

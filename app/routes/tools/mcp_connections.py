@@ -1,6 +1,9 @@
 from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel, ConfigDict
-from shikigen.contracts.mcp_connections import McpStdioSettings
+from shikigen.contracts.mcp_connections import (
+  McpStdioSettings,
+  McpStreamableHttpSettings,
+)
 from shikigen.runtime.tool_library import ToolLibraryError
 
 from app.routes.tools.errors import fail
@@ -9,8 +12,17 @@ router = APIRouter(prefix="/api/mcp")
 
 
 @router.get("/schema/stdio")
-async def connection_schema():
-  schema = McpStdioSettings.model_json_schema()
+async def stdio_schema():
+  return {"data": connection_schema(McpStdioSettings)}
+
+
+@router.get("/schema/streamable_http")
+async def streamable_http_schema():
+  return {"data": connection_schema(McpStreamableHttpSettings)}
+
+
+def connection_schema(settings: type[McpStdioSettings | McpStreamableHttpSettings]):
+  schema = settings.model_json_schema()
   schema.pop("title", None)
   titles = {
     "display_name": "连接名称",
@@ -18,12 +30,15 @@ async def connection_schema():
     "args": "启动参数",
     "env": "环境变量",
     "cwd": "工作目录（可选）",
+    "url": "远程 MCP URL",
+    "headers": "请求头",
     "test_timeout_seconds": "连接测试预算（秒）",
     "discovery_timeout_seconds": "工具发现预算（秒）",
   }
   for key, title in titles.items():
-    schema["properties"][key]["title"] = title
-  return {"data": schema}
+    if key in schema["properties"]:
+      schema["properties"][key]["title"] = title
+  return schema
 
 
 @router.get("/connections")
@@ -37,9 +52,7 @@ async def list_connections(request: Request, response: Response):
 
 
 @router.get("/connections/{connection_id}")
-async def get_connection(
-  connection_id: str, request: Request, response: Response
-):
+async def get_connection(connection_id: str, request: Request, response: Response):
   response.headers["Cache-Control"] = "no-store"
   try:
     data, version = await request.app.state.runtime.tools.get_mcp_connection(
@@ -106,9 +119,7 @@ class DiscoveryImport(BaseModel):
 
 
 @router.post("/connections/{connection_id}/imports")
-async def import_tools(
-  connection_id: str, payload: DiscoveryImport, request: Request
-):
+async def import_tools(connection_id: str, payload: DiscoveryImport, request: Request):
   try:
     data = await request.app.state.runtime.lifecycle.accept(
       request.app.state.runtime.tools.import_mcp_tools(

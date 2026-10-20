@@ -17,7 +17,7 @@
 - 我们先保留简单的 fork-join 语义：Lead Agent 等待 task 完成，
   暂不转发子 agent 中间事件，也不提供后台 Future 管理
 
-**Evidence**: `tools/task_tool.py`, `harness/agent.py` lines 27-28,
+**Evidence**: `core/subagents.py`, `harness/agent.py` lines 27-28,
 `tests/test_task_tool.py`
 
 **Implications**: 项目核心功能完整了。下一步可选：Goal 续跑、多轮自动化、前端 UI。

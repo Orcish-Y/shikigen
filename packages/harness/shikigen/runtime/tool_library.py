@@ -12,7 +12,7 @@ from uuid import uuid4
 
 from pydantic import TypeAdapter, ValidationError
 
-from shikigen.contracts.mcp_connections import McpStdioConnection, McpStdioSettings
+from shikigen.contracts.mcp_connections import AnyMcpConnection, AnyMcpSettings
 from shikigen.contracts.python_schema import prepare_python_input_schema
 from shikigen.contracts.tool_definitions import (
   AnyToolDefinition,
@@ -24,20 +24,23 @@ from shikigen.contracts.tool_execution import (
   PythonToolExecution,
   ToolExecution,
 )
+from shikigen.core.tool_assembly import create_builtin_registry
 from shikigen.persistence.python_source_store import PythonSourceStore
-from shikigen.tools.adapter.http_execution import HttpAdapter
-from shikigen.tools.adapter.mcp_execution import McpAdapter
-from shikigen.tools.adapter.python_execution import PythonAdapter
-from shikigen.tools.library_execution import ToolExecutor
-from shikigen.tools.mcp_sessions import (
-  McpStdioSessionProvider,
+from shikigen.tool_execution.adapter.http_execution import HttpAdapter
+from shikigen.tool_execution.adapter.mcp_execution import McpAdapter
+from shikigen.tool_execution.adapter.python_execution import PythonAdapter
+from shikigen.tool_execution.executor import ToolExecutor
+from shikigen.tool_execution.mcp.sessions import (
+  McpConnectionSessionProvider,
   list_mcp_session_tools,
+  mcp_exception_code,
   mcp_exception_message,
 )
-from shikigen.tools.tool_registry import create_builtin_registry
 
 definition_adapter = TypeAdapter(AnyToolDefinition)
 name_adapter = TypeAdapter(ToolName)
+mcp_settings_adapter = TypeAdapter(AnyMcpSettings)
+mcp_connection_adapter = TypeAdapter(AnyMcpConnection)
 MCP_SOURCE_FIELDS = (
   "connection_id",
   "remote_name",
@@ -60,7 +63,7 @@ class ToolLibrary:
     self.python_source_store = PythonSourceStore(self.source_path)
     self._lock = asyncio.Lock()
     self._reserved_names = set(create_builtin_registry().names) | {"task"}
-    self.mcp_session_provider = McpStdioSessionProvider(
+    self.mcp_session_provider = McpConnectionSessionProvider(
       self.source_path.parent if self.source_path else Path.cwd()
     )
     self.executor = ToolExecutor(
@@ -168,7 +171,10 @@ class ToolLibrary:
         "status": "error",
         "connection_id": connection_id,
         "duration_ms": (time.monotonic() - started) * 1000,
-        "error": {"code": "mcp_connection", "message": mcp_exception_message(error)},
+        "error": {
+          "code": mcp_exception_code(error),
+          "message": mcp_exception_message(error),
+        },
       }
 
   async def import_mcp_tools(
@@ -248,10 +254,10 @@ class ToolLibrary:
     version: str | None = None,
   ):
     try:
-      settings = McpStdioSettings.model_validate(payload)
+      settings = mcp_settings_adapter.validate_python({"transport": "stdio", **payload})
     except ValidationError:
       raise ToolLibraryError(
-        "connection_invalid", "Invalid stdio connection settings"
+        "connection_invalid", "Invalid MCP connection settings"
       ) from None
     async with self._lock:
       raw, library, current_version = await asyncio.to_thread(self._read)
@@ -263,11 +269,17 @@ class ToolLibrary:
           "version_conflict", "Configuration changed; reload before saving", 409
         )
       now = datetime.now(UTC)
-      connection = McpStdioConnection(
-        **settings.model_dump(),
-        id=connection_id or str(uuid4()),
-        created_at=previous.created_at if previous else now,
-        updated_at=now,
+      if previous and previous.transport != settings.transport:
+        raise ToolLibraryError(
+          "connection_invalid", "Create a new connection to change MCP transport"
+        )
+      connection = mcp_connection_adapter.validate_python(
+        {
+          **settings.model_dump(),
+          "id": connection_id or str(uuid4()),
+          "created_at": previous.created_at if previous else now,
+          "updated_at": now,
+        }
       )
       library.mcp_connections[connection.id] = connection
       raw["tool_library"] = library.model_dump(mode="json")

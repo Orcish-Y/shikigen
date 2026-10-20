@@ -257,7 +257,7 @@ class ApprovalPauseTests(unittest.IsolatedAsyncioTestCase):
     )
     with (
       patch(
-        "shikigen.runtime.composition.load_mcp_tools", new=AsyncMock(return_value=[])
+        "shikigen.core.tool_assembly.load_mcp_tools", new=AsyncMock(return_value=[])
       ),
       patch(
         "shikigen.runtime.composition.create_lead_agent",

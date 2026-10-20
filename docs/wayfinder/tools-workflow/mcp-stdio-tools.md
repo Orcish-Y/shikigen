@@ -1,5 +1,7 @@
 # MCP stdio 接入与选中工具调用
 
+2026-10-20 补充：远程传输已接入同一连接集合和会话提供者，见 [Streamable HTTP 接入记录](mcp-streamable-http.md)。两种传输共用 `McpConnectionSessionProvider`；本记录中的 stdio 行为保持适用。
+
 2026-10-18，ticket 07。服务连接、来源工具与本地工具定义分别保存。工具页和 MCP 服务页沿用 [demo 布局规则](../../../frontend/design.md#工具页面原型)。
 
 ## 范围与凭据前置条件

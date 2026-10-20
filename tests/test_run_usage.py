@@ -14,11 +14,12 @@ from shikigen.app_config import AppConfig, McpConfig, ModelConfig
 from shikigen.contracts.runs import InvalidRunState
 from shikigen.core.approval import build_approval_middleware
 from shikigen.core.execution import ExecutionOutcome, ExecutionReason
+from shikigen.core.subagents import build_task_tool
+from shikigen.core.tool_registry import ToolRegistry
 from shikigen.middleware.goal_middleware import GoalEvaluator, GoalMiddleware
 from shikigen.persistence import ChatStore
 from shikigen.runtime.composition import assemble_runtime
 from shikigen.runtime.runs import RunTransitions
-from shikigen.tools import ToolRegistry, build_task_tool
 
 
 def reply(text="done", **kwargs):

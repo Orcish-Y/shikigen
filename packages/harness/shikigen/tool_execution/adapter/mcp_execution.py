@@ -14,10 +14,11 @@ from shikigen.contracts.tool_execution import (
   ToolExecutionContext,
 )
 from shikigen.contracts.tool_results import ToolResult, failure
-from shikigen.tools.mcp_sessions import (
+from shikigen.tool_execution.mcp.sessions import (
   MCP_RESULT_LIMIT,
   McpSessionProvider,
   list_mcp_session_tools,
+  mcp_exception_code,
   mcp_exception_message,
 )
 
@@ -34,7 +35,9 @@ class McpAdapter:
     definition = execution.definition
     details = context.details
     details.update(
-      connection_id=definition.connection_id, remote_name=definition.remote_name
+      connection_id=definition.connection_id,
+      remote_name=definition.remote_name,
+      transport=execution.connection.transport,
     )
     try:
       async with self.mcp_session_provider.open_mcp_session(
@@ -96,4 +99,6 @@ class McpAdapter:
             )
         return ToolResult(status="success", data=data, details=details)
     except Exception as error:
-      return failure("mcp_protocol", mcp_exception_message(error), details=details)
+      return failure(
+        mcp_exception_code(error), mcp_exception_message(error), details=details
+      )

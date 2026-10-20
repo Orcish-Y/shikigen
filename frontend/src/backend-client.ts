@@ -3,7 +3,7 @@ import { RunProtocolError, validStatus, validateEvent, validateFrame, validateMe
 import type { ApprovalResponses } from './approval-decisions.ts';
 import type { AnyToolDefinition, ToolDraft, ToolLibraryRead, ToolNameValidation, ToolRead, ToolTest } from './tool-library';
 import type { RJSFSchema } from '@rjsf/utils';
-import type { McpStdioDraft, McpStdioConnection, McpObservation, McpDiscovery, McpSelection, McpImportedTool } from './mcp-connections';
+import type { McpConnectionDraft, McpConnection, McpTransport, McpObservation, McpDiscovery, McpSelection, McpImportedTool } from './mcp-connections';
 
 export interface Thread {
   id: string;
@@ -173,16 +173,16 @@ export class BackendSession {
   getMcpToolManagementSchema(signal?:AbortSignal) {
     return this.json<{data:RJSFSchema}>('/api/tools/schema/mcp',{cache:'no-store'},signal);
   }
-  getMcpConnectionSchema(signal?:AbortSignal) {
-    return this.json<{data:RJSFSchema}>('/api/mcp/schema/stdio',{cache:'no-store'},signal);
+  getMcpConnectionSchema(transport:McpTransport,signal?:AbortSignal) {
+    return this.json<{data:RJSFSchema}>(`/api/mcp/schema/${transport}`,{cache:'no-store'},signal);
   }
   listMcpConnections(signal?:AbortSignal) {
-    return this.json<ToolRead<McpStdioConnection[]>>('/api/mcp/connections',{cache:'no-store'},signal);
+    return this.json<ToolRead<McpConnection[]>>('/api/mcp/connections',{cache:'no-store'},signal);
   }
   getMcpConnection(id:string,signal?:AbortSignal) {
-    return this.json<ToolRead<McpStdioConnection>>(`/api/mcp/connections/${encodeURIComponent(id)}`,{cache:'no-store'},signal);
+    return this.json<ToolRead<McpConnection>>(`/api/mcp/connections/${encodeURIComponent(id)}`,{cache:'no-store'},signal);
   }
-  async saveMcpConnection(definition:McpStdioDraft,saved?:{id:string;version:string}):Promise<string> {
+  async saveMcpConnection(definition:McpConnectionDraft,saved?:{id:string;version:string}):Promise<string> {
     const init={method:saved ? 'PUT' : 'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify(saved ? {definition,version:saved.version} : definition)};
     if (saved) {

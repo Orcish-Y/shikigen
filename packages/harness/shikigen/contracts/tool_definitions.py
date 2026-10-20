@@ -13,7 +13,7 @@ from pydantic import (
   model_validator,
 )
 
-from shikigen.contracts.mcp_connections import McpStdioConnection
+from shikigen.contracts.mcp_connections import AnyMcpConnection
 
 ToolName = Annotated[
   str, Field(min_length=1, max_length=64, pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -128,7 +128,7 @@ class ToolLibraryConfig(BaseModel):
   model_config = ConfigDict(extra="forbid")
 
   tools: list[AnyToolDefinition] = Field(default_factory=list)
-  mcp_connections: dict[str, McpStdioConnection] = Field(default_factory=dict)
+  mcp_connections: dict[str, AnyMcpConnection] = Field(default_factory=dict)
 
   @model_validator(mode="after")
   def validate_mcp_identities(self):

@@ -9,9 +9,9 @@ from unittest.mock import patch
 
 import httpx
 from shikigen.app_config import AppConfig, McpConfig, ModelConfig
+from shikigen.core.tool_registry import ToolRegistry
 from shikigen.persistence import ChatStore
 from shikigen.runtime.composition import assemble_runtime, open_runtime
-from shikigen.tools.tool_registry import ToolRegistry
 
 from app.server import create_app
 

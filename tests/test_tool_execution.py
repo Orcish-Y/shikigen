@@ -16,9 +16,9 @@ from shikigen.contracts.tool_execution import (
   ToolExecutionContext,
 )
 from shikigen.contracts.tool_results import ToolResult
-from shikigen.tools.adapter.http_execution import HttpAdapter
-from shikigen.tools.adapter.python_execution import PythonAdapter
-from shikigen.tools.library_execution import ToolExecutor
+from shikigen.tool_execution.adapter.http_execution import HttpAdapter
+from shikigen.tool_execution.adapter.python_execution import PythonAdapter
+from shikigen.tool_execution.executor import ToolExecutor
 
 
 def definition(**overrides) -> ToolDefinition:
@@ -174,7 +174,8 @@ class ToolExecutorTests(unittest.IsolatedAsyncioTestCase):
       **definition(kind="http").model_dump(), url="http://example.test/"
     )
     with patch(
-      "shikigen.tools.adapter.http_execution.httpx.AsyncClient", return_value=client
+      "shikigen.tool_execution.adapter.http_execution.httpx.AsyncClient",
+      return_value=client,
     ):
       result = await ToolExecutor(adapters={"http": HttpAdapter()}).execute(
         loader(ToolExecution(tool)), {}

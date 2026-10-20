@@ -13,6 +13,7 @@ from shikigen.checkpoint import make_checkpointer
 from shikigen.core.agent import create_lead_agent
 from shikigen.core.approval import build_approval_middleware
 from shikigen.core.execution import ExecutionRegistry
+from shikigen.core.tool_assembly import create_agent_tool_registry
 from shikigen.persistence.chat_store import ChatStore, open_chat_store
 from shikigen.runtime.data_ownership import own_runtime_data
 from shikigen.runtime.lifecycle import ApplicationLifecycle
@@ -22,8 +23,6 @@ from shikigen.runtime.runs import RunService, RunTransitions
 from shikigen.runtime.threads import ThreadService
 from shikigen.runtime.tool_library import ToolLibrary
 from shikigen.runtime.workspace_resources import WorkspaceResources
-from shikigen.tools import create_builtin_registry
-from shikigen.tools.mcp_loader import load_mcp_tools
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,8 +99,7 @@ async def open_runtime(
     checkpointer = await stack.enter_async_context(make_checkpointer(app_config))
     executions = ExecutionRegistry()
     ingestor = RunEventIngestor(store, executions)
-    registry = create_builtin_registry(app_config.workspace_root)
-    registry.register_many(await load_mcp_tools(app_config.mcp))
+    registry = await create_agent_tool_registry(app_config)
     agent = await create_lead_agent(
       config=app_config,
       tool_registry=registry,

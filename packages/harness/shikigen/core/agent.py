@@ -10,13 +10,14 @@ from langgraph.graph.state import CompiledStateGraph
 from shikigen.app_config import AppConfig, load_app_config
 from shikigen.core.context import AgentRunContext
 from shikigen.core.model import create_chat_model
+from shikigen.core.subagents import build_task_tool
+from shikigen.core.tool_assembly import create_agent_tool_registry
+from shikigen.core.tool_registry import ToolRegistry
 from shikigen.middleware.goal_middleware import GoalEvaluator, GoalMiddleware
 from shikigen.middleware.logging_middleware import LoggingMiddleware
 from shikigen.middleware.tool_error_handling_middleware import (
   ToolErrorHandlingMiddleware,
 )
-from shikigen.tools import ToolRegistry, build_task_tool, create_builtin_registry
-from shikigen.tools.mcp_loader import load_mcp_tools
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +46,7 @@ async def create_lead_agent(
   if model is None:
     model = create_chat_model(resolved_config.model)
   if tool_registry is None:
-    _tool_registry = create_builtin_registry(resolved_config.workspace_root)
-    _tool_registry.register_many(await load_mcp_tools(resolved_config.mcp))
+    _tool_registry = await create_agent_tool_registry(resolved_config)
   else:
     _tool_registry = tool_registry
   _task_tool_registry = (

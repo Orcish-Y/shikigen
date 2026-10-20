@@ -5,7 +5,7 @@ from typing import Protocol
 
 from pydantic import JsonValue
 
-from shikigen.contracts.mcp_connections import McpStdioConnection
+from shikigen.contracts.mcp_connections import AnyMcpConnection
 from shikigen.contracts.tool_definitions import (
   McpToolDefinition,
   PythonToolDefinition,
@@ -32,7 +32,7 @@ class PythonToolExecution(ToolExecution):
 @dataclass(frozen=True, slots=True)
 class McpToolExecution(ToolExecution):
   definition: McpToolDefinition
-  connection: McpStdioConnection
+  connection: AnyMcpConnection
 
 
 @dataclass(frozen=True, slots=True)

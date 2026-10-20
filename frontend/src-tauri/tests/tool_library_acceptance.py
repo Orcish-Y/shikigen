@@ -15,6 +15,8 @@ from threading import Thread
 from client_acceptance import ClientAcceptance
 from window_acceptance import REPO, WindowAcceptance, wait_until
 
+from tests.fixtures.mcp_http_server import McpHttpServer
+
 
 class ToolLibraryAcceptance(WindowAcceptance):
   artifact_root = REPO / ".scratch/tools-workflow/verification/native"
@@ -82,6 +84,7 @@ class ToolLibraryAcceptance(WindowAcceptance):
     self.evaluate("document.querySelector('[aria-label=选择接入类型]').click()")
     self.click("接入 MCP 服务")
     wait_until(lambda: "暂无 MCP 连接" in self.body())
+    self.evaluate("document.querySelector('[aria-label=\"接入 MCP 服务\"]').click()")
     self.evaluate("document.querySelector('[aria-label=\"新建 stdio 连接\"]').click()")
     wait_until(
       lambda: self.evaluate("Boolean(document.getElementById('mcp-config_command'))")
@@ -195,6 +198,104 @@ class ToolLibraryAcceptance(WindowAcceptance):
       self.client.get(base + f"/api/tools/{selected['id']}").json()["data"]["id"],
       selected["id"],
     )
+    self.quit(host)
+    self.assertEqual(host.wait(timeout=10), 0)
+
+  def test_mcp_http_form_discover_and_execute(self):
+    server = McpHttpServer()
+    self.addCleanup(server.close)
+    server.authorization = "Bearer native-test"
+    host = self.launch()
+    self.connect()
+    base = self.state("ready")["base_url"]
+    wait_until(lambda: "新建会话开始对话" in self.body())
+    self.evaluate("document.querySelector('[aria-label=工具]').click()")
+    wait_until(lambda: "工具库为空" in self.body())
+    self.evaluate("document.querySelector('[aria-label=选择接入类型]').click()")
+    self.click("接入 MCP 服务")
+    wait_until(lambda: "暂无 MCP 连接" in self.body())
+    self.evaluate("document.querySelector('[aria-label=\"接入 MCP 服务\"]').click()")
+    self.evaluate(
+      "document.querySelector('[aria-label=\"新建 Streamable HTTP 连接\"]').click()"
+    )
+    wait_until(
+      lambda: self.evaluate("Boolean(document.getElementById('mcp-config_url'))")
+    )
+    self.assertFalse(
+      self.evaluate("Boolean(document.getElementById('mcp-config_command'))")
+    )
+    self.fill("mcp-config_display_name", "远程 MCP 验收")
+    self.fill("mcp-config_url", server.url + "/sse")
+    self.replace(
+      "mcp-config_headers", json.dumps({"Authorization": server.authorization})
+    )
+    self.click("保存连接")
+    wait_until(lambda: "连接已保存" in self.body())
+    wait_until(
+      lambda: self.evaluate(
+        "[...document.querySelectorAll('[aria-label=\"MCP 服务操作\"] button')]"
+        ".some(button => button.textContent === '测试连接' && !button.disabled)"
+      )
+    )
+    self.click("测试连接")
+    wait_until(lambda: "连接测试成功" in self.body())
+    self.click("发现工具")
+    wait_until(lambda: "发现工具预览" in self.body())
+    self.assertEqual(server.calls, 0)
+    for width, height in ((1440, 900), (390, 844)):
+      self.call(
+        "Emulation.setDeviceMetricsOverride",
+        width=width,
+        height=height,
+        deviceScaleFactor=1,
+        mobile=False,
+      )
+      wait_until(lambda width=width: self.evaluate("window.innerWidth") == width)
+      self.assertFalse(
+        self.evaluate("document.documentElement.scrollWidth > window.innerWidth")
+      )
+      self.assertTrue(
+        self.evaluate(
+          "document.getElementById('mcp-config_headers')"
+          ".getBoundingClientRect().width > 0"
+        )
+      )
+      data = self.call("Page.captureScreenshot", format="png")["data"]
+      (self.artifacts / f"mcp-http-{width}.png").write_bytes(base64.b64decode(data))
+      self.evaluate(
+        "document.getElementById('mcp-config_headers').scrollIntoView({block:'center'})"
+      )
+      self.assertTrue(
+        self.evaluate(
+          "(() => {const rect=document.getElementById('mcp-config_headers')"
+          ".getBoundingClientRect();"
+          "return rect.top >= 0 && rect.bottom <= innerHeight;})()"
+        )
+      )
+      data = self.call("Page.captureScreenshot", format="png")["data"]
+      (self.artifacts / f"mcp-http-headers-{width}.png").write_bytes(
+        base64.b64decode(data)
+      )
+    self.call(
+      "Emulation.setDeviceMetricsOverride",
+      width=1440,
+      height=900,
+      deviceScaleFactor=1,
+      mobile=False,
+    )
+    self.evaluate("document.querySelector('[aria-label=\"选择 search\"]').click()")
+    self.click("导入所选工具")
+    wait_until(lambda: "所选工具已入库" in self.body())
+    self.evaluate("document.querySelector('[aria-label=\"打开工具 search\"]').click()")
+    wait_until(
+      lambda: self.evaluate("Boolean(document.getElementById('tool-input_query'))")
+    )
+    self.fill("tool-input_query", "native HTTP MCP")
+    self.click("执行测试")
+    wait_until(lambda: "测试成功" in self.body())
+    self.assertIn('"query": "native HTTP MCP"', self.body())
+    self.assertEqual(len(self.client.get(base + "/api/tools").json()["data"]), 1)
+    self.assertEqual(server.sessions, set())
     self.quit(host)
     self.assertEqual(host.wait(timeout=10), 0)
 

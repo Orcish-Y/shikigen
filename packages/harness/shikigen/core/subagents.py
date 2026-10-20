@@ -7,7 +7,7 @@ from langchain.tools import tool
 from langchain_core.tools import BaseTool
 
 from shikigen.app_config import SubagentConfig, SubagentsConfig
-from shikigen.tools.tool_registry import ToolRegistry
+from shikigen.core.tool_registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
 

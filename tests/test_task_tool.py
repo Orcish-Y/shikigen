@@ -13,11 +13,9 @@ from pydantic import Field
 from shikigen import create_lead_agent
 from shikigen.app_config import AppConfig, McpConfig, ModelConfig
 from shikigen.checkpoint.json_checkpointer import JsonCheckpointer
-from shikigen.tools import (
-  ToolRegistry,
-  build_task_tool,
-  create_builtin_registry,
-)
+from shikigen.core.subagents import build_task_tool
+from shikigen.core.tool_assembly import create_builtin_registry
+from shikigen.core.tool_registry import ToolRegistry
 
 
 class ToolAwareFakeChatModel(FakeMessagesListChatModel):
@@ -77,7 +75,7 @@ class TaskToolTests(unittest.IsolatedAsyncioTestCase):
             model, config=self.app_config, tool_registry=registry, **kwargs
           )
           with patch(
-            "shikigen.tools.task_tool.create_agent", wraps=create_agent
+            "shikigen.core.subagents.create_agent", wraps=create_agent
           ) as create_child:
             result = await agent.ainvoke(
               {"messages": [HumanMessage(content="delegate inspection")]}
