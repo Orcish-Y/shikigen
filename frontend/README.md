@@ -12,6 +12,8 @@ HTTP 认证使用直接密钥字段，通用凭据管理留待统一设计；认
 
 Python 工具使用 CodeMirror 6 + Lezer 提供源码高亮、本地静态分析和只读参数预览；保存、测试时由后端 Python 复核，并支持真实本机子进程测试。入口及限制见 [Python 工具实现](../docs/wayfinder/tools-workflow/python-tool-execution.md)。
 
+MCP 服务支持 stdio 与 Streamable HTTP，重新发现先预览差异、勾选应用，保留本地编辑与未发现工具；连接删除先确认旗下工具清单，详见 [MCP 连接生命周期](../docs/wayfinder/tools-workflow/mcp-discovery-lifecycle.md)。
+
 ```bash
 cd frontend
 pnpm install --frozen-lockfile

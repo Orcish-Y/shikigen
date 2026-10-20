@@ -53,6 +53,46 @@ class McpHttpApiTests(unittest.IsolatedAsyncioTestCase):
       await self.client.get("/api/mcp/connections/" + response.json()["data"]["id"])
     ).json()
 
+  async def test_http_rediscovery_updates_selected_source_and_cascade_deletes(self):
+    server = McpHttpServer()
+    self.addCleanup(server.close)
+    saved = await self.create_connection(url=server.url)
+    connection_id = saved["data"]["id"]
+    ids = await self.import_tools(connection_id, ["search", "blocks"])
+    before = (await self.client.get("/api/tools")).json()
+    source = {
+      "name": "search",
+      "inputSchema": {"type": "object", "properties": {"term": {"type": "string"}}},
+    }
+    server.tools_override = [source]
+    base = f"/api/mcp/connections/{connection_id}"
+    preview = (await self.client.post(base + "/discover")).json()["data"]
+    self.assertEqual(
+      {item["remote_name"]: item["status"] for item in preview["changes"]},
+      {"search": "changed", "blocks": "missing"},
+    )
+    self.assertEqual((await self.client.get("/api/tools")).json(), before)
+    self.assertEqual(server.calls, 0)
+    applied = await self.client.post(
+      base + "/imports",
+      json={
+        "discovery_id": preview["discovery_id"],
+        "tools": [{"remote_name": "search", "name": "http_search"}],
+      },
+    )
+    self.assertEqual(applied.status_code, 200, applied.text)
+    updated = (await self.client.get("/api/tools/" + ids["search"])).json()["data"]
+    self.assertEqual(updated["input_schema"], source["inputSchema"])
+    self.assertEqual(updated["source_tool"], source)
+    blocks = (await self.client.get("/api/tools/" + ids["blocks"])).json()["data"]
+    self.assertEqual(
+      blocks, next(tool for tool in before["data"] if tool["id"] == ids["blocks"])
+    )
+    version = (await self.client.get(base)).json()["version"]
+    deleted = await self.client.request("DELETE", base, json={"version": version})
+    self.assertEqual(deleted.status_code, 204, deleted.text)
+    self.assertEqual((await self.client.get("/api/tools")).json()["data"], [])
+
   async def test_offline_http_connection_has_own_schema_and_uses_same_collection(self):
     saved = await self.create_connection(
       headers={"X-Workspace": "$LITERAL"},
@@ -338,7 +378,19 @@ class McpHttpApiTests(unittest.IsolatedAsyncioTestCase):
       reimported = await self.import_tools(connection_id, ["search"])
       self.assertEqual(reimported, tools)
       after = (await self.client.get("/api/tools/" + tools["search"])).json()["data"]
-      self.assertEqual(after, before)
+      self.assertEqual(
+        {
+          key: value
+          for key, value in after.items()
+          if key not in ("source_tool", "updated_at")
+        },
+        {
+          key: value
+          for key, value in before.items()
+          if key not in ("source_tool", "updated_at")
+        },
+      )
+      self.assertEqual(after["source_tool"]["x-business-calls"], server.calls)
       result = await self.execute(tools["search"])
       self.assertEqual(result["status"], "success", result)
       call = next(

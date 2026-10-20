@@ -19,7 +19,12 @@ export interface McpObservation {
   status:'success' | 'error' | 'timeout'; connection_id:string; duration_ms:number;
   error:{code:string;message:string} | null; server?:Record<string,unknown>;
 }
-export interface McpDiscovery extends McpObservation {discovery_id?:string; version?:string; tools?:McpSourceTool[]}
+export interface McpDiscoveryChange {
+  remote_name:string; status:'new' | 'changed' | 'unchanged' | 'missing';
+  tool_id:string | null; local_name:string | null;
+  source_tool:McpSourceTool | null; previous_source_tool:McpSourceTool | null;
+}
+export interface McpDiscovery extends McpObservation {discovery_id?:string; version?:string; tools?:McpSourceTool[];changes?:McpDiscoveryChange[]}
 export interface McpSelection {remote_name:string; name:string}
 export interface McpImportedTool {id:string; remote_name:string; existing:boolean}
 export function emptyMcpConnection(transport:McpTransport):McpConnectionDraft {

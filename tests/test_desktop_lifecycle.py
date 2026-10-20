@@ -82,10 +82,12 @@ class DesktopLifecycleTests(unittest.IsolatedAsyncioTestCase):
       elif phase == "checkpoint":
         patches.enter_context(patch.object(AsyncSqliteSaver, "setup", new=blocked))
       else:
-        target = "load_mcp_tools" if phase == "mcp" else "create_lead_agent"
-        patches.enter_context(
-          patch("shikigen.runtime.composition." + target, new=blocked)
+        target = (
+          "shikigen.core.tool_assembly.load_mcp_tools"
+          if phase == "mcp"
+          else "shikigen.runtime.composition.create_lead_agent"
         )
+        patches.enter_context(patch(target, new=blocked))
       control = ControlChannel(io.BytesIO(), io.BytesIO(), "initializing")
       with bind_listener(48000) as listener:
         task = asyncio.create_task(serve_backend(config, listener, control))

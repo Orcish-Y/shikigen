@@ -198,6 +198,88 @@ class ToolLibraryAcceptance(WindowAcceptance):
       self.client.get(base + f"/api/tools/{selected['id']}").json()["data"]["id"],
       selected["id"],
     )
+    # 修改连接只保存连接草稿；来源差异须重新发现并明确选择。
+    changed = {
+      "name": "search",
+      "description": "远端已更新",
+      "inputSchema": {
+        "type": "object",
+        "properties": {"term": {"type": "string"}},
+        "required": ["term"],
+      },
+    }
+    self.replace(
+      "mcp-config_env",
+      json.dumps(
+        {"MCP_FIXTURE_TOOLS": json.dumps([changed, {**changed, "name": "renamed"}])}
+      ),
+    )
+    self.evaluate(
+      "document.querySelector('[aria-label=\"查看工具 本地 search\"]').click()"
+    )
+    wait_until(lambda: "未保存的连接修改" in self.body())
+    self.click("继续编辑")
+    self.click("保存连接")
+    wait_until(lambda: "请重新发现核对来源结构" in self.body())
+    self.assertEqual(
+      self.client.get(base + f"/api/tools/{selected['id']}").json()["data"][
+        "input_schema"
+      ],
+      selected["input_schema"],
+    )
+    wait_until(
+      lambda: self.evaluate(
+        "!document.querySelector('[aria-label=\"删除连接\"]').disabled"
+      )
+    )
+    self.click("发现工具")
+    wait_until(lambda: "来源变化" in self.body() and "本次未发现" in self.body())
+    self.assertIsNone(
+      self.evaluate("document.querySelector('[aria-label=\"选择 blocks\"]')")
+    )
+    for width, height in ((1440, 900), (390, 844)):
+      self.call(
+        "Emulation.setDeviceMetricsOverride",
+        width=width,
+        height=height,
+        deviceScaleFactor=1,
+        mobile=False,
+      )
+      wait_until(lambda width=width: self.evaluate("window.innerWidth") == width)
+      self.assertFalse(
+        self.evaluate("document.documentElement.scrollWidth > window.innerWidth")
+      )
+      self.evaluate(
+        "document.querySelector('[aria-label=\"选择 search\"]')"
+        ".scrollIntoView({block:'center'})"
+      )
+      data = self.call("Page.captureScreenshot", format="png")["data"]
+      (self.artifacts / f"mcp-rediscovery-{width}.png").write_bytes(
+        base64.b64decode(data)
+      )
+    self.evaluate("document.querySelector('[aria-label=\"选择 search\"]').click()")
+    self.click("应用所选变更")
+    wait_until(lambda: "所选工具已入库" in self.body())
+    updated = self.client.get(base + f"/api/tools/{selected['id']}").json()["data"]
+    self.assertEqual(updated["input_schema"], changed["inputSchema"])
+    self.assertEqual(updated["name"], selected["name"])
+    self.assertEqual(len(self.client.get(base + "/api/tools").json()["data"]), 2)
+    wait_until(
+      lambda: self.evaluate(
+        "!document.querySelector('[aria-label=\"删除连接\"]').disabled"
+      )
+    )
+    self.evaluate("document.querySelector('[aria-label=\"删除连接\"]').click()")
+    wait_until(lambda: "删除 MCP 连接" in self.body())
+    self.assertIn("2 个工具", self.body())
+    self.assertIn("本地 blocks", self.body())
+    self.assertEqual(len(self.client.get(base + "/api/tools").json()["data"]), 2)
+    data = self.call("Page.captureScreenshot", format="png")["data"]
+    (self.artifacts / "mcp-delete-impact-390.png").write_bytes(base64.b64decode(data))
+    self.click("确认删除连接及工具")
+    wait_until(lambda: "连接及所属工具已删除" in self.body())
+    self.assertEqual(self.client.get(base + "/api/tools").json()["data"], [])
+    self.assertEqual(self.client.get(base + "/api/mcp/connections").json()["data"], [])
     self.quit(host)
     self.assertEqual(host.wait(timeout=10), 0)
 

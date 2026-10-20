@@ -18,6 +18,7 @@ class McpHttpServer:
     self.slow_delete = False
     self.stop = Event()
     self.pending_results: dict[str, dict] = {}
+    self.tools_override: list[dict] | None = None
     fixture = self
 
     class Handler(BaseHTTPRequestHandler):
@@ -181,6 +182,8 @@ class McpHttpServer:
               for name in ("search", "blocks", "fail", "protocol", "slow", "huge")
             ]
           }
+          if fixture.tools_override is not None:
+            result["tools"] = fixture.tools_override
         elif method == "tools/call":
           fixture.calls += 1
           params = message["params"]

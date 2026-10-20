@@ -183,13 +183,13 @@ class McpToolApiTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(forged.status_code, 422, forged.text)
     self.assertEqual(forged.json()["detail"]["code"], "read_only")
 
-  async def import_selected(self, saved, names):
+  async def import_selected(self, saved, names, prefix="fixture_"):
     preview = await self.discover(saved)
     response = await self.client.post(
       f"/api/mcp/connections/{saved['data']['id']}/imports",
       json={
         "discovery_id": preview["discovery_id"],
-        "tools": [{"remote_name": name, "name": "fixture_" + name} for name in names],
+        "tools": [{"remote_name": name, "name": prefix + name} for name in names],
       },
     )
     self.assertEqual(response.status_code, 200, response.text)
@@ -201,6 +201,194 @@ class McpToolApiTests(unittest.IsolatedAsyncioTestCase):
     )
     self.assertEqual(response.status_code, 200, response.text)
     return response.json()["data"]
+
+  async def update_connection(self, saved, **changes):
+    current = (
+      await self.client.get("/api/mcp/connections/" + saved["data"]["id"])
+    ).json()
+    definition = {
+      key: value
+      for key, value in current["data"].items()
+      if key not in ("id", "created_at", "updated_at")
+    }
+    response = await self.client.put(
+      "/api/mcp/connections/" + saved["data"]["id"],
+      json={"definition": {**definition, **changes}, "version": current["version"]},
+    )
+    self.assertEqual(response.status_code, 204, response.text)
+
+  async def test_rediscovery_previews_and_selectively_updates_preserving_local_edits(
+    self,
+  ):
+    source = {"name": "search", "inputSchema": {"type": "object", "properties": {}}}
+    saved = await self.create_connection(
+      args=[str(Path(__file__).parent / "fixtures/mcp_stdio_server.py")],
+      env={"MCP_FIXTURE_TOOLS": json.dumps([source, {**source, "name": "gone"}])},
+    )
+    imported = await self.import_selected(saved, ["search", "gone"])
+    tool_id = imported[0]["id"]
+    detail = (await self.client.get("/api/tools/" + tool_id)).json()
+    local = {
+      "kind": "mcp",
+      "name": "local_search",
+      "display_name": "我的搜索",
+      "description": "本地说明",
+      "enabled": False,
+      "timeout_seconds": 17,
+    }
+    response = await self.client.put(
+      "/api/tools/" + tool_id, json={"definition": local, "version": detail["version"]}
+    )
+    self.assertEqual(response.status_code, 204, response.text)
+    changed = {
+      **source,
+      "inputSchema": {
+        "type": "object",
+        "properties": {"term": {"type": "string"}},
+        "required": ["term"],
+      },
+      "outputSchema": {"type": "object"},
+      "description": "远端新说明",
+    }
+    await self.update_connection(
+      saved,
+      env={"MCP_FIXTURE_TOOLS": json.dumps([changed, {**source, "name": "added"}])},
+    )
+    before = (await self.client.get("/api/tools")).json()
+    for changes in (
+      {"input_schema": changed["inputSchema"]},
+      {"output_schema": changed["outputSchema"]},
+      {"source_tool": changed},
+    ):
+      forbidden = {**local, **changes}
+      ordinary = await self.client.put(
+        "/api/tools/" + tool_id,
+        json={"definition": forbidden, "version": before["version"]},
+      )
+      self.assertEqual(ordinary.status_code, 422, ordinary.text)
+      self.assertEqual(ordinary.json()["detail"]["code"], "read_only")
+      draft = await self.client.post(
+        "/api/tools/tests",
+        json={"tool_id": tool_id, "definition": forbidden, "inputs": {}},
+      )
+      self.assertEqual(draft.status_code, 422, draft.text)
+      self.assertEqual(draft.json()["detail"]["code"], "read_only")
+    preview = await self.discover(saved)
+    self.assertEqual(
+      {item["remote_name"]: item["status"] for item in preview["changes"]},
+      {"search": "changed", "added": "new", "gone": "missing"},
+    )
+    self.assertEqual((await self.client.get("/api/tools")).json(), before)
+    response = await self.client.post(
+      f"/api/mcp/connections/{saved['data']['id']}/imports",
+      json={
+        "discovery_id": preview["discovery_id"],
+        "tools": [{"remote_name": "search", "name": "local_search"}],
+      },
+    )
+    self.assertEqual(response.status_code, 200, response.text)
+    updated = (await self.client.get("/api/tools/" + tool_id)).json()["data"]
+    for key, value in local.items():
+      self.assertEqual(updated[key], value)
+    self.assertEqual(updated["id"], tool_id)
+    self.assertEqual(updated["created_at"], detail["data"]["created_at"])
+    self.assertEqual(updated["input_schema"], changed["inputSchema"])
+    self.assertEqual(updated["output_schema"], changed["outputSchema"])
+    self.assertEqual(updated["source_tool"], changed)
+    tools = (await self.client.get("/api/tools")).json()["data"]
+    self.assertEqual(len(tools), 2)
+    self.assertEqual(
+      next(t for t in tools if t["remote_name"] == "gone"),
+      next(t for t in before["data"] if t["remote_name"] == "gone"),
+    )
+
+  async def test_failed_discovery_and_invalid_or_stale_batches_preserve_saved_tools(
+    self,
+  ):
+    source = {"name": "search", "inputSchema": {"type": "object", "properties": {}}}
+    saved = await self.create_connection(
+      args=[str(Path(__file__).parent / "fixtures/mcp_stdio_server.py")],
+      env={"MCP_FIXTURE_TOOLS": json.dumps([source])},
+    )
+    imported = await self.import_selected(saved, ["search"])
+    changed = {
+      **source,
+      "inputSchema": {"type": "object", "properties": {"term": {"type": "string"}}},
+    }
+    invalid = {"name": "invalid", "inputSchema": {"type": "object", "oneOf": [{}]}}
+    await self.update_connection(
+      saved, env={"MCP_FIXTURE_TOOLS": json.dumps([changed, invalid])}
+    )
+    before = (await self.client.get("/api/tools")).json()
+    preview = await self.discover(saved)
+    base = f"/api/mcp/connections/{saved['data']['id']}"
+    rejected = await self.client.post(
+      base + "/imports",
+      json={
+        "discovery_id": preview["discovery_id"],
+        "tools": [
+          {"remote_name": "search", "name": "fixture_search"},
+          {"remote_name": "invalid", "name": "new_invalid"},
+        ],
+      },
+    )
+    self.assertEqual(rejected.status_code, 422, rejected.text)
+    self.assertIn("invalid", rejected.json()["detail"]["message"])
+    self.assertEqual((await self.client.get("/api/tools")).json(), before)
+    await self.update_connection(saved, command="unavailable-mcp-fixture")
+    stale = await self.client.post(
+      base + "/imports",
+      json={
+        "discovery_id": preview["discovery_id"],
+        "tools": [{"remote_name": "search", "name": "fixture_search"}],
+      },
+    )
+    self.assertEqual(stale.status_code, 409, stale.text)
+    current = (await self.client.get("/api/tools")).json()
+    failed = (await self.client.post(base + "/discover")).json()["data"]
+    self.assertEqual(failed["status"], "error")
+    self.assertNotIn("changes", failed)
+    self.assertEqual((await self.client.get("/api/tools")).json(), current)
+    self.assertEqual(current["data"], before["data"])
+    self.assertEqual(current["data"][0]["id"], imported[0]["id"])
+
+  async def test_delete_connection_removes_only_owned_tools_with_version_check(self):
+    settings = {"args": [str(Path(__file__).parent / "fixtures/mcp_stdio_server.py")]}
+    first = await self.create_connection(**settings, env={"MCP_CALL_DELAY": "0.5"})
+    second = await self.create_connection(**settings)
+    owned = await self.import_selected(first, ["search", "slow"])
+    other = await self.import_selected(second, ["search"], prefix="other_")
+    self.assertNotEqual(owned[0]["id"], other[0]["id"])
+    started = await self.client.post(
+      f"/api/tools/{owned[0]['id']}/tests",
+      json={"inputs": {"query": "already started"}},
+    )
+    self.assertEqual(started.status_code, 202, started.text)
+    base = "/api/mcp/connections/" + first["data"]["id"]
+    before = (await self.client.get("/api/tools")).json()
+    stale = await self.client.request(
+      "DELETE", base, json={"version": first["version"]}
+    )
+    self.assertEqual(stale.status_code, 409, stale.text)
+    self.assertEqual((await self.client.get("/api/tools")).json(), before)
+    response = await self.client.request(
+      "DELETE", base, json={"version": before["version"]}
+    )
+    self.assertEqual(response.status_code, 204, response.text)
+    self.assertEqual((await self.client.get(base)).status_code, 404)
+    remaining = (await self.client.get("/api/tools")).json()["data"]
+    self.assertEqual([tool["id"] for tool in remaining], [other[0]["id"]])
+    for tool in owned:
+      result = await self.execute(tool["id"], {"query": "after delete"})
+      self.assertEqual(result["error"]["code"], "not_found")
+    for _ in range(100):
+      observation = (
+        await self.client.get("/api/tools/tests/" + started.json()["data"]["test_id"])
+      ).json()["data"]
+      if observation["status"] != "running":
+        break
+      await asyncio.sleep(0.02)
+    self.assertEqual(observation["status"], "success", observation)
 
   async def test_raw_blocks_business_error_output_error_and_size_limit(self):
     saved = await self.create_connection(

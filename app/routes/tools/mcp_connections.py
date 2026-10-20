@@ -80,6 +80,26 @@ class ConnectionUpdate(BaseModel):
   version: str
 
 
+class ConnectionDelete(BaseModel):
+  model_config = ConfigDict(extra="forbid", strict=True)
+  version: str
+
+
+@router.delete("/connections/{connection_id}", status_code=204)
+async def delete_connection(
+  connection_id: str, payload: ConnectionDelete, request: Request
+):
+  try:
+    await request.app.state.runtime.lifecycle.accept(
+      request.app.state.runtime.tools.delete_mcp_connection(
+        connection_id, payload.version
+      )
+    )
+    return Response(status_code=204)
+  except ToolLibraryError as error:
+    fail(error)
+
+
 @router.post("/connections/{connection_id}/test")
 async def test_connection(connection_id: str, request: Request):
   try:

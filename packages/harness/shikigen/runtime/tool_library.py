@@ -120,7 +120,11 @@ class ToolLibrary:
     raise ToolLibraryError("not_found", "MCP connection does not exist", 404)
 
   async def inspect_mcp_connection(self, connection_id: str, *, discover: bool):
-    connection, version = await self.get_mcp_connection(connection_id)
+    async with self._lock:
+      _, library, version = await asyncio.to_thread(self._read)
+      connection = library.mcp_connections.get(connection_id)
+      if connection is None:
+        raise ToolLibraryError("not_found", "MCP connection does not exist", 404)
     budget = (
       connection.discovery_timeout_seconds
       if discover
@@ -157,7 +161,40 @@ class ToolLibrary:
           "tools": tools,
           "created": started,
         }
-        observation.update(discovery_id=discovery_id, version=version, tools=tools)
+        existing = {
+          tool.remote_name: tool
+          for tool in library.tools
+          if tool.kind == "mcp" and tool.connection_id == connection_id
+        }
+        changes = []
+        for source in tools:
+          previous = existing.pop(source["name"], None)
+          changes.append(
+            {
+              "remote_name": source["name"],
+              "status": ("unchanged" if previous.source_tool == source else "changed")
+              if previous
+              else "new",
+              "tool_id": previous.id if previous else None,
+              "local_name": previous.name if previous else None,
+              "source_tool": source,
+              "previous_source_tool": previous.source_tool if previous else None,
+            }
+          )
+        changes.extend(
+          {
+            "remote_name": tool.remote_name,
+            "status": "missing",
+            "tool_id": tool.id,
+            "local_name": tool.name,
+            "source_tool": None,
+            "previous_source_tool": tool.source_tool,
+          }
+          for tool in existing.values()
+        )
+        observation.update(
+          discovery_id=discovery_id, version=version, tools=tools, changes=changes
+        )
       return observation
     except TimeoutError:
       return {
@@ -202,11 +239,12 @@ class ToolLibrary:
       if not selections or len(set(selected_names)) != len(selected_names):
         raise ToolLibraryError("selection_invalid", "Select distinct discovered tools")
       imported = []
+      has_changes = False
       for selection in selections:
         remote_name = selection["remote_name"]
         if remote_name not in discovered_tools:
           raise ToolLibraryError(
-            "selection_invalid", "Selected tool is not in this discovery"
+            "selection_invalid", f"{remote_name}: tool is not in this discovery"
           )
         previous = next(
           (
@@ -218,32 +256,54 @@ class ToolLibrary:
           ),
           None,
         )
-        if previous:
-          # 07 只识别既有来源，09 负责来源差异的预览/确认和未发现处理。
+        source_tool = discovered_tools[remote_name]
+        if previous and previous.source_tool == source_tool:
           imported.append(
             {"id": previous.id, "remote_name": remote_name, "existing": True}
           )
           continue
-        source_tool = discovered_tools[remote_name]
-        tool = self._prepare_tool(
+        payload = (
           {
+            key: value
+            for key, value in previous.model_dump().items()
+            if key not in ("id", "created_at", "updated_at")
+          }
+          if previous
+          else {
             "kind": "mcp",
             "connection_id": connection_id,
             "remote_name": remote_name,
-            "source_tool": source_tool,
             "name": selection["name"],
             "display_name": source_tool.get("title") or remote_name,
             "description": source_tool.get("description") or "",
+          }
+        )
+        payload.update(
+          {
+            "source_tool": source_tool,
             "input_schema": source_tool["inputSchema"],
             "output_schema": source_tool.get("outputSchema"),
-          },
-          library,
-          None,
+          }
         )
-        library.tools.append(tool)
-        imported.append({"id": tool.id, "remote_name": remote_name, "existing": False})
-      raw["tool_library"] = library.model_dump(mode="json")
-      await asyncio.to_thread(self._commit, raw, current_version)
+        try:
+          tool = self._prepare_tool(payload, library, previous)
+        except ToolLibraryError as error:
+          raise ToolLibraryError(
+            error.code, f"{remote_name}: {error}", error.status
+          ) from None
+        if previous:
+          library.tools = [
+            tool if item.id == tool.id else item for item in library.tools
+          ]
+        else:
+          library.tools.append(tool)
+        imported.append(
+          {"id": tool.id, "remote_name": remote_name, "existing": previous is not None}
+        )
+        has_changes = True
+      if has_changes:
+        raw["tool_library"] = library.model_dump(mode="json")
+        await asyncio.to_thread(self._commit, raw, current_version)
       return imported
 
   async def save_mcp_connection(
@@ -292,6 +352,25 @@ class ToolLibrary:
       if tool.id == tool_id:
         return tool, version
     raise ToolLibraryError("not_found", "Tool does not exist", 404)
+
+  async def delete_mcp_connection(self, connection_id: str, version: str) -> None:
+    async with self._lock:
+      raw, library, current_version = await asyncio.to_thread(self._read)
+      if connection_id not in library.mcp_connections:
+        raise ToolLibraryError("not_found", "MCP connection does not exist", 404)
+      if version != current_version:
+        raise ToolLibraryError(
+          "version_conflict", "Configuration changed; reload before deleting", 409
+        )
+      del library.mcp_connections[connection_id]
+      library.tools = [
+        tool
+        for tool in library.tools
+        if tool.kind != "mcp" or tool.connection_id != connection_id
+      ]
+      raw["tool_library"] = library.model_dump(mode="json")
+      # 已开始的测试持有执行快照，删除只影响此后按 ID 发起的调用。
+      await asyncio.to_thread(self._commit, raw, current_version)
 
   @property
   def reserved_names(self) -> tuple[str, ...]:

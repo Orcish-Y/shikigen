@@ -196,6 +196,11 @@ export class BackendSession {
   testMcpConnection(id:string) {
     return this.json<{data:McpObservation}>(`/api/mcp/connections/${encodeURIComponent(id)}/test`,{method:'POST'});
   }
+  async deleteMcpConnection(id:string,version:string):Promise<void> {
+    await this.request(`/api/mcp/connections/${encodeURIComponent(id)}`,{
+      method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({version}),
+    });
+  }
   discoverMcpTools(id:string) {
     return this.json<{data:McpDiscovery}>(`/api/mcp/connections/${encodeURIComponent(id)}/discover`,{method:'POST'});
   }

@@ -20,6 +20,8 @@ MCP 服务页沿用相同的连接目录、48px 操作栏、概览和 7:5 配置
 
 2026-10-20 MCP 接入菜单支持本地 stdio 与远程 Streamable HTTP，共用上述布局，分别按管理 schema 展示进程配置或 URL／headers。用户确认 headers 直接编辑、保存及回填，凭据隐藏机制留待统一设计，见 [远程 MCP 记录](../docs/wayfinder/tools-workflow/mcp-streamable-http.md)。
 
+MCP 重新发现沿用观察栏的卡片布局，展示新增、来源变化、来源未变化与本次未发现；变化项可展开对照旧／新完整来源，勾选应用，未发现项继续保留。所属已入库工具卡提供跳转。连接删除位于详情操作栏，确认弹层展示实际工具清单、数量与未来调用影响；连接脏草稿沿用保存并离开／放弃／继续编辑，见[连接生命周期记录](../docs/wayfinder/tools-workflow/mcp-discovery-lifecycle.md)。
+
 > 工具模块规格发布后补充：用户确定使用 shadcn/ui、rjsf（react-jsonschema-form）和 AI Elements。基础控件与主题采用 shadcn/ui；工具配置表单和测试参数表单由 rjsf 按对应 schema 动态渲染；适用的 AI Elements 组件用于工具输入、输出及状态展示。沿用本文的外壳、布局与颜色规则，具体参数编辑、动态表单值保持和测试行为见[工具页面决议](../docs/wayfinder/tools-workflow/tickets/004-management-ui-lifecycle.resolution.md)。后续已完成基础控件、Reasoning 与 rjsf 依赖准备，见[组件接入记录](component-libraries.md)；工具业务 Form/Tool、主题扫描及校验策略仍由工具专项完成。
 
 > 2026-10-07 状态校正：以下正文保留 2026-10-04 定稿时的设计目标和阶段观察；其中“待实施/待补齐”不代表当前待办。首版 23 张票据现已完成，当前交付与未覆盖范围见 [开发交接](../docs/development-handoff.md)和[原生验收汇总](../docs/wayfinder/frontend-completion/native-acceptance-summary.md)。视觉规则继续适用。

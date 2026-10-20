@@ -1,6 +1,6 @@
 import {useEffect,useImperativeHandle,useRef,useState,type Ref} from 'react';
 import type {RJSFSchema} from '@rjsf/utils';
-import {ArrowClockwise,GearSix,Plus,SidebarSimple,PlugsConnected} from '@phosphor-icons/react';
+import {ArrowClockwise,GearSix,Plus,SidebarSimple,PlugsConnected,Trash} from '@phosphor-icons/react';
 import type {BackendSession} from '../../backend-client';
 import {saveWasRejected} from '../../tool-save-errors';
 import {emptyMcpConnection,editMcpConnection,mcpTransportLabel,type McpConnection,type McpConnectionDraft,type McpTransport,type McpDiscovery,type McpObservation,type McpImportedTool} from '../../mcp-connections';
@@ -29,16 +29,21 @@ export function McpWorkspace({session,onOpenTool,onNavigation,initialConnectionI
   const [notice,setNotice]=useState<string | null>(null);
   const [observation,setObservation]=useState<McpObservation | null>(null);
   const [discovery,setDiscovery]=useState<McpDiscovery | null>(null);
+  const [missingNames,setMissingNames]=useState<string[]>([]);
   const [selected,setSelected]=useState<string[]>([]);
   const [names,setNames]=useState<Record<string,string>>({});
   const [imported,setImported]=useState<McpImportedTool[]>([]);
   const [pendingRead,setPendingRead]=useState<string | null>(null);
   const [unknownSave,setUnknownSave]=useState(false);
+  const [unknownDelete,setUnknownDelete]=useState(false);
+  const [deleteImpact,setDeleteImpact]=useState<{version:string;tools:AnyToolDefinition[]} | null>(null);
   const [leaveAction,setLeaveAction]=useState<(() => void) | null>(null);
+  const leaveAfterSave=useRef(false);
   const sequence=useRef(0);
   const openedInitial=useRef<string | undefined>(undefined);
   const dirty=Boolean(editor && !pendingRead && JSON.stringify(editor.draft) !== JSON.stringify(editor.initial));
-  const locked=Boolean(busy || pendingRead || unknownSave);
+  const locked=Boolean(busy || pendingRead || unknownSave || unknownDelete);
+  const ownedTools=tools.filter(tool => tool.kind === 'mcp' && tool.connection_id === editor?.connection?.id);
   const schema=editor ? schemas[editor.draft.transport] : undefined;
   useEffect(() => {
     if (connections && initialConnectionId && openedInitial.current !== initialConnectionId) {
@@ -50,7 +55,7 @@ export function McpWorkspace({session,onOpenTool,onNavigation,initialConnectionI
     const controller=new AbortController();const request=++sequence.current;
     openedInitial.current=undefined;
     setEditor(null);setConnections(null);setSchemas({});setCreateMenu(false);setError(null);setNotice(null);
-    setObservation(null);setDiscovery(null);setImported([]);setPendingRead(null);setUnknownSave(false);setLeaveAction(null);
+    setObservation(null);setDiscovery(null);setMissingNames([]);setImported([]);setPendingRead(null);setUnknownSave(false);setUnknownDelete(false);setDeleteImpact(null);setLeaveAction(null);leaveAfterSave.current=false;
     if (!session) {setBusy(null);return;}
     setBusy('读取中');
     Promise.all([session.getMcpConnectionSchema('stdio',controller.signal),session.getMcpConnectionSchema('streamable_http',controller.signal),session.listMcpConnections(controller.signal),session.listTools(controller.signal)])
@@ -62,7 +67,7 @@ export function McpWorkspace({session,onOpenTool,onNavigation,initialConnectionI
     return () => {controller.abort();sequence.current++;};
   },[session]);
   function requestLeave(action:() => void) {
-    if (busy || unknownSave) {setNotice('当前操作尚未核实，请完成后再离开。');return;}
+    if (busy || unknownSave || unknownDelete) {setNotice('当前操作尚未核实，请完成后再离开。');return;}
     if (dirty) setLeaveAction(() => action);else action();
   }
   useImperativeHandle(ref,() => ({requestLeave}));
@@ -71,14 +76,16 @@ export function McpWorkspace({session,onOpenTool,onNavigation,initialConnectionI
     const warn=(event:BeforeUnloadEvent) => {event.preventDefault();event.returnValue='';};
     window.addEventListener('beforeunload',warn);return () => window.removeEventListener('beforeunload',warn);
   },[dirty]);
-  function clearResults() {setObservation(null);setDiscovery(null);setSelected([]);setImported([]);}
+  function clearResults() {setObservation(null);setDiscovery(null);setMissingNames([]);setSelected([]);setImported([]);}
+  function finishLeave() {const action=leaveAction;setLeaveAction(null);leaveAfterSave.current=false;action?.();}
   async function readDetails(id:string,request:number) {
     if (!session) return;
-    const saved=await session.getMcpConnection(id);
+    const [saved,library]=await Promise.all([session.getMcpConnection(id),session.listTools()]);
     if (sequence.current !== request) return;
     const draft=editMcpConnection(saved.data);
     setEditor({connection:saved.data,draft,initial:draft,version:saved.version,revision:request});
     setConnections(current => [...(current ?? []).filter(item => item.id !== id),saved.data]);
+    setTools(library.data);setReserved(library.reserved_names);
     setPendingRead(null);setError(null);
   }
   async function open(id:string) {
@@ -99,48 +106,55 @@ export function McpWorkspace({session,onOpenTool,onNavigation,initialConnectionI
       const [list,library]=await Promise.all([session.listMcpConnections(),session.listTools()]);
       if (request !== sequence.current) return;
       setConnections(list.data);setTools(library.data);setReserved(library.reserved_names);
-      setEditor(null);setUnknownSave(false);setPendingRead(null);clearResults();
-      setNotice(unknownSave ? '已放弃草稿并重读；此前保存结果仍不确定，请查看已保存连接。' : null);
+      setEditor(null);setUnknownSave(false);setUnknownDelete(false);setPendingRead(null);clearResults();
+      setNotice(unknownSave || unknownDelete ? `已重读；此前${unknownDelete ? '删除' : '保存'}结果仍不确定，请查看已保存连接。` : null);
+      if (leaveAction) finishLeave();
     } catch (failure) {if (request === sequence.current) setError(`连接列表读取失败：${message(failure)}`);}
     finally {if (request === sequence.current) setBusy(null);}
   }
   async function retryRead() {
     if (!pendingRead) return;
     const request=++sequence.current;setBusy('读取中');
-    try {await readDetails(pendingRead,request);setNotice('连接已保存');}
+    try {
+      await readDetails(pendingRead,request);
+      if (request !== sequence.current) return;
+      setNotice('连接已保存');if (leaveAfterSave.current) finishLeave();
+    }
     catch (failure) {if (request === sequence.current) setError(`连接已保存，详情读取失败：${message(failure)}`);}
     finally {if (request === sequence.current) setBusy(null);}
   }
   async function save(value:Record<string,unknown>) {
     if (!session || !editor || locked) return;
     const request=++sequence.current;setBusy('保存中');setError(null);setNotice(null);
+    const wasExisting=Boolean(editor.connection);
     let id:string;
     try {id=await session.saveMcpConnection(value as unknown as McpConnectionDraft,editor.connection ? {id:editor.connection.id,version:editor.version} : undefined);}
     catch (failure) {
       if (request !== sequence.current) return;
       const rejected=saveWasRejected(failure);
       if (!rejected) setUnknownSave(true);
-      setError(`${rejected ? '保存失败' : '保存结果不确定，请勿重复保存'}：${message(failure)}`);setBusy(null);return;
+      leaveAfterSave.current=false;setError(`${rejected ? '保存失败' : '保存结果不确定，请勿重复保存'}：${message(failure)}`);setBusy(null);return;
     }
     if (request !== sequence.current) return;
-    setPendingRead(id);clearResults();setNotice('连接已保存');
-    try {await readDetails(id,request);}
+    setPendingRead(id);clearResults();setNotice(wasExisting ? '连接已保存，请重新发现核对来源结构；已入库 schema 保持不变。' : '连接已保存');
+    try {await readDetails(id,request);if (request === sequence.current && leaveAfterSave.current) finishLeave();}
     catch (failure) {if (request === sequence.current) setError(`连接已保存，详情读取失败：${message(failure)}。只需重新读取，无需保存。`);}
     finally {if (request === sequence.current) setBusy(null);}
   }
   async function inspect(discover:boolean) {
     if (!session || !editor?.connection || locked || dirty) return;
     const request=++sequence.current;setBusy(discover ? '发现中' : '测试中');setError(null);setNotice(null);
-    if (discover) {setDiscovery(null);setSelected([]);setImported([]);}else setObservation(null);
+    if (discover) {setDiscovery(null);setMissingNames([]);setSelected([]);setImported([]);}else setObservation(null);
     try {
       if (discover) {
         const result=(await session.discoverMcpTools(editor.connection.id)).data;
         if (request !== sequence.current) return;
         setDiscovery(result);
+        if (result.status === 'success') setMissingNames(result.changes?.filter(item => item.status === 'missing').map(item => item.remote_name) ?? []);
         const occupied=[...reserved,...tools.map(tool => tool.name)];const candidates:Record<string,string>={};
         for (const source of result.tools ?? []) {
-          const existing=tools.find(tool => tool.kind === 'mcp' && tool.connection_id === editor.connection!.id && tool.remote_name === source.name);
-          candidates[source.name]=existing?.name ?? suggestToolName(source.name,occupied);
+          const change=result.changes?.find(item => item.remote_name === source.name);
+          candidates[source.name]=change?.local_name ?? suggestToolName(source.name,occupied);
           occupied.push(candidates[source.name]);
         }
         setNames(candidates);
@@ -161,12 +175,41 @@ export function McpWorkspace({session,onOpenTool,onNavigation,initialConnectionI
       setImported(result.data);setDiscovery(null);setSelected([]);setNotice('所选工具已入库');
       setPendingRead(editor.connection.id);
       try {
-        const library=await session.listTools();
-        if (request !== sequence.current) return;
-        setTools(library.data);setReserved(library.reserved_names);
         await readDetails(editor.connection.id,request);
       } catch (failure) {if (request === sequence.current) setError(`工具已入库，重新读取失败：${message(failure)}`);}
     } catch (failure) {if (request === sequence.current) {setDiscovery(null);setError(`入库未核实：${message(failure)}。请重新发现，已入库来源将保留原 ID。`);}}
+    finally {if (request === sequence.current) setBusy(null);}
+  }
+  async function prepareDelete() {
+    if (!session || !editor?.connection || locked) return;
+    const request=++sequence.current;setBusy('核对删除影响');setError(null);
+    try {
+      const library=await session.listTools();
+      if (request !== sequence.current) return;
+      setTools(library.data);setReserved(library.reserved_names);
+      setDeleteImpact({version:library.version,tools:library.data.filter(tool => tool.kind === 'mcp' && tool.connection_id === editor.connection!.id)});
+    } catch (failure) {if (request === sequence.current) setError(`删除影响读取失败：${message(failure)}`);}
+    finally {if (request === sequence.current) setBusy(null);}
+  }
+  async function removeConnection() {
+    if (!session || !editor?.connection || !deleteImpact || locked) return;
+    const id=editor.connection.id,request=++sequence.current;setBusy('删除中');setError(null);setNotice(null);
+    try {await session.deleteMcpConnection(id,deleteImpact.version);}
+    catch (failure) {
+      if (request !== sequence.current) return;
+      if (!saveWasRejected(failure)) {setUnknownDelete(true);setDeleteImpact(null);}
+      setError(`${saveWasRejected(failure) ? '删除失败，请取消后刷新核对影响' : '删除结果不确定，请重读列表核实'}：${message(failure)}`);setBusy(null);return;
+    }
+    if (request !== sequence.current) return;
+    setDeleteImpact(null);setEditor(null);clearResults();
+    setConnections(current => current?.filter(item => item.id !== id) ?? null);
+    setTools(current => current.filter(tool => tool.kind !== 'mcp' || tool.connection_id !== id));
+    setNotice('连接及所属工具已删除');
+    try {
+      const [list,library]=await Promise.all([session.listMcpConnections(),session.listTools()]);
+      if (request !== sequence.current) return;
+      setConnections(list.data);setTools(library.data);setReserved(library.reserved_names);
+    } catch (failure) {if (request === sequence.current) setError(`连接已删除，列表读取失败：${message(failure)}`);}
     finally {if (request === sequence.current) setBusy(null);}
   }
   const canInspect=Boolean(editor?.connection && !dirty && !locked);
@@ -184,18 +227,20 @@ export function McpWorkspace({session,onOpenTool,onNavigation,initialConnectionI
         <ul className="tool-library-list">{connections?.map(connection => <li key={connection.id}><button disabled={locked} aria-current={editor?.connection?.id === connection.id ? 'true' : undefined} onClick={() => requestLeave(() => void open(connection.id))}>
           <span className="tool-list-name"><strong>{connection.display_name}</strong><span className="tool-type-tag">{mcpTransportLabel(connection.transport)}</span></span>
           <span className="tool-list-description">{connection.transport === 'stdio' ? connection.command : connection.url}</span><span className="tool-list-footer">需测试确认连接状态</span></button></li>)}</ul></div>
-      <footer className="tool-library-footer"><div><span>{connections?.length ?? 0} 个连接</span><button className="icon-button" aria-label="刷新连接列表" disabled={!session || Boolean(busy) || Boolean(pendingRead)} onClick={() => unknownSave ? void reload() : requestLeave(() => void reload())}><ArrowClockwise/></button></div></footer>
+      <footer className="tool-library-footer"><div><span>{connections?.length ?? 0} 个连接</span><button className="icon-button" aria-label="刷新连接列表" disabled={!session || Boolean(busy) || Boolean(pendingRead)} onClick={() => unknownSave || unknownDelete ? void reload() : requestLeave(() => void reload())}><ArrowClockwise/></button></div></footer>
     </aside>
     <section className="tool-detail-view" aria-label="MCP 服务详情"><div className="tool-detail-toolbar" role="toolbar" aria-label="MCP 服务操作">
       {onNavigation && <button className="icon-button tool-navigation-toggle" aria-label="打开主导航" onClick={onNavigation}><SidebarSimple/></button>}
       <div className="tool-breadcrumb"><span>MCP 服务</span>{editor && <><span>/</span><strong>{editor.draft.display_name || '新建连接'}</strong></>}</div>
       {editor && <div className="tool-toolbar-actions"><Button size="sm" variant="outline" disabled={!canInspect} onClick={() => void inspect(false)}>测试连接</Button>
         <Button size="sm" variant="outline" disabled={!canInspect} onClick={() => void inspect(true)}>发现工具</Button>
-        <Button size="sm" type="submit" form="mcp-connection" disabled={locked}>保存连接</Button></div>}</div>
+        <Button size="sm" type="submit" form="mcp-connection" disabled={locked}>保存连接</Button>
+        {editor.connection && <Button size="sm" variant="outline" aria-label="删除连接" disabled={locked} onClick={prepareDelete}><Trash size={14}/></Button>}</div>}</div>
       <div className="tool-detail-body"><div className="tool-page-notices">
-        {error && <p role="alert" className="business-notice">{error}</p>}{notice && <p role="status">{notice}</p>}{busy && <p role="status">{busy}…</p>}
-        {pendingRead && <Button disabled={Boolean(busy)} onClick={retryRead}>重新读取连接详情</Button>}
-        {unknownSave && <Button disabled={Boolean(busy)} onClick={reload}>放弃草稿并重读连接列表</Button>}</div>
+        {error && !leaveAction && !deleteImpact && <p role="alert" className="business-notice">{error}</p>}{notice && <p role="status">{notice}</p>}{busy && <p role="status">{busy}…</p>}
+        {pendingRead && !leaveAction && <Button disabled={Boolean(busy)} onClick={retryRead}>重新读取连接详情</Button>}
+        {unknownSave && !leaveAction && <Button disabled={Boolean(busy)} onClick={reload}>放弃草稿并重读连接列表</Button>}</div>
+        {unknownDelete && <Button disabled={Boolean(busy)} onClick={reload}>重新读取连接列表核实删除</Button>}
         {editor && schema ? <><section className="tool-summary-card" aria-label="MCP 连接概览"><span className="tool-summary-icon"><PlugsConnected size={25}/></span>
           <div className="tool-summary-information"><div className="tool-summary-title"><h1>{editor.draft.display_name || `创建 ${mcpTransportLabel(editor.draft.transport)} 连接`}</h1><span className="tool-meta-tag">{mcpTransportLabel(editor.draft.transport)}</span>{dirty && <span className="tool-meta-tag unsaved">未保存修改</span>}</div>
             <p>保存连接后分别测试初始化和发现工具；勾选入库后，在工具页面调用。每次操作使用独立会话。</p>
@@ -218,18 +263,34 @@ export function McpWorkspace({session,onOpenTool,onNavigation,initialConnectionI
               {discovery && <p role="status">{status(discovery,'工具发现')}</p>}{discovery?.error && <p role="alert">{discovery.error.code}：{discovery.error.message}</p>}
               {observation?.server && <details><summary>初始化事实</summary><pre className="mcp-source-json">{JSON.stringify(observation.server,null,2)}</pre></details>}</div></section>
               {discovery?.status === 'success' && <section className="tool-panel" aria-label="发现工具预览"><header className="tool-panel-heading"><h2>发现工具预览</h2><span>{discovery.tools?.length ?? 0} 项</span></header><div className="tool-panel-body mcp-discovery-list">
-                <p className="tool-muted">只将勾选项整批入库。已有来源保留已保存配置，本次添加所选的新工具。</p>
+                <p className="tool-muted">只应用勾选项；来源更新保留 ID 和本地编辑。本次未发现的工具继续保留，不自动删除或禁用。</p>
                 {discovery.tools?.map(source => {
-                  const existing=tools.find(tool => tool.kind === 'mcp' && tool.connection_id === editor.connection?.id && tool.remote_name === source.name);
-                  return <div className="mcp-discovery-item" key={source.name}><label><input type="checkbox" aria-label={`选择 ${source.name}`} checked={selected.includes(source.name)} disabled={locked} onChange={event => setSelected(current => event.target.checked ? [...current,source.name] : current.filter(name => name !== source.name))}/> <code>{source.name}</code>{existing && <span className="tool-meta-tag">已入库</span>}</label>
+                  const change=discovery.changes?.find(item => item.remote_name === source.name);
+                  const existing=Boolean(change?.tool_id);
+                  const unchanged=change?.status === 'unchanged';
+                  return <div className="mcp-discovery-item" key={source.name}><label><input type="checkbox" aria-label={`选择 ${source.name}`} checked={selected.includes(source.name)} disabled={locked || unchanged} onChange={event => setSelected(current => event.target.checked ? [...current,source.name] : current.filter(name => name !== source.name))}/> <code>{source.name}</code><span className="tool-meta-tag">{unchanged ? '来源未变化' : existing ? '来源变化' : '新增'}</span></label>
                     <p>{source.description}</p><label>本地调用名称<Input aria-label={`${source.name} 本地调用名称`} value={names[source.name] ?? ''} disabled={locked || Boolean(existing)} onChange={event => setNames(current => ({...current,[source.name]:event.target.value}))}/></label>
-                    <details><summary>来源结构与附加信息</summary><pre className="mcp-source-json">{JSON.stringify(source,null,2)}</pre></details></div>;
+                    {change?.status === 'changed' && <details><summary>已保存的来源结构</summary><pre className="mcp-source-json">{JSON.stringify(change.previous_source_tool,null,2)}</pre></details>}
+                    <details><summary>本次来源结构与附加信息</summary><pre className="mcp-source-json">{JSON.stringify(source,null,2)}</pre></details></div>;
                 })}
+                {discovery.changes?.filter(item => item.status === 'missing').map(item => <div className="mcp-discovery-item" key={item.remote_name}><code>{item.remote_name}</code> <span className="tool-meta-tag">本次未发现</span><p>保留已保存定义与启用状态，实际调用以远端当次结果为准。</p></div>)}
                 {!discovery.tools?.length && <p>该服务未提供工具。</p>}
-                <Button disabled={!selected.length || locked || dirty} onClick={importTools}>导入所选工具</Button></div></section>}
-              {imported.length > 0 && <section className="tool-panel" aria-label="入库结果"><header className="tool-panel-heading"><h2>入库结果</h2></header><div className="tool-panel-body mcp-discovery-list">{imported.map(tool => <div key={tool.id}><code>{tool.remote_name}</code><span> · {tool.existing ? '已存在，保留原项' : '已创建'}</span><Button variant="outline" disabled={locked} aria-label={`打开工具 ${tool.remote_name}`} onClick={() => requestLeave(() => onOpenTool(tool.id))}>打开工具</Button></div>)}</div></section>}
+                <Button disabled={!selected.length || locked || dirty} onClick={importTools}>{discovery.changes?.some(item => item.status === 'changed') ? '应用所选变更' : '导入所选工具'}</Button></div></section>}
+              {imported.length > 0 && <section className="tool-panel" aria-label="入库结果"><header className="tool-panel-heading"><h2>入库结果</h2></header><div className="tool-panel-body mcp-discovery-list">{imported.map(tool => <div key={tool.id}><code>{tool.remote_name}</code><span> · {tool.existing ? '已更新来源，保留本地配置' : '已创建'}</span><Button variant="outline" disabled={locked} aria-label={`打开工具 ${tool.remote_name}`} onClick={() => requestLeave(() => onOpenTool(tool.id))}>打开工具</Button></div>)}</div></section>}
+              {editor.connection && <section className="tool-panel" aria-label="所属已入库工具"><header className="tool-panel-heading"><h2>所属已入库工具</h2><span>{ownedTools.length} 项</span></header><div className="tool-panel-body mcp-discovery-list">
+                {!ownedTools.length && <p className="tool-muted">暂无已入库工具。</p>}{ownedTools.map(tool => <div key={tool.id}><strong>{tool.display_name}</strong> <code>{tool.name}</code>{tool.kind === 'mcp' && missingNames.includes(tool.remote_name) && <span className="tool-meta-tag">本次未发现</span>}<Button variant="outline" disabled={locked} aria-label={`查看工具 ${tool.display_name}`} onClick={() => requestLeave(() => onOpenTool(tool.id))}>查看工具</Button></div>)}
+              </div></section>}
             </div></div></> : <div className="tool-detail-empty"><h1>接入 MCP 服务</h1><p>保存 stdio 或 Streamable HTTP 连接，发现并选择需要的工具。</p></div>}
       </div></section>
-    {leaveAction && <Overlay title="未保存的连接修改" onClose={() => setLeaveAction(null)}><div className="tool-confirmation"><p>当前连接草稿尚未保存。离开会放弃这些修改。</p><div className="tool-actions"><Button onClick={() => {const action=leaveAction;setLeaveAction(null);action();}}>放弃修改并离开</Button><Button variant="outline" onClick={() => setLeaveAction(null)}>继续编辑</Button></div></div></Overlay>}
+    {leaveAction && <Overlay title={pendingRead ? '连接已保存' : '未保存的连接修改'} onClose={() => {if (!busy) {setLeaveAction(null);leaveAfterSave.current=false;}}}><div className="tool-confirmation"><p>{pendingRead ? '连接已保存，详情尚未读取成功；可以重读或直接离开。' : '当前连接草稿尚未保存。离开会放弃这些修改。'}</p>
+      {error && <p role="alert">{error}</p>}{pendingRead && <Button disabled={Boolean(busy)} onClick={retryRead}>重新读取连接详情</Button>}
+      {unknownSave && <Button disabled={Boolean(busy)} onClick={reload}>放弃草稿并重读连接列表</Button>}
+      <div className="tool-actions"><Button type="submit" form="mcp-connection" disabled={locked} onClick={() => {leaveAfterSave.current=true;}}>保存并离开</Button>
+        <Button disabled={Boolean(busy) || unknownSave} onClick={finishLeave}>{pendingRead ? '已保存，直接离开' : '放弃修改并离开'}</Button><Button variant="outline" disabled={Boolean(busy)} onClick={() => {setLeaveAction(null);leaveAfterSave.current=false;}}>继续编辑</Button></div></div></Overlay>}
+    {deleteImpact && editor?.connection && <Overlay title="删除 MCP 连接" onClose={() => {if (!busy) setDeleteImpact(null);}} fallbackFocus="[aria-label='删除连接']"><div className="tool-confirmation">
+      <p>确认删除「{editor.connection.display_name}」及其 {deleteImpact.tools.length} 个工具？未来引用这些 ID 的调用将失败，已经开始的调用继续执行。</p>
+      {dirty && <p>当前未保存的连接修改也会被放弃。</p>}<ul>{deleteImpact.tools.map(tool => <li key={tool.id}>{tool.display_name} · <code>{tool.name}</code></li>)}</ul>
+      {error && <p role="alert">{error}</p>}<div className="tool-actions"><Button disabled={Boolean(busy)} onClick={removeConnection}>确认删除连接及工具</Button><Button variant="outline" disabled={Boolean(busy)} onClick={() => setDeleteImpact(null)}>取消</Button></div>
+    </div></Overlay>}
   </div>;
 }

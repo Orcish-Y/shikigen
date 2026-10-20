@@ -77,6 +77,8 @@ for line in sys.stdin:
         result["tools"] = tools()[:1]
         result["nextCursor"] = "second"
   elif method == "tools/call":
+    if os.getenv("MCP_CALL_DELAY"):
+      time.sleep(float(os.environ["MCP_CALL_DELAY"]))
     calls += 1
     params = message["params"]
     name = params["name"]
