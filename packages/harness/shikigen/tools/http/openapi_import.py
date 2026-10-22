@@ -1,4 +1,4 @@
-"""OpenAPI 基础导入：只转换明确支持的内联请求，不访问网络。"""
+"""OpenAPI 导入预览和保存：转换已确认的请求子集，不访问网络。"""
 
 import json
 import re
@@ -9,8 +9,15 @@ from datetime import UTC, datetime
 import yaml
 from pydantic import ValidationError
 
-from shikigen.contracts.input_schema import DRAFT2020, SUPPORTED, validate_tool_schema
+from shikigen.contracts.http_requests import SCALAR_TYPES, schema_types
+from shikigen.contracts.input_schema import DRAFT2020
 from shikigen.contracts.tool_definitions import HttpToolDefinition
+from shikigen.tools.http.openapi_auth import authentication_errors, security_options
+from shikigen.tools.http.openapi_schema import (
+  SUPPORTED_DIALECTS,
+  OpenApiSchemas,
+  inline_object,
+)
 
 METHODS = {"get", "post", "put", "patch", "delete", "head", "options"}
 
@@ -49,65 +56,14 @@ def read_document(document: str) -> dict:
     raise OpenApiImportError("文档缺少 paths 对象")
   if not isinstance(data.get("info"), dict):
     raise OpenApiImportError("文档缺少 info 对象")
-  if any(
-    not isinstance(data["info"].get(key), str) for key in ("title", "version")
-  ):
+  if any(not isinstance(data["info"].get(key), str) for key in ("title", "version")):
     raise OpenApiImportError("info/title 和 info/version 必须是字符串")
   return data
 
 
-def inline_object(value, path: str) -> dict:
-  if not isinstance(value, dict):
-    raise ValueError(f"{path}：需要对象结构")
-  if "$ref" in value:
-    raise ValueError(f"{path}/$ref：引用尚未支持，请使用内联定义")
-  return value
-
-
-def convert_schema(value, version: str, path: str) -> dict:
-  source = inline_object(value, path)
-  unsupported = set(source) - (SUPPORTED - {"$ref", "$defs", "definitions", "$schema"})
-  if version.startswith("3.0."):
-    unsupported -= {"nullable"}
-  if unsupported:
-    raise ValueError(f"{path}：尚不支持 {', '.join(sorted(unsupported))}")
-  result = deepcopy(source)
-  nullable = result.pop("nullable", False)
-  if not isinstance(nullable, bool):
-    raise ValueError(f"{path}/nullable：需要布尔值")
-  if nullable:
-    if not isinstance(result.get("type"), str):
-      raise ValueError(f"{path}/nullable：需要明确的单一 type")
-    result["type"] = [result["type"], "null"]
-  if version.startswith("3.0."):
-    for bound in ("minimum", "maximum"):
-      exclusive = "exclusive" + bound.capitalize()
-      if exclusive in result:
-        flag = result.pop(exclusive)
-        if not isinstance(flag, bool) or (flag and bound not in result):
-          raise ValueError(f"{path}/{exclusive}：需要布尔值及对应范围")
-        if flag:
-          result[exclusive] = result.pop(bound)
-  for key in ("properties", "patternProperties"):
-    if key in result:
-      if not isinstance(result[key], dict):
-        raise ValueError(f"{path}/{key}：需要对象")
-      result[key] = {
-        name: convert_schema(child, version, f"{path}/{key}/{name}")
-        for name, child in result[key].items()
-      }
-  for key in ("items", "additionalProperties", "propertyNames"):
-    if key in result and not isinstance(result[key], bool):
-      result[key] = convert_schema(result[key], version, f"{path}/{key}")
-  # 使用相同的输入子集检查，输出预填也仅接受可明确理解的简单结构。
-  validate_tool_schema(
-    {"$schema": DRAFT2020, "type": "object", "properties": {"value": result}},
-    inputs=True,
-  )
-  return result
-
-
-def merged_parameters(path_item: dict, operation: dict) -> list[dict]:
+def merged_parameters(
+  schemas: OpenApiSchemas, path_item: dict, operation: dict
+) -> list[dict]:
   merged = {}
   for label, parent in (("path", path_item), ("operation", operation)):
     parameters = parent.get("parameters", [])
@@ -115,14 +71,17 @@ def merged_parameters(path_item: dict, operation: dict) -> list[dict]:
       raise ValueError(f"{label}/parameters：需要数组")
     seen = set()
     for index, value in enumerate(parameters):
-      parameter = inline_object(value, f"{label}/parameters/{index}")
+      parameter = schemas.object(value, f"{label}/parameters/{index}")
       name, location = parameter.get("name"), parameter.get("in")
       if (
         not isinstance(name, str)
         or not name
         or location not in ("path", "query", "header")
       ):
-        raise ValueError(f"{label}/parameters/{index}：需要原名及受支持的位置")
+        raise ValueError(
+          f"{label}/parameters/{index}：仅支持有原名的 path/header/query 参数；"
+          "cookie 未支持，请选择其他接口"
+        )
       identity = (location, name.lower() if location == "header" else name)
       if identity in seen:
         raise ValueError(f"{label}/parameters：重复或冲突的参数 {location}.{name}")
@@ -131,11 +90,9 @@ def merged_parameters(path_item: dict, operation: dict) -> list[dict]:
   return list(merged.values())
 
 
-def request_definition(document: dict, path_item: dict, operation: dict) -> dict:
-  security = operation.get("security", document.get("security", []))
-  if not isinstance(security, list) or any(item != {} for item in security):
-    raise ValueError("security：当前仅支持无认证接口，请选择显式无认证的接口")
-  version = document["openapi"]
+def request_definition(
+  schemas: OpenApiSchemas, path_item: dict, operation: dict
+) -> dict:
   schema = {
     "$schema": DRAFT2020,
     "type": "object",
@@ -144,15 +101,35 @@ def request_definition(document: dict, path_item: dict, operation: dict) -> dict
   }
   mappings = []
   required_groups = []
-  for parameter in merged_parameters(path_item, operation):
+  for parameter in merged_parameters(schemas, path_item, operation):
     name, location = parameter["name"], parameter["in"]
     label = f"parameters/{location}/{name}"
-    if "content" in parameter or parameter.get("allowReserved", False):
-      raise ValueError(f"{label}：不支持 content 或 allowReserved 序列化")
+    if "content" in parameter:
+      raise ValueError(f"{label}/content：参数 content 未支持；请使用普通 schema 参数")
+    if parameter.get("allowReserved", False) is not False:
+      raise ValueError(
+        f"{label}/allowReserved：特殊保留字符序列化未支持；请选择其他接口"
+      )
+    style = "form" if location == "query" else "simple"
+    if parameter.get("style", style) != style:
+      raise ValueError(f"{label}/style：仅支持 {style}；请改用受支持的序列化")
+    if not isinstance(parameter.get("explode", location == "query"), bool):
+      raise ValueError(f"{label}/explode：需要布尔值；请修正文档")
     required = parameter.get("required", False)
     if not isinstance(required, bool) or (location == "path" and not required):
       raise ValueError(f"{label}/required：路径参数必须显式为 true，其余须为布尔值")
-    node = convert_schema(parameter.get("schema"), version, label + "/schema")
+    node = schemas.convert(parameter.get("schema"), label + "/schema")
+    types = schema_types(node) - {"null"}
+    if location == "query" and types == {"array"}:
+      if not schema_types(node.get("items")) <= SCALAR_TYPES:
+        raise ValueError(
+          f"{label}/schema/items：query 数组仅支持非空标量元素；请选择其他接口"
+        )
+    elif not types or not types <= SCALAR_TYPES:
+      raise ValueError(
+        f"{label}/schema：{location} 仅支持普通标量，query 另支持标量数组；"
+        "请选择其他接口"
+      )
     for annotation in ("description", "example"):
       if annotation in parameter:
         node[annotation] = parameter[annotation]
@@ -180,16 +157,26 @@ def request_definition(document: dict, path_item: dict, operation: dict) -> dict
       }
     )
   if "requestBody" in operation:
-    body = inline_object(operation["requestBody"], "requestBody")
+    body = schemas.object(operation["requestBody"], "requestBody")
     content = inline_object(body.get("content"), "requestBody/content")
+    if "application/json" not in content:
+      raise ValueError(
+        f"requestBody/content：仅支持 application/json，当前为 {', '.join(content)}；"
+        "请选择 JSON 接口"
+      )
     media = inline_object(
       content.get("application/json"), "requestBody/application/json"
     )
     if media.get("encoding"):
       raise ValueError("requestBody/encoding：不支持特殊请求体编码")
-    schema["properties"]["body"] = convert_schema(
-      media.get("schema"), version, "requestBody/schema"
+    schema["properties"]["body"] = schemas.convert(
+      media.get("schema"), "requestBody/content/application~1json/schema"
     )
+    for annotation in ("description",):
+      if annotation in body:
+        schema["properties"]["body"][annotation] = deepcopy(body[annotation])
+    if "example" in media:
+      schema["properties"]["body"]["example"] = deepcopy(media["example"])
     if not isinstance(body.get("required", False), bool):
       raise ValueError("requestBody/required：需要布尔值")
     if body.get("required"):
@@ -199,7 +186,9 @@ def request_definition(document: dict, path_item: dict, operation: dict) -> dict
   return {"input_schema": schema, "parameters": mappings}
 
 
-def output_preview(operation: dict, version: str) -> tuple[dict | None, list[str]]:
+def output_preview(
+  schemas: OpenApiSchemas, operation: dict
+) -> tuple[dict | None, list[str]]:
   try:
     responses = inline_object(operation.get("responses", {}), "responses")
     success = [
@@ -207,18 +196,18 @@ def output_preview(operation: dict, version: str) -> tuple[dict | None, list[str
     ]
     if not success or any(code.upper() == "2XX" for code in responses):
       raise ValueError("成功响应不是单一明确结构")
-    schemas = []
+    success_schemas = []
     for value in success:
-      response = inline_object(value, "responses/success")
+      response = schemas.object(value, "responses/success")
       content = inline_object(response.get("content"), "responses/success/content")
       if set(content) != {"application/json"}:
         raise ValueError("成功响应不是单一 application/json")
       media = inline_object(content["application/json"], "responses/application/json")
-      schemas.append(convert_schema(media.get("schema"), version, "responses/schema"))
-    if any(schema != schemas[0] for schema in schemas[1:]):
+      success_schemas.append(schemas.convert(media.get("schema"), "responses/schema"))
+    if any(schema != success_schemas[0] for schema in success_schemas[1:]):
       raise ValueError("成功响应存在多种不同结构")
-    return {"$schema": DRAFT2020, **schemas[0]}, []
-  except ValueError as error:
+    return {"$schema": DRAFT2020, **success_schemas[0]}, []
+  except (ValueError, TypeError, AttributeError, RecursionError) as error:
     return None, [f"输出结构未声明：{error}；测试仍展示实际响应。"]
 
 
@@ -272,12 +261,29 @@ def preview_openapi(document: str) -> dict:
         "configuration_errors": configuration_errors,
       }
       operations.append(candidate)
+      schemas = OpenApiSchemas(parsed_document)
+      definition["openapi_source"] = {
+        "openapi": parsed_document["openapi"],
+        "info": parsed_document["info"],
+        "path": path,
+        "method": method.upper(),
+        "operation": raw_operation,
+        "path_item": {
+          key: value
+          for key, value in raw_path_item.items()
+          if key in ("summary", "description", "parameters", "servers", "$ref")
+        },
+        "references": schemas.references,
+      }
       try:
         path_item = inline_object(raw_path_item, f"paths/{path}")
         operation = inline_object(raw_operation, candidate["key"])
         if method not in METHODS:
           raise ValueError(f"method：不支持 {method.upper()}")
-        if "jsonSchemaDialect" in parsed_document:
+        if "jsonSchemaDialect" in parsed_document and (
+          not isinstance(parsed_document["jsonSchemaDialect"], str)
+          or parsed_document["jsonSchemaDialect"] not in SUPPORTED_DIALECTS
+        ):
           raise ValueError("jsonSchemaDialect：自定义方言尚未支持")
         name_hint = operation.get("operationId") or f"{method}_{path}"
         if not isinstance(name_hint, str):
@@ -303,34 +309,55 @@ def preview_openapi(document: str) -> dict:
             raise ValueError("servers/url：需要字符串")
         candidate["servers"] = servers
         definition["url"] = (servers[0]["url"].rstrip("/") if servers else "") + path
-        definition.update(request_definition(parsed_document, path_item, operation))
-        output, output_warnings = output_preview(operation, parsed_document["openapi"])
+        definition.update(request_definition(schemas, path_item, operation))
+        if {
+          mapping["name"]
+          for mapping in definition["parameters"]
+          if mapping["location"] == "path"
+        } != set(re.findall(r"\{([^{}]+)\}", path)):
+          raise ValueError(
+            "parameters/path：路径占位符必须对应必填 path 参数；请补齐或修正映射"
+          )
+        output, output_warnings = output_preview(schemas, operation)
         definition["output_schema"] = output
         warnings.extend(output_warnings)
-        definition["openapi_source"] = {
-          "openapi": parsed_document["openapi"],
-          "info": parsed_document.get("info", {}),
-          "path": path,
-          "method": method.upper(),
-          "servers": servers,
-          "path_item": {
-            key: value
-            for key, value in path_item.items()
-            if key in ("summary", "description", "parameters", "servers")
-          },
-          "operation": operation,
-        }
+        definition["openapi_source"]["servers"] = servers
         now = datetime.now(UTC)
-        HttpToolDefinition.model_validate(
-          {
-            **definition,
-            "id": "preview",
-            "name": "preview",
-            "display_name": "preview",
-            "url": "https://openapi.invalid" + path,
-            "created_at": now,
-            "updated_at": now,
-          }
+        preview_definition = {
+          **definition,
+          "id": "preview",
+          "name": "preview",
+          "display_name": "preview",
+          "url": "https://openapi.invalid" + path,
+          "created_at": now,
+          "updated_at": now,
+        }
+        HttpToolDefinition.model_validate(preview_definition)
+        options, security_source = security_options(schemas, operation)
+        definition["openapi_source"].update(security_source)
+        for option in options:
+          if not option["errors"]:
+            try:
+              HttpToolDefinition.model_validate(
+                {**preview_definition, "auth": option["auth"]}
+              )
+            except ValidationError as error:
+              option["errors"].extend(
+                f"security/{option['id']}：{item['msg']}；请修正认证目标或业务参数冲突"
+                for item in error.errors(include_input=False)
+              )
+        candidate["security_options"] = options
+        default_option = next(
+          (option for option in options if not option["errors"]), None
+        )
+        candidate["security_option"] = default_option["id"] if default_option else None
+        if default_option is None:
+          raise ValueError(
+            "；".join(reason for option in options for reason in option["errors"])
+          )
+        definition["auth"] = deepcopy(default_option["auth"])
+        configuration_errors.extend(
+          authentication_errors(default_option, definition["auth"])
         )
         try:
           HttpToolDefinition.validate_url(definition["url"])
@@ -344,14 +371,19 @@ def preview_openapi(document: str) -> dict:
           configuration_errors.append("请补充页面名称")
         if not definition["description"]:
           configuration_errors.append("请补充用途说明")
-      except (ValueError, TypeError, AttributeError) as error:
+      except (ValueError, TypeError, AttributeError, RecursionError) as error:
         if isinstance(error, ValidationError):
           errors.extend(
-            f"{'.'.join(map(str, item['loc']))}：{item['msg']}"
+            f"{candidate['key']} {'/'.join(map(str, item['loc'])) or 'request'}："
+            f"{item['msg']}；请修正此配置或取消选择"
             for item in error.errors(include_input=False)
           )
         else:
-          errors.append(str(error))
+          errors.append(f"{candidate['key']} {error}；请修正文档或取消选择")
+      warnings[:] = [f"{candidate['key']} {reason}" for reason in warnings]
+      configuration_errors[:] = [
+        f"{candidate['key']} {reason}" for reason in configuration_errors
+      ]
   return {
     "openapi": parsed_document["openapi"],
     "title": parsed_document.get("info", {}).get("title", ""),
@@ -377,6 +409,24 @@ def selected_openapi_definitions(document: str, selections: list[dict]) -> list[
     }
     if definition.get("kind") != "http":
       raise OpenApiImportError(f"{key}：只能生成 HTTP 工具")
+    selected_option = item.get("security_option") or candidate["security_option"]
+    option = next(
+      (
+        option
+        for option in candidate["security_options"]
+        if option["id"] == selected_option
+      ),
+      None,
+    )
+    if option is None:
+      raise OpenApiImportError(f"{key} security：请选择来源中的受支持认证方案")
+    auth_errors = authentication_errors(option, definition.get("auth", []))
+    if auth_errors:
+      raise OpenApiImportError(f"{key}：{'；'.join(auth_errors)}")
+    definition["openapi_source"] = {
+      **definition["openapi_source"],
+      "selected_security": selected_option,
+    }
     url = definition.get("url")
     if isinstance(url, str):
       server_variables = {

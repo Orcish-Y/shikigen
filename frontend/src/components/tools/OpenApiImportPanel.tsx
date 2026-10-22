@@ -101,7 +101,7 @@ export function OpenApiImportPanel({session,schema,occupiedNames,onLibrary,onOpe
     const request=++sequence.current;setBusy(true);setError(null);setNotice(null);
     let ids:string[];
     try {
-      const result=await session.importOpenApiTools(parsedDocument,chosen.map(item => ({operation_key:item.key,definition:item.definition})));
+      const result=await session.importOpenApiTools(parsedDocument,chosen.map(item => ({operation_key:item.key,definition:item.definition,security_option:item.security_option})));
       ids=result.data.map(item => item.id);
     } catch (failure) {
       if (request !== sequence.current) return;
@@ -150,7 +150,7 @@ export function OpenApiImportPanel({session,schema,occupiedNames,onLibrary,onOpe
           <section className="tool-panel" aria-label="导入文档"><header className="tool-panel-heading"><FileArrowUp size={16}/><h2>导入文档</h2><span>JSON / YAML</span></header>
             <div className="tool-panel-body"><label className="openapi-upload">上传 JSON／YAML 文件<input aria-label="上传 OpenAPI 文档" type="file" accept=".json,.yaml,.yml,application/json,application/yaml,text/yaml" disabled={locked} onChange={event => {void upload(event.target.files?.[0]);event.target.value='';}}/></label>
               <label htmlFor="openapi-document">OpenAPI 文档</label><Textarea id="openapi-document" value={documentText} disabled={locked} rows={12} placeholder="在这里粘贴 OpenAPI JSON 或 YAML…" onChange={event => {setDocumentText(event.target.value);setError(null);}}/>
-              <p className="tool-muted">上传或粘贴文档内容，当前支持内联普通请求和无认证接口；引用及认证导入暂未支持。</p>
+              <p className="tool-muted">支持文档内部请求引用、嵌套 JSON、可空结构及 Bearer／API Key 认证。超出支持范围的接口会逐项说明原因。</p>
               <Button size="sm" disabled={locked || !documentText.trim()} onClick={() => operations.length ? setReplacePreview(true) : void parse()}>解析文档</Button></div>
           </section>
           <section className="tool-panel" aria-label="接口选择"><header className="tool-panel-heading"><h2>接口选择</h2><span>{selected.length} / {operations.length} 已选</span></header><div className="tool-panel-body">
@@ -173,6 +173,17 @@ export function OpenApiImportPanel({session,schema,occupiedNames,onLibrary,onOpe
               const server=active.servers[Number(event.target.value)];
               if (server) {updateActive({...active.definition,url:server.url.replace(/\/$/,'')+active.path});setRevision(value => value+1);}
             }}><option value="" disabled>选择来源服务器或手工修改请求地址</option>{active.servers.map((server,index) => <option key={index} value={index}>{server.description ? `${server.description} · ` : ''}{server.url}</option>)}</select></label>}
+            {active.security_options && <label>来源认证方案<select aria-label="来源认证方案" disabled={locked || active.errors.length > 0} value={active.security_option ?? ''} onChange={event => {
+              const option=active.security_options?.find(item => item.id === event.target.value);
+              if (!option || option.errors.length) return;
+              setOperations(current => current.map(item => item.key === active.key ? {...item,security_option:option.id,definition:{...item.definition,auth:option.auth.map(binding => {
+                const previous=item.definition.auth?.find(saved => saved.id === binding.id && saved.kind === binding.kind && saved.location === binding.location && saved.name === binding.name);
+                return {...binding,value:previous?.value ?? ''};
+              })}} : item));
+              setRevision(value => value+1);setError(null);
+            }}>{!active.security_option && <option value="">没有受支持的认证方案</option>}{active.security_options.map(option => <option key={option.id} value={option.id} disabled={option.errors.length > 0}>{option.label}{option.errors.length ? '（未支持）' : ''}</option>)}</select></label>}
+            {active.security_options?.flatMap(option => option.errors).map((reason,index) => <p key={`security-${index}`} className="tool-muted">{active.key} {reason}</p>)}
+            {active.errors.length > 0 && <details><summary>OpenAPI 原始来源</summary><pre className="openapi-source">{JSON.stringify(active.definition.openapi_source,null,2)}</pre></details>}
             {active.warnings.map(warning => <p key={warning} className="tool-muted">{warning}</p>)}</div></section>
             <ToolDefinitionForm key={`${active.key}-${revision}`} schema={schema} initial={{...active.definition}} disabled={locked || active.errors.length > 0}
               externalSubmit validateName={validateName} onSave={() => {}} onEdited={updateActive}/>

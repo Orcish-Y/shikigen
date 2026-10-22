@@ -19,6 +19,7 @@ class OpenApiSelection(BaseModel):
   model_config = ConfigDict(extra="forbid", strict=True)
   operation_key: str
   definition: dict
+  security_option: str | None = None
 
 
 class OpenApiImport(OpenApiDocument):

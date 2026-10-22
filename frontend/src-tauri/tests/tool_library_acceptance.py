@@ -76,10 +76,17 @@ class ToolLibraryAcceptance(WindowAcceptance):
 
   def test_openapi_upload_paste_configure_edit_and_execute(self):
     requests = []
+    authentication = []
 
     class Handler(BaseHTTPRequestHandler):
       def do_GET(self):
         requests.append(self.path)
+        authentication.append(
+          {
+            "bearer": self.headers.get("Authorization"),
+            "key": self.headers.get("X-Key"),
+          }
+        )
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
@@ -137,6 +144,30 @@ class ToolLibraryAcceptance(WindowAcceptance):
         }
       },
     }
+    parameter = document["paths"]["/orders"]["get"]["parameters"][0]
+    document["paths"]["/orders"]["get"]["parameters"] = [
+      {"$ref": "#/components/parameters/Message"}
+    ]
+    document["components"] = {
+      "parameters": {"Message": parameter},
+      "securitySchemes": {
+        "OAuth": {"type": "oauth2", "flows": {}},
+        "Token": {"type": "http", "scheme": "bearer"},
+        "Key": {"type": "apiKey", "in": "header", "name": "X-Key"},
+      },
+    }
+    document["security"] = [{"OAuth": []}, {"Token": [], "Key": []}]
+    document["paths"]["/unsupported"] = {
+      "post": {
+        "summary": "外部引用",
+        "security": [],
+        "requestBody": {
+          "content": {
+            "application/json": {"schema": {"$ref": "https://never.invalid/schema"}}
+          }
+        },
+      }
+    }
     file_path = self.artifacts / "openapi.json"
     file_path.write_text(json.dumps(document, ensure_ascii=False), encoding="utf-8")
     root = self.call("DOM.getDocument")["root"]["nodeId"]
@@ -160,7 +191,33 @@ class ToolLibraryAcceptance(WindowAcceptance):
       self.evaluate("document.getElementById('tool-config_name').value"), "list_orders"
     )
     self.assertIn("需要补配置", self.body())
+    self.assertIn("未支持", self.body())
+    self.assertTrue(
+      self.evaluate(
+        "document.querySelector('[aria-label=\"选择 POST /unsupported\"]').disabled"
+      )
+    )
+    self.assertEqual(
+      self.evaluate("document.querySelector('[aria-label=来源认证方案]').value"),
+      "security_1",
+    )
     self.replace("tool-config_url", origin + "/orders")
+    self.assertTrue(
+      self.evaluate(
+        "document.querySelector('.openapi-toolbar button:last-child').disabled"
+      )
+    )
+    self.fill("tool-config_auth-0-secret", "Bearer native-token")
+    self.fill("tool-config_auth-1-secret", "native-key")
+    wait_until(
+      lambda: (
+        not self.evaluate(
+          "document.querySelector('.openapi-toolbar button:last-child').disabled"
+        )
+      )
+    )
+    self.evaluate("document.querySelector('.openapi-source').parentElement.open = true")
+    self.assertIn("#/components/parameters/Message", self.body())
     self.assertEqual(requests, [])
     self.assertEqual(self.client.get(base + "/api/tools").json()["data"], [])
     for width, height in ((1440, 900), (390, 844)):
@@ -184,7 +241,7 @@ class ToolLibraryAcceptance(WindowAcceptance):
       )
       self.evaluate("document.querySelector('.tool-detail-view').scrollTop = 0")
       screenshot = self.call("Page.captureScreenshot", format="png")["data"]
-      (self.artifacts / f"openapi-preview-{width}.png").write_bytes(
+      (self.artifacts / f"openapi-auth-preview-{width}.png").write_bytes(
         base64.b64decode(screenshot)
       )
       if width == 1440:
@@ -202,11 +259,35 @@ class ToolLibraryAcceptance(WindowAcceptance):
         self.assertAlmostEqual(layout["sidebar"], 256, delta=1)
         self.assertAlmostEqual(layout["toolbar"], 48, delta=1)
         self.assertAlmostEqual(layout["ratio"], 7 / 5, delta=0.02)
+      self.evaluate(
+        "document.getElementById('tool-config_auth-1-secret')"
+        ".scrollIntoView({block:'center'})"
+      )
+      self.assertTrue(
+        self.evaluate("""(() => {
+        const field = document.getElementById('tool-config_auth-1-secret');
+        const rect = field.getBoundingClientRect();
+        return field.type === 'password' && rect.width > 0 && rect.left >= 0
+          && rect.right <= innerWidth && rect.top >= 0 && rect.bottom <= innerHeight;
+      })()""")
+      )
+      self.assertFalse(
+        self.evaluate("document.documentElement.scrollWidth > innerWidth")
+      )
+      screenshot = self.call("Page.captureScreenshot", format="png")["data"]
+      (self.artifacts / f"openapi-auth-fields-{width}.png").write_bytes(
+        base64.b64decode(screenshot)
+      )
     self.call("Emulation.clearDeviceMetricsOverride")
     self.click("保存所选工具")
     wait_until(lambda: "可打开详情编辑和测试" in self.body())
     first = self.client.get(base + "/api/tools").json()["data"][0]
     self.assertEqual(first["kind"], "http")
+    self.assertEqual(
+      [binding["value"] for binding in first["auth"]],
+      ["Bearer native-token", "native-key"],
+    )
+    self.assertNotIn("X-Key", json.dumps(first["input_schema"]))
     self.assertEqual(requests, [])
     self.click("编辑工具 订单查询")
     wait_until(lambda: "快速测试调试" in self.body())
@@ -219,6 +300,9 @@ class ToolLibraryAcceptance(WindowAcceptance):
     self.click("执行测试")
     wait_until(lambda: "测试成功" in self.body())
     self.assertEqual(requests, ["/orders?message=hello"])
+    self.assertEqual(
+      authentication, [{"bearer": "Bearer native-token", "key": "native-key"}]
+    )
     self.assertIn("OpenAPI 原始来源", self.body())
     self.evaluate("document.querySelector('[aria-label=选择接入类型]').click()")
     self.click("导入 OpenAPI 文档")

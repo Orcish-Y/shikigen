@@ -16,6 +16,8 @@ MCP 服务支持 stdio 与 Streamable HTTP，重新发现先预览差异、勾�
 
 工具侧栏接入菜单支持上传／粘贴 OpenAPI JSON／YAML，预览、补配置并批量生成普通 HTTP 工具，详见 [OpenAPI 基础导入](../docs/wayfinder/tools-workflow/openapi-basic-import.md)。
 
+内部请求引用、可空结构、认证方案选择和逐接口诊断见 [OpenAPI 兼容与认证](../docs/wayfinder/tools-workflow/openapi-compatibility-auth.md)。
+
 ```bash
 cd frontend
 pnpm install --frozen-lockfile

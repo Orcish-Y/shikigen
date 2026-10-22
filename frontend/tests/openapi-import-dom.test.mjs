@@ -26,6 +26,62 @@ const operation={key:'GET /items',method:'GET',path:'/items',name_hint:'list-ite
   errors:[],warnings:['输出结构未声明'],configuration_errors:['请补充地址']};
 const json=(data,status=200) => new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json'}});
 
+test('认证方案切换、补齐组合密钥后可保存；移除要求会阻止保存，取消问题项可继续',async () => {
+  const authSchema={...schema,properties:{...schema.properties,auth:{type:'array',title:'认证',items:{type:'object'}},openapi_source:{type:'object'}}};
+  const token={id:'auth_1_0',kind:'bearer',location:'headers',name:'Authorization',value:''};
+  const key={id:'auth_1_1',kind:'api_key',location:'query',name:'key',value:''};
+  const secure={...operation,servers:[],configuration_errors:[],security_option:'security_1',
+    security_options:[{id:'security_0',label:'OAuth',auth:[],errors:['security/0：OAuth 未支持，请选择其他方案']},
+      {id:'security_1',label:'Token + Key',auth:[token,key],errors:[]},
+      {id:'security_2',label:'HeaderKey',auth:[{...key,id:'auth_2_0',location:'headers',name:'X-Key'}],errors:[]}],
+    definition:{...definition,url:'https://api.test/items',auth:[token,key],openapi_source:{security:[{Token:[],Key:[]}]}}};
+  const incomplete={...operation,key:'GET /incomplete',path:'/incomplete',name_hint:'incomplete',definition:{...definition,url:'/incomplete'}};
+  const writes=[];
+  const session=new BackendSession('test','http://backend',new AbortController().signal,async (url,init) => {
+    const path=new URL(url).pathname;
+    if (path.endsWith('/schema/http')) return json({data:authSchema});
+    if (path.endsWith('/validate-name')) return json({data:{valid:true}});
+    if (path === '/api/tools') return json({data:[],version:'v1',reserved_names:[]});
+    if (path.endsWith('/openapi/preview')) return json({data:{openapi:'3.1.0',title:'Auth',operations:[secure,incomplete]}});
+    if (path.endsWith('/openapi/imports')) {writes.push(JSON.parse(init.body));return json({detail:{message:'fixture rejection'}},422);}
+    throw new Error(path);
+  });
+  const user=userEvent.setup({document:browser.window.document,delay:null});
+  render(React.createElement(ToolsWorkspace,{session,onView:() => {}}));
+  await waitFor(() => assert.equal(screen.getByRole('button',{name:'选择接入类型'}).disabled,false));
+  await user.click(screen.getByRole('button',{name:'选择接入类型'}));
+  await user.click(screen.getByRole('button',{name:'导入 OpenAPI 文档'}));
+  fireEvent.change(screen.getByLabelText('OpenAPI 文档'),{target:{value:'doc'}});
+  await user.click(screen.getByRole('button',{name:'解析文档'}));
+  await user.click(await screen.findByRole('checkbox',{name:'选择 GET /items'}));
+  const save=() => screen.getByRole('button',{name:'保存所选工具'});
+  assert.equal(save().disabled,true);
+  assert.equal(screen.getByLabelText('来源认证方案').value,'security_1');
+  assert.equal(screen.getByRole('option',{name:/OAuth/}).disabled,true);
+  fireEvent.change(screen.getByLabelText('认证密钥'),{target:{value:'token'}});
+  assert.equal(save().disabled,true);
+  fireEvent.change(screen.getByLabelText('认证密钥 2'),{target:{value:'query-key'}});
+  assert.equal(save().disabled,false);
+  await user.click(screen.getByRole('button',{name:'移除凭据 2'}));
+  assert.equal(save().disabled,true);
+  await user.selectOptions(screen.getByLabelText('来源认证方案'),'security_2');
+  fireEvent.change(screen.getByLabelText('认证密钥'),{target:{value:'header-key'}});
+  assert.equal(save().disabled,false);
+  await user.click(screen.getByRole('checkbox',{name:'选择 GET /incomplete'}));
+  assert.equal(save().disabled,true);
+  await user.click(screen.getByRole('checkbox',{name:'选择 GET /incomplete'}));
+  assert.equal(save().disabled,false);
+  await user.click(screen.getByRole('button',{name:'预览 GET /items'}));
+  assert.equal(screen.getByLabelText('认证密钥').value,'header-key');
+  await user.click(screen.getByText('OpenAPI 原始来源'));
+  assert.match(screen.getByText(/"security":/).textContent,/Token/);
+  await user.click(save());
+  await screen.findByText(/保存失败/);
+  assert.equal(writes[0].tools.length,1);
+  assert.equal(writes[0].tools[0].security_option,'security_2');
+  assert.equal(writes[0].tools[0].definition.auth[0].value,'header-key');
+});
+
 test('粘贴文档、补齐所选接口，保存失败保留草稿，保存后读取失败不重复导入',async () => {
   const writes=[];let failSave=true,failRead=false,tools=[];
   const session=new BackendSession('test','http://backend',new AbortController().signal,async (url,init) => {

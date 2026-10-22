@@ -49,6 +49,8 @@ tools/
   http/
     execution.py           # HTTP 请求执行
     openapi_import.py      # OpenAPI 解析、预览及 HTTP 定义转换
+    openapi_schema.py      # 内部引用及请求 schema 转换
+    openapi_auth.py        # 来源认证方案和绑定完整性
   python/
     execution.py           # Python 工具执行
     worker.py              # Python 子进程入口
