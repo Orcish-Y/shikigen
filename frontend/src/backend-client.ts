@@ -244,15 +244,15 @@ export class BackendSession {
     if (!data || typeof data.id !== 'string' || !data.id) throw new Error('创建响应缺少工具 ID');
     return data.id;
   }
-  startToolTest(id: string, inputs: Record<string, unknown>) {
+  startToolTest(id: string, inputs: Record<string, unknown>, signal?:AbortSignal) {
     return this.json<{data:ToolTest}>(`/api/tools/${encodeURIComponent(id)}/tests`, {
       method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({inputs}),
-    });
+    },signal);
   }
-  startToolDraftTest(definition:ToolDraft, inputs:Record<string,unknown>, toolId?:string) {
+  startToolDraftTest(definition:ToolDraft, inputs:Record<string,unknown>, toolId?:string, signal?:AbortSignal) {
     return this.json<{data:ToolTest}>('/api/tools/tests', {
       method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({definition,inputs,tool_id:toolId}),
-    });
+    },signal);
   }
   async deleteTool(id:string, version:string):Promise<void> {
     await this.request(`/api/tools/${encodeURIComponent(id)}`, {
@@ -261,6 +261,9 @@ export class BackendSession {
   }
   getToolTest(id: string, signal?: AbortSignal) {
     return this.json<{data:ToolTest}>(`/api/tools/tests/${encodeURIComponent(id)}`, {cache:'no-store'}, signal);
+  }
+  cancelToolTest(id:string, signal?:AbortSignal) {
+    return this.json<{data:ToolTest}>(`/api/tools/tests/${encodeURIComponent(id)}/cancel`, {method:'POST'}, signal);
   }
 
   async resolveResource(reference:string, signal?:AbortSignal):Promise<WorkspaceResource> {

@@ -32,14 +32,19 @@ export type AnyToolDefinition = HttpToolDefinition | PythonToolDefinition | McpT
 export type ToolLibraryRead = ToolRead<AnyToolDefinition[]> & {reserved_names: string[]};
 export interface ToolResult {
   status: 'success' | 'error' | 'timeout' | 'cancelled'; data: unknown;
+  data_available: boolean;
   error: {code: string; message: string} | null; duration_ms: number; details: Record<string, unknown>;
 }
 export interface ToolTest {
   test_id: string; tool_id: string | null; created_at: string;
   status: 'running' | ToolResult['status']; result: ToolResult | null;
+  cancel_requested: boolean; inputs:Record<string,unknown>;
 }
 export interface ToolRead<T> {data: T; version: string}
 export interface RecentToolTest {test:ToolTest; inputs:Record<string,unknown>; definition:string}
+export function isToolTestActive(status:ToolTest['status']):boolean {
+  return status === 'running';
+}
 export function toolTestStatus(status:ToolTest['status']):string {
   return {running:'测试中',success:'测试成功',error:'测试失败',timeout:'测试超时',cancelled:'测试已取消'}[status];
 }

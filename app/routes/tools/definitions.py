@@ -265,3 +265,14 @@ async def get_test(test_id: str, request: Request, response: Response):
     return {"data": request.app.state.runtime.tools.get_test(test_id)}
   except (ToolLibraryError, PythonSourceError) as error:
     fail(error)
+
+
+@router.post("/tests/{test_id}/cancel")
+async def cancel_test(test_id: str, request: Request):
+  try:
+    snapshot = await request.app.state.runtime.lifecycle.accept(
+      request.app.state.runtime.tools.cancel_test(test_id)
+    )
+    return {"data": snapshot}
+  except (ToolLibraryError, PythonSourceError) as error:
+    fail(error)

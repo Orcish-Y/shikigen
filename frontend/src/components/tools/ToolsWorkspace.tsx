@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
 import { ArrowLeft, ClockCounterClockwise, Globe, Play, SidebarSimple, FloppyDisk, Trash, ToggleLeft, ToggleRight } from '@phosphor-icons/react';
 import type { RJSFSchema } from '@rjsf/utils';
-import type { BackendSession } from '../../backend-client';
+import { BackendRequestError, type BackendSession } from '../../backend-client';
 import { saveWasRejected } from '../../tool-save-errors';
 import type { ContentView } from '../MessageBody';
 import { Button } from '../ui/button';
@@ -13,7 +13,7 @@ import { ToolInputForm } from './ToolInputForm';
 import { ToolTestResult } from './ToolTestResult';
 import { ToolLibrarySidebar } from './ToolLibrarySidebar';
 import { ToolSummaryCard } from './ToolSummaryCard';
-import { editTool, emptyToolDraft, emptyPythonToolDraft, suggestToolName, toolDraftFingerprint, toolTestStatus, type AnyToolDefinition, type RecentToolTest, type ToolDraft, type ToolTest } from '../../tool-library';
+import { editTool, emptyToolDraft, emptyPythonToolDraft, isToolTestActive, suggestToolName, toolDraftFingerprint, toolTestStatus, type AnyToolDefinition, type RecentToolTest, type ToolDraft, type ToolTest } from '../../tool-library';
 import type { PythonSourceAnalysis } from '../../python-source';
 import {OpenApiImportPanel} from './OpenApiImportPanel';
 
@@ -50,6 +50,12 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
   const [recent, setRecent] = useState<Record<string,RecentToolTest>>({});
   const [testDefinition, setTestDefinition] = useState<string | null>(null);
   const [leaveAction, setLeaveAction] = useState<(() => void) | null>(null);
+  const [testLeaveAction, setTestLeaveAction] = useState<(() => void) | null>(null);
+  const [cancellingTest, setCancellingTest] = useState(false);
+  const [testStartState, setTestStartState] = useState<'pending' | 'uncertain' | null>(null);
+  const testInFlight=useRef(false);
+  const testObservationRevision=useRef(0);
+  const testStartRequest=useRef<AbortController | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const leaveAfterSave = useRef(false);
   const selection = useRef(0);
@@ -67,6 +73,8 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
     setSavedToolAwaitingRead(null);
     setDirty(false);setNotice(null);setInputs({});
     setRecent({});setTestDefinition(null);setLeaveAction(null);setConfirmDelete(false);leaveAfterSave.current=false;
+    setTestLeaveAction(null);setCancellingTest(false);testInFlight.current=false;testObservationRevision.current++;
+    setTestStartState(null);
     if (!session) {setBusy(null); return;}
     const controller = new AbortController();
     setBusy('loading'); setError(null);
@@ -74,25 +82,33 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
       .then(([management, library]) => {setSchema(management.data); setTools(library.data); setReservedNames(library.reserved_names ?? []); setVerified(true);})
       .catch(failure => {if (!controller.signal.aborted) setError(`工具库读取失败：${message(failure)}`);})
       .finally(() => {if (!controller.signal.aborted) setBusy(null);});
-    return () => {controller.abort(); selection.current++;};
+    return () => {controller.abort();testStartRequest.current?.abort();testStartRequest.current=null;selection.current++;testObservationRevision.current++;};
   }, [session]);
 
   function requestLeave(action:() => void) {
     if (importing && importer.current) {importer.current.requestLeave(action);return;}
+    if (testInFlight.current) {setTestLeaveAction(() => action);return;}
     if (busy || saveOutcomeUnknown) {setNotice('当前操作尚未完成，请完成后再离开。');return;}
     if (dirty) {setLeaveAction(() => action);leaveAfterSave.current=false;}
     else action();
   }
   useImperativeHandle(ref, () => ({requestLeave}));
   useEffect(() => {
-    if (!dirty) return;
+    if (testLeaveAction && !test && busy === null) {
+      const action=testLeaveAction;setTestLeaveAction(null);
+      if (dirty) {setLeaveAction(() => action);leaveAfterSave.current=false;}
+      else action();
+    }
+  },[testLeaveAction,test,busy,dirty]);
+  useEffect(() => {
+    if (!dirty && busy !== 'testing') return;
     const warn = (event:BeforeUnloadEvent) => {event.preventDefault();event.returnValue='';};
     window.addEventListener('beforeunload',warn);
     return () => window.removeEventListener('beforeunload',warn);
-  }, [dirty]);
+  }, [dirty,busy]);
   useEffect(() => {
     if (!editor?.tool || !test?.result || !testDefinition) return;
-    setRecent(current => ({...current,[editor.tool!.id]:{test,inputs,definition:testDefinition}}));
+    setRecent(current => ({...current,[editor.tool!.id]:{test,inputs:test.inputs ?? inputs,definition:testDefinition}}));
   }, [test, editor?.tool?.id, testDefinition, inputs]);
 
   function finishLeave() {
@@ -107,19 +123,27 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
     setSaveOutcomeUnknown(false);
   }
 
+  function observeTest(observed:ToolTest) {
+    if (testStartState === 'uncertain') setError(null);
+    setTestStartState(null);
+    setTest(current => current?.test_id === observed.test_id && !isToolTestActive(current.status) ? current : observed);
+    if (!isToolTestActive(observed.status)) {testInFlight.current=false;setBusy(null);}
+  }
+
   useEffect(() => {
-    if (!session || !test || test.status !== 'running') return;
+    if (!session || !test || !isToolTestActive(test.status) || cancellingTest || testStartState === 'pending') return;
     const controller = new AbortController();
+    const observationRevision=testObservationRevision.current;
     const timer = window.setTimeout(() => {
       session.getToolTest(test.test_id, controller.signal).then(response => {
-        if (controller.signal.aborted) return;
-        setTest(response.data); if (response.data.status !== 'running') setBusy(null);
+        if (controller.signal.aborted || observationRevision !== testObservationRevision.current) return;
+        observeTest(response.data);
       }).catch(failure => {
-        if (!controller.signal.aborted) {setError(`测试状态读取失败：${message(failure)}。可重新查询。`);}
+        if (!controller.signal.aborted && observationRevision === testObservationRevision.current) {setError(`测试状态读取失败：${message(failure)}。可重新查询。`);}
       });
     }, 300);
     return () => {window.clearTimeout(timer); controller.abort();};
-  }, [session, test]);
+  }, [session, test,cancellingTest,testStartState]);
 
   async function reload() {
     if (!session) return;
@@ -223,17 +247,33 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
     finally {if (request === selection.current) setBusy(null);}
   }
   async function runTest(value:Record<string, unknown>) {
+    if (testInFlight.current) {setNotice('已有测试正在运行，请先取消或等待完成。');return;}
     if (!session || !editor || !canTest) return;
+    testInFlight.current=true;
+    const observationRevision=++testObservationRevision.current;
     const request = ++selection.current;
-    setBusy('testing'); setError(null); setNotice(null); setInputs(value);setTest(null);
+    const startController=new AbortController();
+    testStartRequest.current=startController;
+    setBusy('testing'); setError(null); setNotice(null); setInputs(value);setTestStartState('pending');
+    setTest(null);
     setTestDefinition(toolDraftFingerprint(editor.draft));
     try {
       const definition={...editor.draft};
       if (definition.kind === 'python' && pythonAnalysis?.source === definition.source && pythonAnalysis.backendValidationRequested)
         delete definition.input_schema;
-      const started = await session.startToolDraftTest(definition, value, editor.tool?.id);
-      if (request === selection.current) {setTest(started.data);if (started.data.status !== 'running') setBusy(null);}
-    } catch (failure) {if (request === selection.current) {setError(`无法开始草稿测试：${message(failure)}`); setBusy(null);}}
+      const started = await session.startToolDraftTest(definition, value, editor.tool?.id, startController.signal);
+      if (request === selection.current && observationRevision === testObservationRevision.current) observeTest(started.data);
+    } catch (failure) {
+      if (request !== selection.current || observationRevision !== testObservationRevision.current) return;
+      if (failure instanceof BackendRequestError && [404,409,422].includes(failure.status)) {
+        setError(`无法开始草稿测试：${message(failure)}`);testInFlight.current=false;setBusy(null);setTest(null);setTestStartState(null);
+      } else {
+        setTestStartState('uncertain');
+        setError(`测试启动结果不确定：${message(failure)}。未取得测试 ID，无法查询或取消；后端执行仍受超时限制，请勿重复开始。`);
+      }
+    } finally {
+      if (testStartRequest.current === startController) testStartRequest.current=null;
+    }
   }
   const suggestName = useCallback((displayName: string) => suggestToolName(displayName,
     [...reservedNames, ...(tools ?? []).map(tool => tool.name)]), [reservedNames, tools]);
@@ -259,13 +299,45 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
     setInputs({});setTestDefinition(null);
   }
   async function retryTest() {
-    if (!session || !test) return;
+    if (!session || !test || cancellingTest) return;
     const request = selection.current;
+    const observationRevision=++testObservationRevision.current;
     try {
       const observed = await session.getToolTest(test.test_id);
-      if (request !== selection.current) return;
-      setTest(observed.data);setError(null);if (observed.data.status !== 'running') setBusy(null);
-    } catch (failure) {if (request === selection.current) setError(message(failure));}
+      if (request !== selection.current || observationRevision !== testObservationRevision.current) return;
+      observeTest(observed.data);setError(null);
+    } catch (failure) {if (request === selection.current && observationRevision === testObservationRevision.current) setError(message(failure));}
+  }
+  async function cancelTest(leave=false) {
+    if (!session || !test || cancellingTest) return;
+    const request=selection.current;
+    const observationRevision=++testObservationRevision.current;
+    setCancellingTest(true);setError(null);
+    try {
+      const cancelled=await session.cancelToolTest(test.test_id);
+      if (request !== selection.current || observationRevision !== testObservationRevision.current) return;
+      observeTest(cancelled.data);
+      if (leave && !isToolTestActive(cancelled.data.status)) {
+        const action=testLeaveAction;setTestLeaveAction(null);
+        if (dirty) {setLeaveAction(() => action);leaveAfterSave.current=false;}
+        else action?.();
+      }
+    } catch (failure) {
+      if (request === selection.current && observationRevision === testObservationRevision.current)
+        setError(`取消尚未确认：${message(failure)}。请重新查询或再次取消，当前草稿已保留。`);
+    } finally {
+      if (request === selection.current && observationRevision === testObservationRevision.current) setCancellingTest(false);
+    }
+  }
+  function stopWaitingForTest(leave=false) {
+    testStartRequest.current?.abort();testStartRequest.current=null;testObservationRevision.current++;
+    testInFlight.current=false;setBusy(null);setTestStartState(null);setError(null);
+    setNotice('已停止等待启动响应，未确认测试是否执行。后端执行仍受超时限制，本次未发送取消请求。');
+    if (leave) {
+      const action=testLeaveAction;setTestLeaveAction(null);
+      if (dirty) {setLeaveAction(() => action);leaveAfterSave.current=false;}
+      else action?.();
+    }
   }
   async function remove() {
     if (!session || !editor?.tool || busy || saveOutcomeUnknown || savedToolAwaitingRead) return;
@@ -292,18 +364,18 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
     setDirty(Boolean(editor && toolDraftFingerprint(draft) !== toolDraftFingerprint(editor.initial)));setNotice(null);
   }
   return <div className="tool-registry">
-    <ToolLibrarySidebar tools={tools} recent={recent} selectedId={editor?.tool?.id} busy={Boolean(busy)} verified={verified}
+    <ToolLibrarySidebar tools={tools} recent={recent} selectedId={editor?.tool?.id} busy={Boolean(busy && busy !== 'testing')} verified={verified}
       onImportOpenApi={() => requestLeave(() => {closeEditor();setImporting(true);})}
       onOpenMcp={onOpenMcp ? () => requestLeave(() => onOpenMcp()) : undefined}
-      connected={Boolean(session)} canCreate={Boolean(session && schema && verified && !busy && !saveOutcomeUnknown && !savedToolAwaitingRead)}
-      onCreate={kind => requestLeave(() => void create(kind))} onOpen={tool => requestLeave(() => void open(tool))} onReload={() => void reload()}/>
+      connected={Boolean(session)} canCreate={Boolean(session && schema && verified && (!busy || busy === 'testing') && !saveOutcomeUnknown && !savedToolAwaitingRead)}
+      onCreate={kind => requestLeave(() => void create(kind))} onOpen={tool => requestLeave(() => void open(tool))} onReload={() => {if (!testInFlight.current) void reload();else setNotice('测试正在运行，请完成或取消后刷新。');}}/>
     {importing && session && httpSchema ? <OpenApiImportPanel ref={importer} session={session} schema={httpSchema}
       occupiedNames={[...reservedNames,...(tools ?? []).map(tool => tool.name)]} onNavigation={onNavigation}
       onLibrary={library => {setTools(library.data);setReservedNames(library.reserved_names);setVerified(true);}}
       onOpen={tool => void open(tool)} onClose={closeEditor}/> : <section className="tool-detail-view" aria-label="工具详情">
       <div className="tool-detail-toolbar" role="toolbar" aria-label="工具操作">
         {onNavigation && <button className="icon-button tool-navigation-toggle" aria-label="打开主导航" onClick={onNavigation}><SidebarSimple/></button>}
-        <div className="tool-breadcrumb"><button aria-label="返回工具列表" disabled={Boolean(busy) || saveOutcomeUnknown}
+        <div className="tool-breadcrumb"><button aria-label="返回工具列表" disabled={Boolean(busy && busy !== 'testing') || saveOutcomeUnknown}
           onClick={() => requestLeave(closeEditor)}>工具与技能</button>{editor && <><span>/</span><span>{editor.draft.kind.toUpperCase()}</span></>}
           {editor && <><span>/</span><strong>{editor.tool?.display_name || '新建工具'}</strong></>}</div>
         {editor && <div className="tool-toolbar-actions"><Button size="sm" variant="outline" disabled={!canTest}
@@ -317,7 +389,7 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
       </div>
       <div className="tool-detail-body">
         <div className="tool-page-notices" aria-label="工具页面提示">
-          {error && !leaveAction && !confirmDelete && <p role="alert" className="business-notice">{error}</p>}
+          {error && !leaveAction && !testLeaveAction && !confirmDelete && <p role="alert" className="business-notice">{error}</p>}
           {notice && <p role="status">{notice}</p>}
           {saveOutcomeUnknown && !leaveAction && <Button size="sm" variant="outline" disabled={Boolean(busy)} onClick={discardDraftAndReload}>放弃草稿并重读工具库</Button>}
           {savedToolAwaitingRead && !leaveAction && <><p>已保存工具 ID：<code>{savedToolAwaitingRead}</code></p><Button size="sm" variant="outline" disabled={Boolean(busy)} onClick={retrySavedToolRead}>重新读取工具详情</Button></>}
@@ -326,7 +398,7 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
         </div>
         {editor ? <>
           <ToolSummaryCard tool={editor.tool} initial={editor.draft} version={editor.version} dirty={dirty}/>
-          {editor.draft.kind === 'mcp' && onOpenMcp && <div className="tool-page-notices"><Button variant="outline" aria-label="打开所属 MCP 服务" disabled={Boolean(busy)} onClick={() => requestLeave(() => onOpenMcp(editor.draft.kind === 'mcp' ? editor.draft.connection_id : undefined))}>打开所属 MCP 服务</Button><p className="tool-muted">来源身份和结构只读；本地名称、说明、启用状态及超时可编辑。</p></div>}
+          {editor.draft.kind === 'mcp' && onOpenMcp && <div className="tool-page-notices"><Button variant="outline" aria-label="打开所属 MCP 服务" disabled={Boolean(busy && busy !== 'testing')} onClick={() => requestLeave(() => onOpenMcp(editor.draft.kind === 'mcp' ? editor.draft.connection_id : undefined))}>打开所属 MCP 服务</Button><p className="tool-muted">来源身份和结构只读；本地名称、说明、启用状态及超时可编辑。</p></div>}
           <div className="tool-editor-layout">
             {schema && <ToolDefinitionForm key={editor.revision} schema={schema} initial={{...editor.initial}} formId="tool-definition" externalSubmit
               onSourceAnalysis={setPythonAnalysis}
@@ -341,9 +413,10 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
                   {!validDraft && <p className="tool-muted">请补齐有效配置后开始测试。</p>}
                   {staleTest && <p role="status" className="tool-muted">修改前的测试结果</p>}
                   <ToolInputForm key={editor.inputKey} draft schema={editor.draft.kind === 'python' ? currentPythonSchema ?? {} : editor.draft.input_schema} disabled={!canTest} onTest={runTest}/>
-                  {busy === 'testing' && <p role="status" className="tool-muted">测试中，正在执行并读取完整结果…</p>}
-                  {busy === 'testing' && error && test && <Button size="sm" variant="outline" onClick={retryTest}>重新查询测试</Button>}
-                  {test?.result ? <ToolTestResult key={test.test_id} result={test.result} inputs={inputs} onView={onView}/>
+                  {busy === 'testing' && <><p role="status" className="tool-muted">{cancellingTest ? '正在取消并清理本次测试资源…' : !test ? testStartState === 'uncertain' ? '尚未确认测试是否启动。停止等待不会取消后端执行。' : '正在启动测试，取得测试 ID 后可查询或取消。停止等待不会取消后端执行。' : '测试中，正在执行并读取完整结果…'}</p>
+                    <Button size="sm" variant="outline" disabled={cancellingTest} onClick={() => test ? void cancelTest() : stopWaitingForTest()}>{test ? '取消测试' : '停止等待'}</Button></>}
+                  {busy === 'testing' && error && test && <Button size="sm" variant="outline" disabled={cancellingTest} onClick={retryTest}>重新查询测试</Button>}
+                  {test?.result ? <ToolTestResult key={test.test_id} result={test.result} inputs={test.inputs ?? inputs} onView={onView}/>
                     : <div className="tool-result-placeholder"><span>响应结果</span><pre>{busy === 'testing' ? '正在等待执行结果…' : '执行测试后，完整结果将在这里显示。'}</pre></div>}
                 </div>
               </section>
@@ -360,6 +433,14 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
           <p>{session ? '从左侧工具库选择已有工具，或接入一个 HTTP／Python 工具。' : '后端尚未连接，工具配置和测试暂不可用。'}</p><span><ArrowLeft size={14}/>工具库位于左侧</span></div>}
       </div>
     </section>}
+    {testLeaveAction && <Overlay title={test ? '测试正在运行' : '测试启动状态待确认'} initialFocus="[data-continue-test]" onClose={() => {if (!cancellingTest) setTestLeaveAction(null);}} fallbackFocus=".tool-breadcrumb button">
+      <div className="tool-confirmation"><p>{test ? '离开前先取消本次测试并等待资源清理；随后仍会检查未保存修改。远端已执行的操作不能撤销。' : '尚未取得测试 ID，无法查询或取消。停止等待后，后端可能仍在执行并受超时限制；随后仍会检查未保存修改。'}</p>
+        {error && <p role="alert">{error}</p>}
+        {cancellingTest && <p role="status">正在取消并清理本次测试资源…</p>}
+        <div className="tool-actions"><Button disabled={cancellingTest} onClick={() => test ? void cancelTest(true) : stopWaitingForTest(true)}>{test ? '取消测试并离开' : '停止等待并离开'}</Button>
+          <Button data-continue-test variant="outline" disabled={cancellingTest} onClick={() => setTestLeaveAction(null)}>继续测试</Button></div>
+      </div>
+    </Overlay>}
     {leaveAction && <Overlay title={savedToolAwaitingRead ? '工具已保存' : saveOutcomeUnknown ? '保存结果不确定' : '未保存的工具修改'} onClose={() => {if (!busy) {setLeaveAction(null);leaveAfterSave.current=false;}}} fallbackFocus=".tool-toolbar-actions button">
       <div className="tool-confirmation"><p>{savedToolAwaitingRead ? '保存已成功，详情尚未读取成功。可以重新读取详情，或直接离开。' : saveOutcomeUnknown ? '没有收到保存响应，无法确认是否生效。放弃草稿并重读工具库后可以继续离开；不会再次保存。' : '当前草稿尚未保存。测试不会保存工具，离开后草稿不再保留。'}</p>
         {error && <p role="alert">{error}</p>}

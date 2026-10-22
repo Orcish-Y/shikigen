@@ -12,6 +12,7 @@ from shikigen.contracts.tool_execution import (
   ToolExecutionContext,
 )
 from shikigen.contracts.tool_results import ToolResult, failure
+from shikigen.tools.redaction import execution_secrets, redact_tool_value
 
 
 class ToolExecutor:
@@ -27,9 +28,14 @@ class ToolExecutor:
   ) -> ToolResult:
     started = time.monotonic()
     context = ToolExecutionContext()
+    execution = None
     try:
-      execution = await load()
-      async with asyncio.timeout(execution.definition.timeout_seconds):
+      # 准备也计入总预算；取得定义后使用其从同一起点计算的截止时间。
+      async with asyncio.timeout(30) as budget:
+        execution = await load()
+        budget.reschedule(started + execution.definition.timeout_seconds)
+        if time.monotonic() >= started + execution.definition.timeout_seconds:
+          raise TimeoutError
         result = await self._dispatch(execution, inputs, manual_test, context)
     except TimeoutError:
       result = ToolResult(
@@ -49,6 +55,12 @@ class ToolExecutor:
         str(error) if hasattr(error, "code") else "Tool execution failed",
       )
     result.duration_ms = (time.monotonic() - started) * 1000
+    if execution is not None:
+      secrets = execution_secrets(execution)
+      if result.data_available:
+        result.data = redact_tool_value(result.data, secrets)
+      result.error = redact_tool_value(result.error, secrets)
+      result.details = redact_tool_value(result.details, secrets)
     return result
 
   async def _dispatch(

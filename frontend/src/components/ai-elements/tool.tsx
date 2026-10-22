@@ -4,19 +4,16 @@
 import { CaretDown, CheckCircle, Clock, Wrench, XCircle } from '@phosphor-icons/react';
 import type { ComponentProps } from 'react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
-import type { ToolTest } from '../../tool-library';
+import { isToolTestActive, toolTestStatus, type ToolTest } from '../../tool-library';
 
 export function Tool(props: ComponentProps<typeof Collapsible>) {
   return <Collapsible className="tool-test-result" {...props}/>;
 }
-const labels: Record<ToolTest['status'], string> = {
-  running:'测试中', success:'测试成功', error:'测试失败', timeout:'测试超时', cancelled:'测试已取消',
-};
 export function ToolHeader({status}: {status: ToolTest['status']}) {
-  const Icon = status === 'running' ? Clock : status === 'success' ? CheckCircle : XCircle;
+  const Icon = isToolTestActive(status) ? Clock : status === 'success' ? CheckCircle : XCircle;
   return <CollapsibleTrigger className="tool-test-heading">
     <Wrench size={16}/><span>工具测试结果</span>
-    <span className={`tool-test-status ${status}`}><Icon size={16}/>{labels[status]}</span><CaretDown size={16}/>
+    <span className={`tool-test-status ${status}`}><Icon size={16}/>{toolTestStatus(status)}</span><CaretDown size={16}/>
   </CollapsibleTrigger>;
 }
 export function ToolContent(props: ComponentProps<typeof CollapsibleContent>) {

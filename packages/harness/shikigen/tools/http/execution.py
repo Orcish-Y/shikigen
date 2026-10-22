@@ -4,7 +4,6 @@ import json
 from urllib.parse import quote
 
 import httpx
-from pydantic import JsonValue
 
 from shikigen.contracts.http_requests import check_header
 from shikigen.contracts.tool_definitions import HttpToolDefinition, ToolDefinition
@@ -27,12 +26,14 @@ class HttpAdapter:
     context: ToolExecutionContext,
   ) -> ToolResult:
     try:
-      return await self._execute_request(execution.definition, inputs)
+      return await self._execute_request(execution.definition, inputs, context)
     except httpx.HTTPError:
-      return failure("transport", "HTTP request or response reading failed")
+      return failure(
+        "transport", "HTTP request or response reading failed", details=context.details
+      )
 
   async def _execute_request(
-    self, definition: ToolDefinition, inputs: dict
+    self, definition: ToolDefinition, inputs: dict, context: ToolExecutionContext
   ) -> ToolResult:
     if not isinstance(definition, HttpToolDefinition):
       return failure("configuration", "Expected an HTTP tool definition")
@@ -119,11 +120,12 @@ class HttpAdapter:
         definition.method, request_url, headers=headers, content=content
       ) as response:
         mime = response.headers.get("content-type", "").split(";")[0].strip().lower()
-        details: dict[str, JsonValue] = {
-          "status_code": response.status_code,
-          "content_type": mime,
-          "headers": dict(response.headers),
-        }
+        details = context.details
+        details.update(
+          status_code=response.status_code,
+          content_type=mime,
+          headers=dict(response.headers),
+        )
         chunks = bytearray()
         async for chunk in response.aiter_bytes():
           if len(chunks) + len(chunk) > OUTPUT_LIMIT:

@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, JsonValue
+from pydantic import BaseModel, ConfigDict, JsonValue, computed_field
 
 
 class ToolResult(BaseModel):
@@ -13,6 +13,12 @@ class ToolResult(BaseModel):
   error: dict[str, JsonValue] | None = None
   duration_ms: float = 0
   details: dict[str, JsonValue] = {}
+
+  @computed_field
+  @property
+  def data_available(self) -> bool:
+    """显式返回的 null 也是数据；默认占位 null 不代表取得响应。"""
+    return "data" in self.model_fields_set
 
 
 def failure(code: str, message: str, **kwargs) -> ToolResult:

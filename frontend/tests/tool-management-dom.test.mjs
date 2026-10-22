@@ -502,6 +502,203 @@ function toolSession(fetcher, id='tool-session') {
 }
 const response = data => new Response(JSON.stringify(data), {headers:{'Content-Type':'application/json'}});
 
+test('运行中锁定草稿，先取消测试再选择保存或放弃，继续测试保留现场', async () => {
+  const user=userEvent.setup({document:browser.window.document,delay:null});
+  const tool={...initial,kind:'http',method:'GET',id:'blocking',display_name:'阻塞工具',name:'blocking',description:'',url:'http://localhost/',
+    created_at:'2026-10-22T00:00:00Z',updated_at:'2026-10-22T00:00:00Z'};
+  let observed={test_id:'blocked-test',tool_id:tool.id,status:'running',created_at:tool.created_at,result:null};
+  let starts=0,cancels=0;
+  const session=toolSession(async (url,init) => {
+    if (url.endsWith('/schema/http')) return response({data:schema});
+    if (url.includes('/validate-name?')) return response({data:{valid:true}});
+    if (url.endsWith('/api/tools/tests')) {starts++;return response({data:observed});}
+    if (url.endsWith('/cancel')) {
+      cancels++;
+      observed={...observed,status:'cancelled',result:{status:'cancelled',data:null,data_available:false,
+        error:{code:'cancelled',message:'Tool test cancelled'},duration_ms:42,details:{cleanup:true}},inputs:{}};
+      return response({data:observed});
+    }
+    if (url.includes('/tests/')) return response({data:observed});
+    return response({data:url.endsWith('/api/tools') ? [tool] : tool,version:'v1'});
+  });
+  render(React.createElement(ToolsWorkspace,{session,onView:() => {}}));
+  await user.click(await screen.findByRole('button',{name:/阻塞工具/}));
+  await user.type(screen.getByLabelText(/页面名称/),'修改');
+  await user.click(screen.getByRole('button',{name:'测试当前草稿'}));
+  assert.equal(screen.getByLabelText(/页面名称/).disabled,true);
+  assert.equal(screen.getByRole('button',{name:'保存工具'}).disabled,true);
+  assert.equal(screen.getByRole('button',{name:'测试当前草稿'}).disabled,true);
+  assert.equal(starts,1);
+  await user.click(screen.getByRole('button',{name:'返回工具列表'}));
+  await screen.findByRole('dialog',{name:'测试正在运行'});
+  await user.click(screen.getByRole('button',{name:'继续测试'}));
+  assert.equal(cancels,0);
+  assert.equal(screen.getByLabelText(/页面名称/).value,'阻塞工具修改');
+  await user.click(screen.getByRole('button',{name:'返回工具列表'}));
+  await user.click(screen.getByRole('button',{name:'取消测试并离开'}));
+  await screen.findByRole('dialog',{name:'未保存的工具修改'});
+  assert.equal(cancels,1);
+  assert.equal(screen.getByLabelText(/页面名称/).value,'阻塞工具修改');
+  await user.click(screen.getByRole('button',{name:'继续编辑'}));
+  assert.equal(screen.getByLabelText(/页面名称/).disabled,false);
+  assert.equal(screen.getByLabelText(/页面名称/).value,'阻塞工具修改');
+  assert.ok(screen.getByText('未取得返回数据'));
+  await user.type(screen.getByLabelText(/页面名称/),'新版本');
+  assert.ok(screen.getAllByText('修改前的测试结果').length);
+  await user.click(screen.getByRole('button',{name:'返回工具列表'}));
+  await user.click(screen.getByRole('button',{name:'放弃修改'}));
+  assert.equal(screen.queryByLabelText(/页面名称/),null);
+});
+
+test('取消结果不会被迟到查询覆盖，取消失败保留测试并可重试，宿主切换隔离迟到取消', async () => {
+  const user=userEvent.setup({document:browser.window.document,delay:null});
+  const tool={...initial,kind:'http',method:'GET',id:'racing',display_name:'竞态工具',name:'racing',description:'',url:'http://localhost/',
+    created_at:'2026-10-22T00:00:00Z',updated_at:'2026-10-22T00:00:00Z'};
+  const running={test_id:'racing-test',tool_id:tool.id,status:'running',created_at:tool.created_at,result:null};
+  const cancelled={...running,status:'cancelled',result:{status:'cancelled',data:null,data_available:false,error:{code:'cancelled',message:'cancelled'},duration_ms:10,details:{}}};
+  let resolveQuery,resolveCancel,cancels=0;
+  const session=toolSession(async (url,init) => {
+    if (url.endsWith('/schema/http')) return response({data:schema});
+    if (url.includes('/validate-name?')) return response({data:{valid:true}});
+    if (url.endsWith('/api/tools/tests')) return response({data:running});
+    if (url.endsWith('/cancel')) {
+      if (++cancels === 1) throw new TypeError('connection lost');
+      if (cancels === 2) return response({data:cancelled});
+      return new Promise(resolve => {resolveCancel=resolve;});
+    }
+    if (url.includes('/tests/')) return new Promise(resolve => {resolveQuery=resolve;});
+    return response({data:url.endsWith('/api/tools') ? [tool] : tool,version:'v1'});
+  },'old-test-host');
+  const workspace=render(React.createElement(ToolsWorkspace,{session,onView:() => {}}));
+  await user.click(await screen.findByRole('button',{name:/竞态工具/}));
+  await user.click(screen.getByRole('button',{name:'测试当前草稿'}));
+  await waitFor(() => assert.ok(resolveQuery));
+  const lateQuery=resolveQuery;
+  await user.click(screen.getByRole('button',{name:'取消测试'}));
+  await screen.findByText(/取消尚未确认/);
+  assert.equal(screen.getByLabelText(/页面名称/).disabled,true);
+  await user.click(screen.getByRole('button',{name:'取消测试'}));
+  await screen.findByText('未取得返回数据');
+  await act(async () => lateQuery(response({data:running})));
+  assert.ok(screen.getAllByText('测试已取消').length);
+  assert.equal(screen.getByLabelText(/页面名称/).disabled,false);
+  await user.click(screen.getByRole('button',{name:'测试当前草稿'}));
+  await user.click(screen.getByRole('button',{name:'取消测试'}));
+  await waitFor(() => assert.ok(resolveCancel));
+  const newSession=toolSession(async url => response(url.endsWith('/schema/http') ? {data:schema} : {data:[],version:'new'}),'new-test-host');
+  workspace.rerender(React.createElement(ToolsWorkspace,{session:newSession,onView:() => {}}));
+  await screen.findByText(/工具库为空/);
+  await act(async () => resolveCancel(response({data:cancelled})));
+  assert.equal(screen.queryByText('未取得返回数据'),null);
+  assert.equal(screen.queryByRole('alert'),null);
+});
+
+test('四种终态各自展示，未取得响应与真实 null 不混淆，Python 完整详情可以展开', async () => {
+  const user=userEvent.setup({document:browser.window.document,delay:null});
+  for (const [status,label] of [['success','测试成功'],['error','测试失败'],['timeout','测试超时'],['cancelled','测试已取消']]) {
+    const views=[];
+    const result={status,data:null,data_available:status === 'success',error:status === 'success' ? null : {code:status,message:status},duration_ms:12,
+      details:{stdout:'debug',stderr:'',exit_code:0,stdout_truncated:true,stderr_truncated:false,extra:{complete:[false,0,'']}}};
+    const rendered=render(React.createElement(ToolTestResult,{result,inputs:{token:'[REDACTED]'},onView:view => views.push(view)}));
+    assert.ok(screen.getByText(label));
+    if (status === 'success') assert.equal(screen.getByLabelText('工具返回 data').textContent,'null');
+    else {assert.ok(screen.getByText('未取得返回数据'));assert.equal(screen.queryByLabelText('工具返回 data'),null);}
+    await user.click(screen.getByText('完整执行详情'));
+    assert.match(document.body.textContent,/complete/);
+    await user.click(screen.getByRole('button',{name:'查看完整结果'}));
+    assert.deepEqual(JSON.parse(views[0].text),result);
+    await user.click(screen.getByRole('button',{name:'复制完整结果'}));
+    assert.deepEqual(JSON.parse(await navigator.clipboard.readText()),result);
+    rendered.unmount();
+  }
+});
+
+test('单次开始响应丢失显示结果不确定，不重试或伪造取消，停止等待后仍处理草稿', async () => {
+  const user=userEvent.setup({document:browser.window.document,delay:null});
+  const tool={...initial,kind:'http',method:'GET',id:'uncertain-test',display_name:'失联测试',name:'uncertain_test',description:'',url:'http://localhost/',
+    created_at:'2026-10-22T00:00:00Z',updated_at:'2026-10-22T00:00:00Z'};
+  let starts=0,queries=0,cancels=0;
+  const requests=[];
+  const session=toolSession(async (url,init) => {
+    requests.push(url);
+    if (url.endsWith('/schema/http')) return response({data:schema});
+    if (url.includes('/validate-name?')) return response({data:{valid:true}});
+    if (url.endsWith('/api/tools/tests')) {
+      starts++;
+      assert.equal(Object.hasOwn(JSON.parse(init.body),'test_id'),false);
+      throw new TypeError('lost start response');
+    }
+    if (url.endsWith('/cancel')) {cancels++;throw new Error('unknown identity');}
+    if (url.includes('/tests/')) {queries++;throw new Error('unknown identity');}
+    return response({data:url.endsWith('/api/tools') ? [tool] : tool,version:'v1'});
+  });
+  render(React.createElement(ToolsWorkspace,{session,onView:() => {}}));
+  await user.click(await screen.findByRole('button',{name:/失联测试/}));
+  await user.type(screen.getByLabelText(/页面名称/),'修改');
+  await user.click(screen.getByRole('button',{name:'测试当前草稿'}));
+  await screen.findByText(/测试启动结果不确定/);
+  assert.ok(screen.getByText(/未取得测试 ID，无法查询或取消/));
+  assert.equal(screen.getByLabelText(/页面名称/).disabled,true);
+  assert.equal(screen.getByRole('button',{name:'测试当前草稿'}).disabled,true);
+  assert.equal(screen.queryByRole('button',{name:'取消测试'}),null);
+  assert.equal(screen.queryByRole('button',{name:'重新查询测试'}),null);
+  await user.click(screen.getByRole('button',{name:'测试当前草稿'}));
+  assert.equal(starts,1);
+  await user.click(screen.getByRole('button',{name:'返回工具列表'}));
+  await screen.findByRole('dialog',{name:'测试启动状态待确认'});
+  await user.click(screen.getByRole('button',{name:'继续测试'}));
+  assert.equal(screen.getByLabelText(/页面名称/).value,'失联测试修改');
+  await user.click(screen.getByRole('button',{name:'返回工具列表'}));
+  await user.click(screen.getByRole('button',{name:'停止等待并离开'}));
+  await screen.findByRole('dialog',{name:'未保存的工具修改'});
+  await user.click(screen.getByRole('button',{name:'继续编辑'}));
+  assert.equal(screen.getByLabelText(/页面名称/).disabled,false);
+  assert.equal(screen.getByLabelText(/页面名称/).value,'失联测试修改');
+  assert.ok(screen.getByText(/本次未发送取消请求/));
+  assert.equal(screen.queryByText('测试已取消'),null);
+  assert.equal(starts,1);assert.equal(queries,0);assert.equal(cancels,0);
+  assert.equal(requests.some(url => url.includes('/reservations')),false);
+});
+
+test('停止等待不会声明测试已取消，迟到启动响应不恢复测试，明确拒绝可修正后重试', async () => {
+  const user=userEvent.setup({document:browser.window.document,delay:null});
+  const tool={...initial,kind:'http',method:'GET',id:'starting',display_name:'启动工具',name:'starting',description:'',url:'http://localhost/',
+    created_at:'2026-10-22T00:00:00Z',updated_at:'2026-10-22T00:00:00Z'};
+  let resolveStart,startSignal,starts=0,queries=0,cancels=0;
+  const session=toolSession(async (url,init) => {
+    if (url.endsWith('/schema/http')) return response({data:schema});
+    if (url.includes('/validate-name?')) return response({data:{valid:true}});
+    if (url.endsWith('/api/tools/tests')) {
+      starts++;
+      assert.equal(Object.hasOwn(JSON.parse(init.body),'test_id'),false);
+      if (starts === 1) {startSignal=init.signal;return new Promise(resolve => {resolveStart=resolve;});}
+      return new Response(JSON.stringify({detail:{code:'definition_invalid',message:'invalid definition'}}),{status:422});
+    }
+    if (url.endsWith('/cancel')) {cancels++;throw new Error('unknown identity');}
+    if (url.includes('/tests/')) {queries++;throw new Error('must not observe abandoned start');}
+    return response({data:url.endsWith('/api/tools') ? [tool] : tool,version:'v1'});
+  });
+  render(React.createElement(ToolsWorkspace,{session,onView:() => {}}));
+  await user.click(await screen.findByRole('button',{name:/启动工具/}));
+  await user.type(screen.getByLabelText(/页面名称/),'修改');
+  await user.click(screen.getByRole('button',{name:'测试当前草稿'}));
+  await waitFor(() => assert.ok(resolveStart));
+  assert.ok(screen.getByText(/正在启动测试，取得测试 ID 后可查询或取消/));
+  await user.click(screen.getByRole('button',{name:'停止等待'}));
+  assert.equal(startSignal.aborted,true);
+  await act(async () => resolveStart(response({data:{test_id:'server-generated',tool_id:tool.id,status:'running',
+    created_at:tool.created_at,result:null,cancel_requested:false,inputs:{}}})));
+  assert.equal(starts,1);assert.equal(queries,0);assert.equal(cancels,0);
+  assert.equal(screen.queryByText('测试已取消'),null);
+  assert.equal(screen.getByLabelText(/页面名称/).disabled,false);
+  assert.equal(screen.getByLabelText(/页面名称/).value,'启动工具修改');
+  await user.click(screen.getByRole('button',{name:'测试当前草稿'}));
+  await screen.findByText(/无法开始草稿测试/);
+  assert.equal(screen.getByRole('button',{name:'测试当前草稿'}).disabled,false);
+  assert.equal(screen.getByLabelText(/页面名称/).disabled,false);
+  assert.equal(starts,2);assert.equal(queries,0);assert.equal(cancels,0);
+});
+
 test('Python 工作区更新测试表单并提交最终 schema，保存与重读失败状态分别保留', async () => {
   const user=userEvent.setup({document:browser.window.document,delay:null});
   const source='def main(quantity: int, price: float = 2.5):\n    return quantity * price\n';

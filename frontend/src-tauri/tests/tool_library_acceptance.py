@@ -10,7 +10,7 @@ from http.server import (
   SimpleHTTPRequestHandler,
   ThreadingHTTPServer,
 )
-from threading import Thread
+from threading import Event, Thread
 
 from client_acceptance import ClientAcceptance
 from window_acceptance import REPO, WindowAcceptance, wait_until
@@ -73,6 +73,229 @@ class ToolLibraryAcceptance(WindowAcceptance):
     else:
       self.evaluate(f"document.getElementById({json.dumps(field)}).select()")
     self.fill(field, value)
+
+  def test_test_cancellation_draft_leave_states_and_responsive_layout(self):
+    started, release = Event(), Event()
+    requests = []
+
+    class Handler(BaseHTTPRequestHandler):
+      def do_GET(self):
+        requests.append(self.path)
+        body = b"null" if self.path == "/null" else b"false"
+        self.send_response(500 if self.path == "/error" else 200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header(
+          "Content-Length", "100" if self.path == "/block" else str(len(body))
+        )
+        self.end_headers()
+        if self.path == "/block":
+          started.set()
+          release.wait(30)
+        else:
+          self.wfile.write(body)
+
+      def log_message(self, *args):
+        pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    Thread(target=server.serve_forever, daemon=True).start()
+    self.addCleanup(server.server_close)
+    self.addCleanup(server.shutdown)
+    self.addCleanup(release.set)
+    origin = f"http://127.0.0.1:{server.server_port}"
+    self.launch()
+    self.connect()
+    base = self.state("ready")["base_url"]
+    created = self.client.post(
+      base + "/api/tools",
+      json={
+        "kind": "http",
+        "display_name": "生命周期工具",
+        "name": "lifecycle",
+        "url": origin + "/block",
+      },
+    )
+    self.assertEqual(created.status_code, 201, created.text)
+    tool_id = created.json()["data"]["id"]
+    self.call("Page.enable")
+    self.call(
+      "Page.addScriptToEvaluateOnNewDocument",
+      source="""(() => {
+      const fetchOriginal=window.fetch.bind(window);
+      window.__testStartRequests=0;
+      window.fetch=async (input,init) => {
+        if (String(input).includes('/api/tools/tests/'))
+          window.__testObservationRequests=(window.__testObservationRequests ?? 0)+1;
+        const response=await fetchOriginal(input,init);
+        if (init?.method === 'POST'
+          && String(input).endsWith('/api/tools/tests') && response.status === 202) {
+          window.__testStartRequests++;
+          window.__lastTestStart={requested:JSON.parse(init.body),
+            received:(await response.clone().json()).data.test_id};
+          if (window.__dropNextTestStart) {
+            window.__dropNextTestStart=false;
+            throw new TypeError('acceptance: lost start response');
+          }
+        }
+        return response;
+      };
+    })()""",
+    )
+    self.call("Page.reload")
+    wait_until(lambda: "新建会话开始对话" in self.body())
+    self.evaluate("document.querySelector('[aria-label=工具]').click()")
+    wait_until(lambda: "生命周期工具" in self.body())
+    self.evaluate("document.querySelector('.tool-library-list button').click()")
+    wait_until(lambda: "执行测试" in self.body())
+    self.replace("tool-config_display_name", "生命周期工具修改")
+    self.click("执行测试")
+    self.assertTrue(started.wait(5))
+    wait_until(lambda: self.evaluate("Boolean(window.__lastTestStart)"))
+    identity = self.evaluate("window.__lastTestStart")
+    self.assertNotIn("test_id", identity["requested"])
+    self.assertTrue(identity["received"])
+    wait_until(lambda: "取消测试" in self.body())
+    self.assertTrue(
+      self.evaluate("document.getElementById('tool-config_display_name').disabled")
+    )
+    self.assertTrue(
+      self.evaluate("document.querySelector('[aria-label=\"测试当前草稿\"]').disabled")
+    )
+    self.assertTrue(
+      self.evaluate("document.querySelector('button[form=tool-definition]').disabled")
+    )
+    for width, height in ((1440, 900), (390, 844)):
+      self.call(
+        "Emulation.setDeviceMetricsOverride",
+        width=width,
+        height=height,
+        deviceScaleFactor=1,
+        mobile=False,
+      )
+      wait_until(lambda width=width: self.evaluate("window.innerWidth") == width)
+      self.evaluate(
+        "[...document.querySelectorAll('button')]"
+        ".find(button => button.textContent === '取消测试')"
+        ".scrollIntoView({block:'center'})"
+      )
+      self.assertFalse(
+        self.evaluate("document.documentElement.scrollWidth > window.innerWidth")
+      )
+      bounds = self.evaluate("""(() => {
+        const button=[...document.querySelectorAll('button')]
+          .find(button => button.textContent === '取消测试');
+        const r=button.getBoundingClientRect();
+        return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,
+          disabled:button.disabled};
+      })()""")
+      self.assertFalse(bounds["disabled"])
+      self.assertGreaterEqual(bounds["left"], 0)
+      self.assertLessEqual(bounds["right"], width)
+      self.assertGreaterEqual(bounds["top"], 0)
+      self.assertLessEqual(bounds["bottom"], height)
+      screenshot = self.call("Page.captureScreenshot", format="png")["data"]
+      (self.artifacts / f"test-running-{width}.png").write_bytes(
+        base64.b64decode(screenshot)
+      )
+    self.evaluate("document.querySelector('[aria-label=\"返回工具列表\"]').click()")
+    wait_until(lambda: "测试正在运行" in self.body())
+    self.click("继续测试")
+    self.assertEqual(len(requests), 1)
+    self.evaluate("document.querySelector('[aria-label=\"返回工具列表\"]').click()")
+    self.click("取消测试并离开")
+    wait_until(lambda: "未保存的工具修改" in self.body())
+    self.assertIn(
+      "生命周期工具修改",
+      self.evaluate("document.getElementById('tool-config_display_name').value"),
+    )
+    screenshot = self.call("Page.captureScreenshot", format="png")["data"]
+    (self.artifacts / "test-cancelled-unsaved-390.png").write_bytes(
+      base64.b64decode(screenshot)
+    )
+    self.click("继续编辑")
+    wait_until(
+      lambda: not self.evaluate("Boolean(document.querySelector('dialog[open]'))")
+    )
+    self.assertIn("测试已取消", self.body())
+    self.assertIn("未取得返回数据", self.body())
+    self.assertFalse(
+      self.evaluate("document.getElementById('tool-config_display_name').disabled")
+    )
+    self.evaluate("document.querySelector('[aria-label=\"返回工具列表\"]').click()")
+    self.click("保存并离开")
+    wait_until(
+      lambda: (
+        not self.evaluate(
+          "Boolean(document.getElementById('tool-config_display_name'))"
+        )
+      )
+    )
+    saved = self.client.get(base + f"/api/tools/{tool_id}").json()["data"]
+    self.assertEqual(saved["display_name"], "生命周期工具修改")
+    self.evaluate("document.querySelector('.tool-library-list button').click()")
+    wait_until(lambda: "执行测试" in self.body())
+    self.replace("tool-config_timeout_seconds", "1")
+    self.click("执行测试")
+    wait_until(lambda: "测试超时" in self.body())
+    self.assertIn("未取得返回数据", self.body())
+    for endpoint, status, expected in (
+      ("/null", "测试成功", "null"),
+      ("/error", "测试失败", "false"),
+    ):
+      self.replace("tool-config_url", origin + endpoint)
+      self.replace("tool-config_timeout_seconds", "30")
+      self.click("执行测试")
+      wait_until(lambda status=status: status in self.body())
+      self.assertEqual(
+        self.evaluate(
+          "document.querySelector('[aria-label=\"工具返回 data\"]').textContent"
+        ),
+        expected,
+      )
+    self.assertEqual(requests, ["/block", "/block", "/null", "/error"])
+    self.call("Emulation.clearDeviceMetricsOverride")
+    wait_until(lambda: self.evaluate("window.innerWidth") > 1000)
+    layout = self.evaluate("""(() => {
+      const rect=s => document.querySelector(s).getBoundingClientRect();
+      const c=document.querySelector('.tool-editor-layout').children;
+      return {rail:rect('.workspace > .navigation').width,
+        sidebar:rect('.tool-library-sidebar').width,
+        toolbar:rect('.tool-detail-toolbar').height,
+        ratio:c[0].getBoundingClientRect().width/c[1].getBoundingClientRect().width};
+    })()""")
+    self.assertAlmostEqual(layout["rail"], 64, delta=1)
+    self.assertAlmostEqual(layout["sidebar"], 256, delta=1)
+    self.assertAlmostEqual(layout["toolbar"], 48, delta=1)
+    self.assertAlmostEqual(layout["ratio"], 7 / 5, delta=0.02)
+
+    self.replace("tool-config_url", origin + "/block")
+    self.replace("tool-config_timeout_seconds", "1")
+    self.evaluate("window.__dropNextTestStart=true;window.__testObservationRequests=0")
+    self.click("执行测试")
+    wait_until(lambda: "测试启动结果不确定" in self.body())
+    identity = self.evaluate("window.__lastTestStart")
+    self.assertNotIn("test_id", identity["requested"])
+    self.assertIn("未取得测试 ID，无法查询或取消", self.body())
+    self.assertTrue(
+      self.evaluate("document.querySelector('[aria-label=\"测试当前草稿\"]').disabled")
+    )
+    wait_until(
+      lambda: (
+        self.client.get(base + f"/api/tools/tests/{identity['received']}").json()[
+          "data"
+        ]["status"]
+        == "timeout"
+      )
+    )
+    self.assertEqual(self.evaluate("window.__testStartRequests"), 5)
+    self.assertEqual(self.evaluate("window.__testObservationRequests"), 0)
+    self.click("停止等待")
+    self.assertIn("本次未发送取消请求", self.body())
+    self.assertNotIn("测试已取消", self.body())
+    self.assertFalse(
+      self.evaluate("document.getElementById('tool-config_display_name').disabled")
+    )
+    self.assertEqual(requests, ["/block", "/block", "/null", "/error", "/block"])
 
   def test_openapi_upload_paste_configure_edit_and_execute(self):
     requests = []

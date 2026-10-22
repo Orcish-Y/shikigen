@@ -18,6 +18,8 @@ MCP 服务支持 stdio 与 Streamable HTTP，重新发现先预览差异、勾�
 
 内部请求引用、可空结构、认证方案选择和逐接口诊断见 [OpenAPI 兼容与认证](../docs/wayfinder/tools-workflow/openapi-compatibility-auth.md)。
 
+测试的取消、总预算、资源回收、结果脱敏及运行中离开规则见 [测试生命周期](../docs/wayfinder/tools-workflow/test-cancellation-lifecycle.md)。
+
 ```bash
 cd frontend
 pnpm install --frozen-lockfile

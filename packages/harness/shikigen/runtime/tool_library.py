@@ -6,9 +6,10 @@ import json
 import os
 import tempfile
 import time
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from pydantic import TypeAdapter, ValidationError
 
@@ -24,6 +25,7 @@ from shikigen.contracts.tool_execution import (
   PythonToolExecution,
   ToolExecution,
 )
+from shikigen.contracts.tool_results import ToolResult
 from shikigen.core.tool_assembly import create_builtin_registry
 from shikigen.persistence.python_source_store import PythonSourceStore
 from shikigen.tools.executor import ToolExecutor
@@ -37,6 +39,7 @@ from shikigen.tools.mcp.sessions import (
   mcp_exception_message,
 )
 from shikigen.tools.python.execution import PythonAdapter
+from shikigen.tools.redaction import execution_secrets, redact_tool_value
 
 definition_adapter = TypeAdapter(AnyToolDefinition)
 name_adapter = TypeAdapter(ToolName)
@@ -58,6 +61,12 @@ class ToolLibraryError(ValueError):
     self.status = status
 
 
+@dataclass(slots=True)
+class ToolTestRecord:
+  snapshot: dict
+  task: asyncio.Task[None] | None = None
+
+
 class ToolLibrary:
   def __init__(self, source_path: Path | None):
     self.source_path = source_path.resolve() if source_path else None
@@ -74,8 +83,7 @@ class ToolLibrary:
         "mcp": McpAdapter(self.mcp_session_provider),
       }
     )
-    self._tests: dict[str, dict] = {}
-    self._tasks: dict[str, asyncio.Task] = {}
+    self._test_records: dict[str, ToolTestRecord] = {}
     self._discoveries: dict[str, dict] = {}
 
   def _read(self) -> tuple[dict, ToolLibraryConfig, str]:
@@ -468,13 +476,15 @@ class ToolLibrary:
       return saved_version
 
   async def start_test(self, tool_id: str, inputs: dict):
-    # Resolve before admission. A corrupt/deleted definition must never use cache.
     tool, _ = await self.get_tool(tool_id)
     execution = await self._load_saved_execution(tool)
     return self._start_test(execution, inputs, tool_id)
 
   async def start_draft_test(
-    self, payload: dict, inputs: dict, tool_id: str | None = None
+    self,
+    payload: dict,
+    inputs: dict,
+    tool_id: str | None = None,
   ):
     async with self._lock:
       _, library, _ = await asyncio.to_thread(self._read)
@@ -496,12 +506,23 @@ class ToolLibrary:
         execution = ToolExecution(definition=tool)
     return self._start_test(execution, inputs, tool_id)
 
-  def _start_test(
+  def _create_test_record(
     self,
-    execution: ToolExecution,
-    inputs: dict,
     tool_id: str | None,
-  ):
+    inputs: dict,
+  ) -> ToolTestRecord:
+    if len(self._test_records) >= 100:
+      completed = next(
+        (
+          key
+          for key, record in self._test_records.items()
+          if record.task is None and record.snapshot["status"] != "running"
+        ),
+        None,
+      )
+      if completed is None:
+        raise ToolLibraryError("busy", "Too many active tool tests", 503)
+      del self._test_records[completed]
     test_id = str(uuid4())
     snapshot = {
       "test_id": test_id,
@@ -509,36 +530,87 @@ class ToolLibrary:
       "status": "running",
       "created_at": datetime.now(UTC).isoformat(),
       "result": None,
+      "cancel_requested": False,
+      "inputs": inputs,
     }
-    # Keep only this session's most recent completed observations (no history store).
-    if len(self._tests) >= 100:
-      completed = next((key for key in self._tests if key not in self._tasks), None)
-      if completed is not None:
-        del self._tests[completed]
-      else:
-        raise ToolLibraryError("busy", "Too many active tool tests", 503)
-    self._tests[test_id] = snapshot
+    record = ToolTestRecord(snapshot=snapshot)
+    self._test_records[test_id] = record
+    return record
+
+  def _start_test(
+    self,
+    execution: ToolExecution,
+    inputs: dict,
+    tool_id: str | None,
+  ):
+    observed_inputs = redact_tool_value(inputs, execution_secrets(execution))
+    record = self._create_test_record(tool_id, observed_inputs)
+    snapshot = record.snapshot
 
     async def load():
       return execution
 
+    started = time.monotonic()
+
     async def run():
       result = await self.executor.execute(load, inputs, manual_test=True)
       snapshot.update(status=result.status, result=result.model_dump(mode="json"))
-      self._tasks.pop(test_id, None)
 
-    self._tasks[test_id] = asyncio.create_task(run())
+    def finished(task: asyncio.Task[None]):
+      # 任务在第一次调度前被取消时，协程内的异常处理尚未开始。
+      if task.cancelled():
+        result = ToolResult(
+          status="cancelled",
+          error={"code": "cancelled", "message": "Tool test cancelled"},
+          duration_ms=(time.monotonic() - started) * 1000,
+        )
+        snapshot.update(status=result.status, result=result.model_dump(mode="json"))
+      record.task = None
+
+    task = asyncio.create_task(run())
+    record.task = task
+    task.add_done_callback(finished)
     return dict(snapshot)
 
-  def get_test(self, test_id: str):
-    if test_id not in self._tests:
+  def _get_test_record(self, test_id: str):
+    try:
+      test_id = str(UUID(test_id))
+    except ValueError:
+      raise ToolLibraryError("not_found", "Tool test does not exist", 404) from None
+    if test_id not in self._test_records:
       raise ToolLibraryError("not_found", "Tool test does not exist", 404)
-    return dict(self._tests[test_id])
+    return self._test_records[test_id]
+
+  def get_test(self, test_id: str):
+    return dict(self._get_test_record(test_id).snapshot)
+
+  async def cancel_test(self, test_id: str):
+    record = self._get_test_record(test_id)
+    task = record.task
+    if task is not None:
+      self._request_test_cancellation(record)
+      try:
+        await asyncio.shield(task)
+      except asyncio.CancelledError:
+        if not task.cancelled():
+          raise
+    return dict(record.snapshot)
+
+  def _request_test_cancellation(self, record: ToolTestRecord):
+    task = record.task
+    snapshot = record.snapshot
+    if task is not None and not task.done() and not snapshot["cancel_requested"]:
+      snapshot["cancel_requested"] = True
+      # 不在超时或另一取消的资源清理期间再次注入取消。
+      if not task.cancelling():
+        task.cancel()
 
   async def shutdown(self):
-    tasks = list(self._tasks.values())
-    for task in tasks:
-      task.cancel()
+    tasks = []
+    for record in tuple(self._test_records.values()):
+      if record.task is not None:
+        tasks.append(record.task)
+        self._request_test_cancellation(record)
     await asyncio.gather(*tasks, return_exceptions=True)
 
   async def save_tool(

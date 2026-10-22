@@ -189,7 +189,14 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
     executed = await self.client.post(
       f"/api/tools/{tool_id}/execute", json={"inputs": {}}
     )
-    self.assertEqual(executed.json()["data"]["data"], expected)
+    self.assertEqual(
+      executed.json()["data"]["data"],
+      {
+        "authorization": "Bearer [REDACTED]",
+        "header_key": "[REDACTED]",
+        "query": {"api_key": ["[REDACTED]"]},
+      },
+    )
     self.assertEqual(requests, [expected])
     self.assertEqual(
       [binding["value"] for binding in saved["data"]["auth"]],

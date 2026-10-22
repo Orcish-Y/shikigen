@@ -5,6 +5,7 @@ import os
 import sys
 import time
 from pathlib import Path
+from urllib.request import urlopen
 
 if os.getenv("MCP_FIXTURE_PID_FILE"):
   Path(os.environ["MCP_FIXTURE_PID_FILE"]).write_text(str(os.getpid()))
@@ -60,6 +61,11 @@ for line in sys.stdin:
   if "id" not in message:
     continue
   method = message["method"]
+  if method == os.getenv("MCP_FIXTURE_SIGNAL_PHASE"):
+    with urlopen(
+      os.environ["MCP_FIXTURE_SIGNAL_URL"] + f"?pid={os.getpid()}"
+    ) as signal:
+      signal.read()
   if os.getenv("MCP_INITIALIZE_DELAY"):
     time.sleep(float(os.environ["MCP_INITIALIZE_DELAY"]))
   if method == "initialize":
