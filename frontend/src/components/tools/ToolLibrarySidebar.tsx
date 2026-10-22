@@ -9,10 +9,11 @@ const categories = [
   {value:'python',label:'Python'}, {value:'mcp',label:'MCP'},
 ] as const;
 
-export function ToolLibrarySidebar({tools, recent, selectedId, busy, verified, canCreate, connected, onCreate, onOpen, onReload, onOpenMcp}: {
+export function ToolLibrarySidebar({tools, recent, selectedId, busy, verified, canCreate, connected, onCreate, onOpen, onReload, onOpenMcp, onImportOpenApi}: {
   tools:AnyToolDefinition[] | null; recent:Record<string,RecentToolTest>; selectedId?:string; busy:boolean; verified:boolean;
   canCreate:boolean; connected:boolean; onCreate:(kind:'http' | 'python') => void; onOpen:(tool:AnyToolDefinition) => void; onReload:() => void;
   onOpenMcp?:() => void;
+  onImportOpenApi?:() => void;
 }) {
   const [query, setQuery] = useState('');
   const [hideDisabled, setHideDisabled] = useState(false);
@@ -32,6 +33,7 @@ export function ToolLibrarySidebar({tools, recent, selectedId, busy, verified, c
           <Button size="xs" variant="outline" aria-label="选择接入类型" aria-expanded={createMenu} disabled={!canCreate} onClick={() => setCreateMenu(!createMenu)}>⌄</Button>
           {createMenu && <div className="tool-create-menu"><Button variant="ghost" onClick={() => {setCreateMenu(false);onCreate('http');}}>新建 HTTP 工具</Button>
             <Button variant="ghost" onClick={() => {setCreateMenu(false);onCreate('python');}}>新建 Python 工具</Button>
+            {onImportOpenApi && <Button variant="ghost" onClick={() => {setCreateMenu(false);onImportOpenApi();}}>导入 OpenAPI 文档</Button>}
             {onOpenMcp && <Button variant="ghost" onClick={() => {setCreateMenu(false);onOpenMcp();}}>接入 MCP 服务</Button>}</div>}
         </div>
       </div>

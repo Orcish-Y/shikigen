@@ -5,7 +5,7 @@ from datetime import datetime
 from unittest.mock import patch
 from zoneinfo import ZoneInfo, reset_tzpath
 
-from shikigen.tools.get_current_time import get_current_time
+from shikigen.tools.builtin.get_current_time import get_current_time
 
 
 class CurrentTimeTests(unittest.TestCase):

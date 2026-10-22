@@ -301,6 +301,16 @@ class McpHttpApiTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(timed_out["status"], "timeout", timed_out)
     self.assertLess(timed_out["duration_ms"], 2500)
     self.assertEqual(server.sessions, set())
+    # 取消阶段使用独立预算，确保实际测试 shutdown，而不是再次自然超时。
+    refreshed = (await self.client.get("/api/tools/" + tool_id)).json()
+    updated = await self.client.put(
+      "/api/tools/" + tool_id,
+      json={
+        "definition": {**definition, "timeout_seconds": 30},
+        "version": refreshed["version"],
+      },
+    )
+    self.assertEqual(updated.status_code, 204, updated.text)
     server.slow_started.clear()
     started = await self.client.post(
       f"/api/tools/{tool_id}/tests", json={"inputs": {"query": "cancel"}}
@@ -313,6 +323,10 @@ class McpHttpApiTests(unittest.IsolatedAsyncioTestCase):
     self.assertLess(time.monotonic() - shutdown_started, 1.5)
     observed = (await self.client.get(f"/api/tools/tests/{test_id}")).json()["data"]
     self.assertEqual(observed["status"], "cancelled", observed)
+    # 客户端清理返回时，服务端线程可能尚未处理已发送的 DELETE。
+    deadline = time.monotonic() + 5
+    while server.sessions and time.monotonic() < deadline:
+      await asyncio.sleep(0.01)
     self.assertEqual(server.sessions, set())
 
   async def test_remote_sse_ends_without_a_result_reports_transport_error(self):

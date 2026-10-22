@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ObjectFieldTemplateProps, RJSFSchema } from '@rjsf/utils';
+import type { FieldProps, ObjectFieldTemplateProps, RJSFSchema } from '@rjsf/utils';
 import { BracketsCurly, GearSix } from '@phosphor-icons/react';
 import { Button } from '../ui/button';
 import { SchemaForm } from './SchemaForm';
@@ -13,8 +13,11 @@ import { analyzePythonSource, type PythonSourceAnalysis } from '../../python-sou
 import { syncHttpMappings, type HttpParameterMapping } from '../../tool-library';
 import type { ToolNameValidation } from '../../tool-library';
 
+function OpenApiSource({formData}:FieldProps) {
+  return formData ? <details className="tool-panel-body"><summary>OpenAPI 原始来源</summary><pre className="openapi-source">{JSON.stringify(formData,null,2)}</pre></details> : null;
+}
 function DefinitionSections({properties, registry}: ObjectFieldTemplateProps) {
-  const structureFields = new Set(['input_schema','output_schema']);
+  const structureFields = new Set(['input_schema','output_schema','openapi_source']);
   return <div className="tool-definition-sections">
     <section className="tool-panel" aria-label="工具配置"><header className="tool-panel-heading"><GearSix size={16}/><h2>工具配置</h2><span>{registry.formContext?.python ? 'Python' : registry.formContext?.mcp ? 'MCP' : 'HTTP'}</span></header>
       <div className="tool-config-fields">{properties.filter(property => !structureFields.has(property.name)).map(property =>
@@ -78,7 +81,7 @@ export function ToolDefinitionForm({schema, initial, enabled, disabled = false, 
   const nameError = nameCheck?.name === name && nameCheck.result?.valid === false
     ? nameCheck.result.message ?? '调用名称无效' : null;
   return <SchemaForm className="tool-definition-form" id={formId} idPrefix="tool-config" schema={schema}
-    fields={{InputSchema:InputSchemaEditor,HttpAuth:HttpAuthEditor,PythonParameters}}
+    fields={{InputSchema:InputSchemaEditor,HttpAuth:HttpAuthEditor,PythonParameters,OpenApiSource}}
     widgets={{PythonSource:PythonSourceEditor}}
     formContext={{python,mcp,pythonAnalysis:analysis,localPythonAnalysis:localAnalysis,backendOnly,onBackendValidation:() => setBackendSource(source),
       pythonChanges:changes,onConfirmPythonChanges:() => setChanges(current => current.map(change => ({...change,review:false})))}}
@@ -88,12 +91,13 @@ export function ToolDefinitionForm({schema, initial, enabled, disabled = false, 
       'ui:submitButtonOptions':{norender:externalSubmit},
       'ui:order':(python ? ['display_name','name','description','kind','source','timeout_seconds','enabled','input_schema','output_schema']
         : mcp ? ['display_name','name','description','kind','connection_id','remote_name','timeout_seconds','enabled','input_schema','output_schema','source_tool']
-        : ['display_name','name','description','kind','method','url','headers','parameters','auth','timeout_seconds','enabled','input_schema','output_schema']).filter(field => schema.properties?.[field]),
+        : ['display_name','name','description','kind','method','url','headers','parameters','auth','timeout_seconds','enabled','input_schema','output_schema','openapi_source']).filter(field => schema.properties?.[field]),
       kind:{'ui:widget':'hidden'}, description:{'ui:widget':'textarea'},
       source:{'ui:widget':'PythonSource','ui:help':'顶层同步 main，支持普通具名、仅关键字和 **kwargs；未知类型请在参数区补齐。Tab 缩进，Esc 后按 Tab 离开编辑器。仅测试或执行时以本机权限运行。'},
       headers:{'ui:field':'JsonSchema','ui:help':'固定请求头：JSON 对象；请求体仅支持 application/json。'},
       parameters:{'ui:field':'JsonSchema','ui:help':'每项填写 location、input_name、name；query 使用 form（explode 默认 true），path/headers 使用 simple。'},
       auth:{'ui:field':'HttpAuth'},
+      openapi_source:{'ui:field':'OpenApiSource'},
       name:{'ui:help':nameCheck?.name === name && nameCheck.error ? nameCheck.error
         : '1–64 个英文字母、数字或下划线，以字母或下划线开头；手动修改后保留。'},
       connection_id:{'ui:readonly':true},remote_name:{'ui:readonly':true},source_tool:{'ui:field':'JsonSchema','ui:readonly':true},

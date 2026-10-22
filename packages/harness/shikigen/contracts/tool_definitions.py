@@ -77,6 +77,7 @@ class HttpToolDefinition(ToolDefinition[Literal["http"]]):
   headers: dict[str, str] = Field(default_factory=dict)
   parameters: list[HttpParameterMapping] = Field(default_factory=list)
   auth: list[HttpAuthBinding] = Field(default_factory=list)
+  openapi_source: dict[str, JsonValue] | None = None
 
   @field_validator("url")
   @classmethod

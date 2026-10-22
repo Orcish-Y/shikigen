@@ -25,7 +25,7 @@
 | 位置 | 后续改动 |
 | --- | --- |
 | [后端源码解析](../../../packages/harness/shikigen/contracts/python_source.py) | 顶层入口允许 `FunctionDef` 和 `AsyncFunctionDef`；移除异步禁用分支，保留装饰器、签名和生成器检查；更新错误文案。 |
-| [子进程执行器](../../../packages/harness/shikigen/tool_execution/adapter/python_worker.py) | 运行时允许协程函数，显式拒绝 `inspect.isasyncgenfunction`；协程通过 `asyncio.run` 执行，取得最终值后继续校验严格 JSON。 |
+| [子进程执行器](../../../packages/harness/shikigen/tools/python/worker.py) | 运行时允许协程函数，显式拒绝 `inspect.isasyncgenfunction`；协程通过 `asyncio.run` 执行，取得最终值后继续校验严格 JSON。 |
 | [前端源码分析](../../../frontend/src/python-source.ts) | 允许异步入口，保留其他入口限制；确认 `await` 不被误报，嵌套函数和生成器检查与后端保持一致。 |
 | [工具表单](../../../frontend/src/components/tools/ToolDefinitionForm.tsx) | 更新只支持同步入口的帮助文案。 |
 | [共享源码样例](../../../tests/fixtures/python_source_cases.json) | 将异步入口从拒绝用例改为接受用例，补充异步参数、默认表达式和异步生成器边界。 |

@@ -38,6 +38,7 @@ async def parameters_schema():
     "timeout_seconds": "超时（秒）",
     "input_schema": "输入结构",
     "output_schema": "输出结构（可选）",
+    "openapi_source": "OpenAPI 原始来源",
   }
   for field, title in titles.items():
     schema["properties"][field]["title"] = title

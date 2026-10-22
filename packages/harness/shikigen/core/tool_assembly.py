@@ -5,7 +5,7 @@ from pathlib import Path
 from shikigen.app_config import AppConfig
 from shikigen.core.mcp_loader import load_mcp_tools
 from shikigen.core.tool_registry import ToolRegistry
-from shikigen.tools import (
+from shikigen.tools.builtin import (
   add,
   create_filesystem_tools,
   get_current_time,

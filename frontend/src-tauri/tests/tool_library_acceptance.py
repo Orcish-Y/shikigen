@@ -74,6 +74,189 @@ class ToolLibraryAcceptance(WindowAcceptance):
       self.evaluate(f"document.getElementById({json.dumps(field)}).select()")
     self.fill(field, value)
 
+  def test_openapi_upload_paste_configure_edit_and_execute(self):
+    requests = []
+
+    class Handler(BaseHTTPRequestHandler):
+      def do_GET(self):
+        requests.append(self.path)
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps({"path": self.path}).encode())
+
+      def log_message(self, *args):
+        pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    Thread(target=server.serve_forever, daemon=True).start()
+    self.addCleanup(server.server_close)
+    self.addCleanup(server.shutdown)
+    origin = f"http://127.0.0.1:{server.server_port}"
+    host = self.launch()
+    self.connect()
+    base = self.state("ready")["base_url"]
+    wait_until(lambda: "新建会话开始对话" in self.body())
+    self.evaluate("document.querySelector('[aria-label=工具]').click()")
+    wait_until(lambda: "工具库为空" in self.body())
+    self.evaluate("document.querySelector('[aria-label=选择接入类型]').click()")
+    self.click("导入 OpenAPI 文档")
+    wait_until(lambda: "OpenAPI 文档" in self.body())
+    document = {
+      "openapi": "3.1.0",
+      "info": {"title": "订单 API", "version": "1"},
+      "servers": [{"url": "/relative"}],
+      "paths": {
+        "/orders": {
+          "get": {
+            "operationId": "list-orders",
+            "summary": "订单查询",
+            "description": "查找订单",
+            "parameters": [
+              {
+                "name": "message",
+                "in": "query",
+                "required": True,
+                "schema": {"type": "string", "description": "原始查询参数"},
+              }
+            ],
+            "responses": {
+              "200": {
+                "description": "成功",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "type": "object",
+                      "properties": {"path": {"type": "string"}},
+                    }
+                  }
+                },
+              }
+            },
+          }
+        }
+      },
+    }
+    file_path = self.artifacts / "openapi.json"
+    file_path.write_text(json.dumps(document, ensure_ascii=False), encoding="utf-8")
+    root = self.call("DOM.getDocument")["root"]["nodeId"]
+    node = self.call("DOM.querySelector", nodeId=root, selector="input[type=file]")[
+      "nodeId"
+    ]
+    self.call("DOM.setFileInputFiles", files=[str(file_path)], nodeId=node)
+    wait_until(lambda: "已读取 openapi.json" in self.body())
+    self.click("解析文档")
+    wait_until(
+      lambda: (
+        "选择 GET /orders"
+        in self.evaluate(
+          "[...document.querySelectorAll('input[aria-label]')]"
+          ".map(el => el.ariaLabel).join('|')"
+        )
+      )
+    )
+    self.evaluate("document.querySelector('[aria-label=\"选择 GET /orders\"]').click()")
+    self.assertEqual(
+      self.evaluate("document.getElementById('tool-config_name').value"), "list_orders"
+    )
+    self.assertIn("需要补配置", self.body())
+    self.replace("tool-config_url", origin + "/orders")
+    self.assertEqual(requests, [])
+    self.assertEqual(self.client.get(base + "/api/tools").json()["data"], [])
+    for width, height in ((1440, 900), (390, 844)):
+      self.call(
+        "Emulation.setDeviceMetricsOverride",
+        width=width,
+        height=height,
+        deviceScaleFactor=1,
+        mobile=False,
+      )
+      wait_until(lambda width=width: self.evaluate("window.innerWidth") == width)
+      self.assertFalse(
+        self.evaluate("document.documentElement.scrollWidth > window.innerWidth")
+      )
+      self.assertTrue(
+        self.evaluate("""(() => {
+        const button = document.querySelector('.openapi-toolbar button:last-child');
+        const rect = button.getBoundingClientRect();
+        return rect.width > 0 && rect.left >= 0 && rect.right <= innerWidth;
+      })()""")
+      )
+      self.evaluate("document.querySelector('.tool-detail-view').scrollTop = 0")
+      screenshot = self.call("Page.captureScreenshot", format="png")["data"]
+      (self.artifacts / f"openapi-preview-{width}.png").write_bytes(
+        base64.b64decode(screenshot)
+      )
+      if width == 1440:
+        layout = self.evaluate("""(() => {
+          const rect = selector => document.querySelector(selector)
+            .getBoundingClientRect();
+          const columns = document.querySelector('.tool-editor-layout').children;
+          return {rail:rect('.workspace > .navigation').width,
+            sidebar:rect('.tool-library-sidebar').width,
+            toolbar:rect('.tool-detail-toolbar').height,
+            ratio:columns[0].getBoundingClientRect().width
+              / columns[1].getBoundingClientRect().width};
+        })()""")
+        self.assertAlmostEqual(layout["rail"], 64, delta=1)
+        self.assertAlmostEqual(layout["sidebar"], 256, delta=1)
+        self.assertAlmostEqual(layout["toolbar"], 48, delta=1)
+        self.assertAlmostEqual(layout["ratio"], 7 / 5, delta=0.02)
+    self.call("Emulation.clearDeviceMetricsOverride")
+    self.click("保存所选工具")
+    wait_until(lambda: "可打开详情编辑和测试" in self.body())
+    first = self.client.get(base + "/api/tools").json()["data"][0]
+    self.assertEqual(first["kind"], "http")
+    self.assertEqual(requests, [])
+    self.click("编辑工具 订单查询")
+    wait_until(lambda: "快速测试调试" in self.body())
+    self.replace("tool-config_display_name", "订单查询编辑")
+    self.click("保存工具")
+    wait_until(lambda: "工具已保存" in self.body())
+    edited = self.client.get(base + f"/api/tools/{first['id']}").json()["data"]
+    self.assertEqual(edited["display_name"], "订单查询编辑")
+    self.fill("tool-input_query_message", "hello")
+    self.click("执行测试")
+    wait_until(lambda: "测试成功" in self.body())
+    self.assertEqual(requests, ["/orders?message=hello"])
+    self.assertIn("OpenAPI 原始来源", self.body())
+    self.evaluate("document.querySelector('[aria-label=选择接入类型]').click()")
+    self.click("导入 OpenAPI 文档")
+    wait_until(lambda: "导入文档" in self.body())
+    yaml_document = """openapi: 3.0.3
+info: {title: 订单 API, version: '1'}
+servers:
+  - url: ORIGIN
+paths:
+  /orders:
+    get:
+      operationId: list-orders
+      summary: 再次导入
+      description: 创建新工具
+""".replace("ORIGIN", origin)
+    self.fill("openapi-document", yaml_document)
+    self.click("解析文档")
+    wait_until(
+      lambda: self.evaluate(
+        "Boolean(document.querySelector('[aria-label=\"选择 GET /orders\"]'))"
+      )
+    )
+    self.evaluate("document.querySelector('[aria-label=\"选择 GET /orders\"]').click()")
+    self.assertEqual(
+      self.evaluate("document.getElementById('tool-config_name').value"),
+      "list_orders_2",
+    )
+    self.click("保存所选工具")
+    wait_until(lambda: "可打开详情编辑和测试" in self.body())
+    final = self.client.get(base + "/api/tools").json()["data"]
+    self.assertEqual(len(final), 2)
+    self.assertEqual(final[0], edited)
+    self.assertNotEqual(final[0]["id"], final[1]["id"])
+    self.assertEqual(requests, ["/orders?message=hello"])
+    self.record(tools=final, requests=requests)
+    self.quit(host)
+    self.assertEqual(host.wait(timeout=10), 0)
+
   def test_mcp_stdio_discover_select_call_and_source_navigation(self):
     host = self.launch()
     self.connect()

@@ -43,7 +43,7 @@ class PythonAdapter:
       process = await asyncio.create_subprocess_exec(
         sys.executable,
         "-u",
-        str(Path(__file__).with_name("python_worker.py")),
+        str(Path(__file__).with_name("worker.py")),
         str(work / "source.py"),
         str(work / "inputs.json"),
         str(work / "result.json"),

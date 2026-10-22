@@ -14,6 +14,8 @@ Python 工具使用 CodeMirror 6 + Lezer 提供源码高亮、本地静态分析
 
 MCP 服务支持 stdio 与 Streamable HTTP，重新发现先预览差异、勾选应用，保留本地编辑与未发现工具；连接删除先确认旗下工具清单，详见 [MCP 连接生命周期](../docs/wayfinder/tools-workflow/mcp-discovery-lifecycle.md)。
 
+工具侧栏接入菜单支持上传／粘贴 OpenAPI JSON／YAML，预览、补配置并批量生成普通 HTTP 工具，详见 [OpenAPI 基础导入](../docs/wayfinder/tools-workflow/openapi-basic-import.md)。
+
 ```bash
 cd frontend
 pnpm install --frozen-lockfile

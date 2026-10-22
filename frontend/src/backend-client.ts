@@ -2,6 +2,7 @@ import type { BackendSnapshot } from "./backend-state";
 import { RunProtocolError, validStatus, validateEvent, validateFrame, validateMessage, validateRun } from './run-protocol.ts';
 import type { ApprovalResponses } from './approval-decisions.ts';
 import type { AnyToolDefinition, ToolDraft, ToolLibraryRead, ToolNameValidation, ToolRead, ToolTest } from './tool-library';
+import type {OpenApiPreview, OpenApiSelection} from './openapi-import';
 import type { RJSFSchema } from '@rjsf/utils';
 import type { McpConnectionDraft, McpConnection, McpTransport, McpObservation, McpDiscovery, McpSelection, McpImportedTool } from './mcp-connections';
 
@@ -211,6 +212,16 @@ export class BackendSession {
   }
   listTools(signal?: AbortSignal) {
     return this.json<ToolLibraryRead>('/api/tools', {cache:'no-store'}, signal);
+  }
+  previewOpenApi(document:string, signal?:AbortSignal) {
+    return this.json<{data:OpenApiPreview}>('/api/tools/openapi/preview',{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({document}),
+    },signal);
+  }
+  importOpenApiTools(document:string, tools:OpenApiSelection[]) {
+    return this.json<{data:{id:string}[]}>('/api/tools/openapi/imports',{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({document,tools}),
+    });
   }
   validateToolName(name: string, toolId?: string, signal?: AbortSignal) {
     const query = new URLSearchParams({name});

@@ -25,8 +25,7 @@ shikigen/
 ├── contracts/       # 消息、事件、Run 状态及流载荷的数据模型
 ├── persistence/     # SQLite 事务和读写
 ├── checkpoint/      # Graph checkpoint 存取
-├── tools/           # 具体 Agent 工具，schema、说明和处理函数共置
-├── tool_execution/  # 工具库调用调度、协议适配器及 MCP 会话与传输
+├── tools/           # 内置工具、HTTP／Python／MCP 能力及统一调用调度
 ├── middleware/      # Agent middleware
 ├── callback_handler/ # 模型回调与 token 统计
 └── utils/           # 通用辅助函数
@@ -45,24 +44,33 @@ runtime 负责审批对应的 Run 状态检查、持久化与恢复执行。
 工具相关代码按职责分布，后续开发沿用以下归属：
 
 ```text
-tools/                     # add、filesystem、time、web 等具体工具
+tools/
+  builtin/                 # add、filesystem、time、web 等 Agent 内置工具
+  http/
+    execution.py           # HTTP 请求执行
+    openapi_import.py      # OpenAPI 解析、预览及 HTTP 定义转换
+  python/
+    execution.py           # Python 工具执行
+    worker.py              # Python 子进程入口
+  mcp/
+    execution.py           # MCP 工具调用
+    sessions.py            # MCP 连接会话
+    http_transport.py      # MCP HTTP 传输
+  executor.py              # 校验、超时预算及按 kind 分发
 core/
   tool_registry.py         # ToolRegistry 集合、去重与筛选
   tool_assembly.py         # 内置工具及启动配置中的 MCP 工具组装
   subagents.py             # 子 Agent 创建与 task 工具
   mcp_loader.py            # 将启动配置中的 MCP 工具转换为 LangChain BaseTool
-tool_execution/
-  executor.py              # 校验、超时预算及按 kind 分发
-  adapter/                 # HTTP、Python、MCP 适配器及 Python 子进程入口
-  mcp/                     # 工具库使用的 MCP 会话与 HTTP 传输
 ```
 
 `create_lead_agent()` 与 `open_runtime()` 共用
 `core.tool_assembly.create_agent_tool_registry()` 组装默认工具。
 `runtime/tool_library.py` 负责持久工具的管理、发现与测试协调，并组装
-`tool_execution` 中的执行器和适配器；执行器与适配器不反向依赖 runtime。
+`tools` 中的执行器和各类型适配器；执行器与适配器不反向依赖 runtime。
 共享定义和执行协议仍归 `contracts`，源码与配置存取仍归 `persistence`。
 迁移后的内部模块直接使用上述路径，不保留旧路径的兼容导出。
+本次目录归属及后续工具票据使用规则见[工具模块布局](docs/wayfinder/tools-workflow/tool-module-layout.md)。
 
 公共导入 `from shikigen import create_lead_agent, execute_agent_loop` 和
 `from shikigen.runtime import open_runtime` 保持不变。直接引用旧内部模块的代码
@@ -82,7 +90,7 @@ shell 设置执行目录不提供 sandbox，MCP 工具仍使用各自配置。
 
 Python 调用方可从 `shikigen.core.tool_assembly` 导入
 `create_builtin_registry(workspace_root)`，或从
-`shikigen.tools` 导入 `create_filesystem_tools(workspace_root)` 获得五个文件工具。
+`shikigen.tools.builtin` 导入 `create_filesystem_tools(workspace_root)` 获得五个文件工具。
 原来的全局文件工具导出已移除；通过返回工具的 `name` 获取所需工具。
 `open_runtime()` 与 `create_lead_agent()` 的默认工具装配均使用配置中的工作区；
 显式注入 registry 时沿用其中工具，子 Agent 继承工具集合时沿用同一工作区。

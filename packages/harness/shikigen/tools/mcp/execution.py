@@ -14,7 +14,7 @@ from shikigen.contracts.tool_execution import (
   ToolExecutionContext,
 )
 from shikigen.contracts.tool_results import ToolResult, failure
-from shikigen.tool_execution.mcp.sessions import (
+from shikigen.tools.mcp.sessions import (
   MCP_RESULT_LIMIT,
   McpSessionProvider,
   list_mcp_session_tools,

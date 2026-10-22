@@ -26,16 +26,17 @@ from shikigen.contracts.tool_execution import (
 )
 from shikigen.core.tool_assembly import create_builtin_registry
 from shikigen.persistence.python_source_store import PythonSourceStore
-from shikigen.tool_execution.adapter.http_execution import HttpAdapter
-from shikigen.tool_execution.adapter.mcp_execution import McpAdapter
-from shikigen.tool_execution.adapter.python_execution import PythonAdapter
-from shikigen.tool_execution.executor import ToolExecutor
-from shikigen.tool_execution.mcp.sessions import (
+from shikigen.tools.executor import ToolExecutor
+from shikigen.tools.http.execution import HttpAdapter
+from shikigen.tools.http.openapi_import import selected_openapi_definitions
+from shikigen.tools.mcp.execution import McpAdapter
+from shikigen.tools.mcp.sessions import (
   McpConnectionSessionProvider,
   list_mcp_session_tools,
   mcp_exception_code,
   mcp_exception_message,
 )
+from shikigen.tools.python.execution import PythonAdapter
 
 definition_adapter = TypeAdapter(AnyToolDefinition)
 name_adapter = TypeAdapter(ToolName)
@@ -571,6 +572,27 @@ class ToolLibrary:
       await asyncio.to_thread(self._cleanup_python_source_files, library)
       return tool, saved_version
 
+  async def import_openapi_tools(self, document: str, selections: list[dict]):
+    definitions = await asyncio.to_thread(
+      selected_openapi_definitions, document, selections
+    )
+    async with self._lock:
+      raw, library, version = await asyncio.to_thread(self._read)
+      imported = []
+      for selection, definition in zip(selections, definitions, strict=True):
+        self._check_tool_edit_permissions(definition, None)
+        try:
+          tool = self._prepare_tool(definition, library, None)
+        except ToolLibraryError as error:
+          raise ToolLibraryError(
+            error.code, f"{selection['operation_key']}：{error}", error.status
+          ) from None
+        library.tools.append(tool)
+        imported.append({"id": tool.id})
+      raw["tool_library"] = library.model_dump(mode="json")
+      await asyncio.to_thread(self._commit, raw, version)
+      return imported
+
   def _prepare_python_payload(self, payload: dict) -> tuple[dict, str | None]:
     """只解析本次提交的 Python 草稿，不读取或修改持久状态及传入对象。"""
     if payload.get("kind") != "python":
@@ -635,6 +657,7 @@ class ToolLibrary:
     try:
       if previous and previous.kind == "http":
         definition.setdefault("auth", previous.model_dump(mode="json")["auth"])
+        definition.setdefault("openapi_source", previous.openapi_source)
       return definition_adapter.validate_python(definition)
     except ValidationError as error:
       details = "; ".join(

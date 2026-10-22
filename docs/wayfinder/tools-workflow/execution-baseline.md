@@ -7,17 +7,17 @@
 ## Python 与取消
 
 - 项目要求 Python >=3.12；桌面开发态以项目虚拟环境解释器启动后端。没有独立代码工具环境或自动安装工具依赖机制。新子进程可以复用后端解释器；代码、参数和返回值协议需要新增。见 [backend.rs](../../../frontend/src-tauri/src/backend.rs)、[harness 依赖](../../../packages/harness/pyproject.toml)。
-- 现有 shell 工具采用同步 `subprocess.run(shell=True)`，30 秒超时，合并 stdout/stderr 并截取 4000 字符，不能直接承担结构化 Python 入口协议。见 [filesystem.py](../../../packages/harness/shikigen/tools/filesystem.py)。
+- 现有 shell 工具采用同步 `subprocess.run(shell=True)`，30 秒超时，合并 stdout/stderr 并截取 4000 字符，不能直接承担结构化 Python 入口协议。见 [filesystem.py](../../../packages/harness/shikigen/tools/builtin/filesystem.py)。
 - 当前 Run 取消信号没有代码工具子进程句柄；桌面 Job Object 针对整个后端进程树，不是每项工具的终止接口。取消 Run 不能证明单项工具及其派生进程都停止。见 [execution.py](../../../packages/harness/shikigen/core/execution.py)、[run_execution.py](../../../packages/harness/shikigen/runtime/run_execution.py)、[windows.rs](../../../frontend/src-tauri/src/process/windows.rs)。
 - `asyncio.timeout()` 可限制异步执行预算，但取消与清理仍可能继续耗时；不代表远端操作已撤销。见 [Python 官方文档](https://docs.python.org/3.12/library/asyncio-task.html#timeouts)。
 - 普通函数可以通过 `function(**inputs)` 按字典键传关键字参数；默认参数在未提供时按函数定义生效。仅位置参数不能用关键字传入，可变位置参数需要位置值规则。inspect.Signature.bind 可以检查参数是否匹配签名；这些是 Python 调用事实，不代表本项目已实现全部签名支持。见 [Python 参数文档](https://docs.python.org/3.12/tutorial/controlflow.html#special-parameters)、[inspect 签名绑定](https://docs.python.org/3.12/library/inspect.html#inspect.Signature.bind)。
 - Python AST 的 FunctionDef/arguments/arg 提供函数名、参数种类、默认表达式和注解，可静态提取签名骨架，不需导入或执行源码。是否有默认表达式可决定参数可省略性；缺少注解时无法仅据名称/默认值可靠知道所有允许类型，自定义类型、动态签名和 **kwargs 业务字段也需要额外信息。见 [AST 官方参数节点](https://docs.python.org/3.12/library/ast.html#ast.arguments)。
-- 仓库已有 [add.py](../../../packages/harness/shikigen/tools/add.py) 的 LangChain @tool 自动 schema，但它接受真实函数对象；锁定实现使用 inspect.signature/Pydantic，并通过 get_type_hints 处理注解，需要运行命名空间，不是源码草稿的静态解析器。当前没有源码 AST 参数提取服务。
+- 仓库已有 [add.py](../../../packages/harness/shikigen/tools/builtin/add.py) 的 LangChain @tool 自动 schema，但它接受真实函数对象；锁定实现使用 inspect.signature/Pydantic，并通过 get_type_hints 处理注解，需要运行命名空间，不是源码草稿的静态解析器。当前没有源码 AST 参数提取服务。
 - Python 类型注解本身不自动强制检查运行参数；本项目仍需按生成或补充后的 JSON Schema 实施输入校验。见 [Python typing 官方说明](https://docs.python.org/3.12/library/typing.html)。
 
 ## HTTP
 
-- HTTPX 已是直接依赖，已有异步调用；尚无通用 HTTP 定义或结果契约。见 [web_fetch.py](../../../packages/harness/shikigen/tools/web_fetch.py)、[web_search_client.py](../../../packages/harness/shikigen/tools/web_search_client.py)。
+- HTTPX 已是直接依赖，已有异步调用；尚无通用 HTTP 定义或结果契约。见 [web_fetch.py](../../../packages/harness/shikigen/tools/builtin/web_fetch.py)、[web_search_client.py](../../../packages/harness/shikigen/tools/builtin/web_search_client.py)。
 - HTTPX 超时区分连接、读取、写入和连接池等待；不是整个调用总时长。通用 AsyncClient 默认不跟随重定向，默认读取环境代理/证书配置。见锁定 SDK `_config.py`、`_client.py` 与 [HTTPX 官方超时文档](https://www.python-httpx.org/advanced/timeouts/)。
 - 锁定 HTTPX 将 query 的 `None` 编为空字符串；`json=None` 表示不发送 JSON body。需要区分缺失、空字符串与 JSON `null`，不能直接把 SDK 默认当作产品规则。见锁定 SDK `_utils.py`、`_content.py`。
 - 项目已有严格 JSON 值边界，禁止 NaN/Infinity，可用于工具参数及结果。见 [messages.py](../../../packages/harness/shikigen/contracts/messages.py)。

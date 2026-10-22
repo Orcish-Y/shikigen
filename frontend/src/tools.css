@@ -81,6 +81,17 @@
 .tool-panel-heading h2 { font-size: 12px; font-weight: 600; }
 .tool-panel-heading > span { font-size: 10px; color: var(--muted); margin-left: auto; }
 .tool-panel-body { padding: 16px; }
+.openapi-import-layout label { display: block; margin-bottom: 10px; font-size: 12px; }
+.openapi-import-layout input[type=file], .openapi-import-layout select { display: block; width: 100%; max-width: 100%; margin-top: 6px; }
+.openapi-import-layout select { min-height: 32px; border: 1px solid var(--border); border-radius: 6px; background: var(--canvas); }
+.openapi-import-layout textarea { max-width: 100%; font-family: var(--font-mono); }
+.openapi-operation-list { list-style: none; margin: 0; padding: 0; }
+.openapi-operation-list li { padding: 12px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; overflow-wrap: anywhere; }
+.openapi-operation-list li.active { border-color: var(--accent); }
+.openapi-operation-list label { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.openapi-operation-list button { max-width: 100%; white-space: normal; height: auto; }
+.openapi-source { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 100%; font-size: 11px; }
+.tool-detail-toolbar.openapi-toolbar .tool-toolbar-actions button { display: inline-flex; }
 .tool-config-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px 12px; padding: 16px; }
 .tool-config-field { min-width: 0; }
 .tool-field-description, .tool-field-url, .tool-field-enabled, .tool-field-headers, .tool-field-parameters { grid-column: 1 / -1; }

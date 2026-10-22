@@ -634,7 +634,7 @@ class PythonToolApiTests(unittest.IsolatedAsyncioTestCase):
     from unittest.mock import patch
 
     from shikigen.contracts.tool_execution import PythonToolExecution
-    from shikigen.tool_execution.adapter.python_execution import PythonAdapter
+    from shikigen.tools.python.execution import PythonAdapter
 
     source = "def main(): return 'loaded'\n"
     saved = await self.create(source)

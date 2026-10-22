@@ -44,7 +44,7 @@ Python 的编辑保存和草稿测试都要求显式提交 `kind: "python"` 与�
 
 适配器统一实现 `execute(execution, inputs, *, context)`。Python 适配器只消费执行对象中的源码，并核对参数结构，不回退到文件读取；加载完成后文件发生修改也不会改变本次执行，后续调用重新加载。`ToolExecutionContext` 每次调用独立创建，仅携带可写执行信息，不携带源码；适配器在清理时写入的信息仍可用于超时或取消结果。HTTP 传输错误在 HTTP 适配器内转换为原有 `transport` 错误。源码加载属于执行前准备，执行预算继续覆盖适配器启动、业务执行及读取结果。
 
-具体适配器统一放在 `tool_execution/adapter/`：HTTP 请求实现在 [`http_execution.py`](../../../packages/harness/shikigen/tool_execution/adapter/http_execution.py)，Python 适配器及其子进程入口分别在 [`python_execution.py`](../../../packages/harness/shikigen/tool_execution/adapter/python_execution.py) 和 [`python_worker.py`](../../../packages/harness/shikigen/tool_execution/adapter/python_worker.py)。通用执行器位于 `tool_execution/executor.py`，源码文件存取位于 [`persistence/python_source_store.py`](../../../packages/harness/shikigen/persistence/python_source_store.py)，避免执行模块反向依赖 runtime。后续 MCP 的会话提供者应在装配时注入 MCP 适配器，再登记映射；连接配置和会话管理不进入 `ToolExecutor` 的构造函数或工具定义。
+工具实现按类型归入 `tools/`：HTTP 请求适配器在 [`tools/http/execution.py`](../../../packages/harness/shikigen/tools/http/execution.py)，Python 适配器及其子进程入口分别在 [`tools/python/execution.py`](../../../packages/harness/shikigen/tools/python/execution.py) 和 [`tools/python/worker.py`](../../../packages/harness/shikigen/tools/python/worker.py)。通用执行器位于 `tools/executor.py`，源码文件存取位于 [`persistence/python_source_store.py`](../../../packages/harness/shikigen/persistence/python_source_store.py)，执行模块不反向依赖 runtime。MCP 会话提供者在装配时注入对应适配器，再登记映射；连接配置和会话管理不进入 `ToolExecutor` 的构造函数或工具定义。目录职责见[工具模块布局](tool-module-layout.md)。
 
 装配调整时的验证记录：执行器接口 7 项与既有 HTTP/Python 工具 API 40 项全部通过，覆盖自定义适配器登记、调用上下文隔离、输入和禁用检查、超时与取消清理信息、HTTP 传输错误、真实请求和 Python 子进程。Ruff、ty 与 diff 检查通过。日志为 `.scratch/tools-workflow/adapter-injection-*.log`。
 

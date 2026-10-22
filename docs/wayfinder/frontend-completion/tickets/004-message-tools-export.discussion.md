@@ -9,9 +9,9 @@
 - [当前对话组件](../../../../frontend/src/components/Conversation.tsx)将正文作为 React 文本显示，未渲染真实 Markdown；CodeBlock 仍依赖示例 code 字段。工具失败文案仍配绿色勾号，需要按真实 status 修正。
 - [当前导出](../../../../frontend/src/App.tsx)消费显示消息；当前 delta 与已提交消息混在一个数组内，不能保证只导出已提交内容。已确认的运行投影契约要求先分开事实与预览。
 - [当前片段接入](../../../../packages/harness/shikigen/runtime/run_events.py)只在内存中积累尚未提交的正文；[取消与执行结算](../../../../packages/harness/shikigen/runtime/run_execution.py)及[状态事务](../../../../packages/harness/shikigen/runtime/runs.py)尚未把这些正文封存为完整消息记录。取消／失败后保存已生成正文属于新增后端目标，尚未实现。
-- [当前工具实现](../../../../packages/harness/shikigen/tools/filesystem.py)的 bash 输出已在后端截到 4000 字符。前端“完整查看／复制”只能保证包含接口提供的全部内容，不能宣称拿到了截断前的进程输出。
+- [当前工具实现](../../../../packages/harness/shikigen/tools/builtin/filesystem.py)的 bash 输出已在后端截到 4000 字符。前端“完整查看／复制”只能保证包含接口提供的全部内容，不能宣称拿到了截断前的进程输出。
 - [现有前端依赖](../../../../frontend/package.json)没有 Markdown 渲染库；库的选择与安全边界尚待写入完整方案。
-- [文件工具](../../../../packages/harness/shikigen/tools/filesystem.py)统一绑定配置中的 workspace_root，相对路径在该目录下解析；[Tauri 权限](../../../../frontend/src-tauri/capabilities/default.json)尚无文件读取或打开能力，[宿主配置](../../../../frontend/src-tauri/tauri.conf.json)也未启用本地资源协议。
+- [文件工具](../../../../packages/harness/shikigen/tools/builtin/filesystem.py)统一绑定配置中的 workspace_root，相对路径在该目录下解析；[Tauri 权限](../../../../frontend/src-tauri/capabilities/default.json)尚无文件读取或打开能力，[宿主配置](../../../../frontend/src-tauri/tauri.conf.json)也未启用本地资源协议。
 - [react-markdown 官方文档](https://github.com/remarkjs/react-markdown#appendix-a-html-in-markdown)说明默认将原始 HTML 转义为文本；[remark-gfm](https://github.com/remarkjs/remark-gfm#what-is-this)提供表格、任务列表等扩展；[rehype-sanitize](https://github.com/rehypejs/rehype-sanitize#what-is-this)按允许列表处理 HTML 语法树。该组合已在完整契约核对后确定为首版方案，依赖尚未安装。
 
 ## 用户逐项确认

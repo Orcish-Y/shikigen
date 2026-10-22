@@ -10,7 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 class PackageImportTests(unittest.TestCase):
   def test_tools_imports_in_a_fresh_process(self) -> None:
     result = subprocess.run(
-      [sys.executable, "-c", "import shikigen.tools"],
+      [sys.executable, "-c", "import shikigen.tools.builtin"],
       cwd=PROJECT_ROOT,
       capture_output=True,
       text=True,
@@ -26,18 +26,20 @@ class PackageImportTests(unittest.TestCase):
           sys.executable,
           "-I",
           "-c",
-          "import shikigen; import shikigen.tools; "
+          "import shikigen; import shikigen.tools.builtin; "
           "import shikigen.core.graph_events; "
           "import shikigen.core.tool_registry; "
           "import shikigen.core.tool_assembly; "
           "import shikigen.core.subagents; "
           "import shikigen.core.mcp_loader; "
-          "import shikigen.tool_execution.executor; "
-          "import shikigen.tool_execution.adapter.http_execution; "
-          "import shikigen.tool_execution.adapter.python_execution; "
-          "import shikigen.tool_execution.adapter.mcp_execution; "
-          "import shikigen.tool_execution.mcp.sessions; "
-          "import shikigen.tool_execution.mcp.http; "
+          "import shikigen.tools.executor; "
+          "import shikigen.tools.http.execution; "
+          "import shikigen.tools.http.openapi_import; "
+          "import shikigen.tools.python.execution; "
+          "import shikigen.tools.python.worker; "
+          "import shikigen.tools.mcp.execution; "
+          "import shikigen.tools.mcp.sessions; "
+          "import shikigen.tools.mcp.http_transport; "
           "import shikigen.contracts.events; "
           "import shikigen.contracts.runs; "
           "import shikigen.contracts.stream; "

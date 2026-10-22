@@ -3,7 +3,7 @@ import unittest
 from contextlib import chdir
 from pathlib import Path
 
-from shikigen.tools.filesystem import create_filesystem_tools
+from shikigen.tools.builtin.filesystem import create_filesystem_tools
 
 
 class FilesystemToolTests(unittest.TestCase):

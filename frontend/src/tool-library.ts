@@ -10,6 +10,7 @@ export interface HttpToolDefinition extends ToolDefinition {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS'; url: string;
   headers:Record<string,string>; parameters:HttpParameterMapping[];
   auth?:HttpAuthBinding[];
+  openapi_source?:Record<string,unknown> | null;
 }
 export interface HttpAuthBinding {
   id:string; kind:'bearer' | 'api_key'; location:'headers' | 'query'; name:string; value:string;
@@ -84,7 +85,7 @@ export function editTool(tool: AnyToolDefinition): ToolDraft {
   return draft;
 }
 export function toolDraftFingerprint(draft:ToolDraft):string {
-  const normalized=draft.kind !== 'http' ? draft : {...draft,headers:draft.headers === undefined ? {} : draft.headers,
+  const normalized=draft.kind !== 'http' ? draft : {...draft,openapi_source:draft.openapi_source ?? null,headers:draft.headers === undefined ? {} : draft.headers,
     auth:(draft.auth ?? []).map(binding => ({...binding,value:binding.value ?? ''})),
     parameters:Array.isArray(draft.parameters) ? draft.parameters.map(mapping => mapping && typeof mapping === 'object' && !Array.isArray(mapping)
       ? {...mapping,style:mapping.style ?? null,explode:mapping.explode ?? null} : mapping) : draft.parameters === undefined ? [] : draft.parameters};

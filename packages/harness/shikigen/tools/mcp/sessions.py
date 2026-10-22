@@ -14,7 +14,7 @@ from mcp.client.stdio import stdio_client
 from mcp.client.streamable_http import streamable_http_client
 
 from shikigen.contracts.mcp_connections import AnyMcpConnection
-from shikigen.tool_execution.mcp.http import McpHttpClient, McpHttpClientSession
+from shikigen.tools.mcp.http_transport import McpHttpClient, McpHttpClientSession
 
 MCP_RESULT_LIMIT = 1024 * 1024
 

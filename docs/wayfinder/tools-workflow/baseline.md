@@ -6,8 +6,8 @@
 | --- | --- | --- |
 | 可调用集合 | `ToolRegistry` 保存 BaseTool，按 name 去重，同名后注册者被忽略；没有持久工具身份 | [tool_registry.py](../../../packages/harness/shikigen/core/tool_registry.py) |
 | MCP | 配置服务连接，支持 stdio / http；按服务发现多个 BaseTool，添加服务名前缀，单服务发现失败隔离 | [app_config.py](../../../packages/harness/shikigen/app_config.py)、[mcp_loader.py](../../../packages/harness/shikigen/core/mcp_loader.py) |
-| HTTP | 已有网页抓取与搜索，但服务实现写死；没有用户定义 method / URL / headers / query / body 的通用工具 | [web_fetch.py](../../../packages/harness/shikigen/tools/web_fetch.py)、[web_search_client.py](../../../packages/harness/shikigen/tools/web_search_client.py) |
-| 代码 | Python >=3.12；已有 shell 工具，但没有用户录入 Python 片段的工具或执行适配器 | [harness 依赖](../../../packages/harness/pyproject.toml)、[filesystem.py](../../../packages/harness/shikigen/tools/filesystem.py) |
+| HTTP | 已有网页抓取与搜索，但服务实现写死；没有用户定义 method / URL / headers / query / body 的通用工具 | [web_fetch.py](../../../packages/harness/shikigen/tools/builtin/web_fetch.py)、[web_search_client.py](../../../packages/harness/shikigen/tools/builtin/web_search_client.py) |
+| 代码 | Python >=3.12；已有 shell 工具，但没有用户录入 Python 片段的工具或执行适配器 | [harness 依赖](../../../packages/harness/pyproject.toml)、[filesystem.py](../../../packages/harness/shikigen/tools/builtin/filesystem.py) |
 | Agent 装配 | 启动时建立 Registry、发现 MCP、创建 Agent；可注入主/子 Agent 的 Registry，尚无工具更新服务 | [composition.py](../../../packages/harness/shikigen/runtime/composition.py)、[agent.py](../../../packages/harness/shikigen/core/agent.py) |
 | 审批 | 目前显式覆盖 write_file 与 bash；新工具不会自动继承这两项策略 | [approval.py](../../../packages/harness/shikigen/core/approval.py) |
 | 页面与 API | “工具与技能编排”只有禁用导航；无 tools / workflow / custom-agent CRUD 路由 | [Sidebar.tsx](../../../frontend/src/components/Sidebar.tsx)、[server.py](../../../app/server.py) |

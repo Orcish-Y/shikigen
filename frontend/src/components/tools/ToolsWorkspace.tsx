@@ -15,6 +15,7 @@ import { ToolLibrarySidebar } from './ToolLibrarySidebar';
 import { ToolSummaryCard } from './ToolSummaryCard';
 import { editTool, emptyToolDraft, emptyPythonToolDraft, suggestToolName, toolDraftFingerprint, toolTestStatus, type AnyToolDefinition, type RecentToolTest, type ToolDraft, type ToolTest } from '../../tool-library';
 import type { PythonSourceAnalysis } from '../../python-source';
+import {OpenApiImportPanel} from './OpenApiImportPanel';
 
 const message = (error:unknown) => error instanceof Error ? error.message : String(error);
 interface Editor {tool:AnyToolDefinition | null; initial:ToolDraft; draft:ToolDraft; version:string; revision:number; inputKey:number}
@@ -26,6 +27,8 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
   onOpenMcp?:(serverId?:string) => void; initialToolId?:string;
 }) {
   const [httpSchema, setSchema] = useState<RJSFSchema | null>(null);
+  const [importing,setImporting]=useState(false);
+  const importer=useRef<ToolsWorkspaceHandle>(null);
   const [pythonSchema, setPythonSchema] = useState<RJSFSchema | null>(null);
   const [mcpSchema,setMcpSchema]=useState<RJSFSchema | null>(null);
   const [pythonAnalysis, setPythonAnalysis] = useState<PythonSourceAnalysis | null>(null);
@@ -58,6 +61,7 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
     }
   },[tools,initialToolId]);
   useEffect(() => {
+    setImporting(false);
     setMcpSchema(null);openedInitial.current=undefined;
     setPythonSchema(null);setPythonAnalysis(null);setSchema(null); setTools(null); setReservedNames([]); setEditor(null); setTest(null); setVerified(false); setSaveOutcomeUnknown(false);
     setSavedToolAwaitingRead(null);
@@ -74,6 +78,7 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
   }, [session]);
 
   function requestLeave(action:() => void) {
+    if (importing && importer.current) {importer.current.requestLeave(action);return;}
     if (busy || saveOutcomeUnknown) {setNotice('当前操作尚未完成，请完成后再离开。');return;}
     if (dirty) {setLeaveAction(() => action);leaveAfterSave.current=false;}
     else action();
@@ -96,6 +101,7 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
     action?.();
   }
   function closeEditor() {
+    setImporting(false);
     selection.current++;setEditor(null);setTest(null);setDirty(false);setBusy(null);setNotice(null);setTestDefinition(null);
     setSavedToolAwaitingRead(null);
     setSaveOutcomeUnknown(false);
@@ -132,6 +138,7 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
     finally {if (request === selection.current) setBusy(null);}
   }
   async function open(tool:AnyToolDefinition) {
+    setImporting(false);
     if (!session) return;
     const request = ++selection.current;
     setBusy('loading'); setError(null); setNotice(null); setVerified(false); setTest(null);
@@ -235,6 +242,7 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
     return (await session.validateToolName(name, editor?.tool?.id, signal)).data;
   }, [session, editor?.tool?.id]);
   async function create(kind:'http' | 'python' = 'http') {
+    setImporting(false);
     if (!session) return;
     const request = ++selection.current;
     if (kind === 'python' && !pythonSchema) {
@@ -285,10 +293,14 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
   }
   return <div className="tool-registry">
     <ToolLibrarySidebar tools={tools} recent={recent} selectedId={editor?.tool?.id} busy={Boolean(busy)} verified={verified}
+      onImportOpenApi={() => requestLeave(() => {closeEditor();setImporting(true);})}
       onOpenMcp={onOpenMcp ? () => requestLeave(() => onOpenMcp()) : undefined}
       connected={Boolean(session)} canCreate={Boolean(session && schema && verified && !busy && !saveOutcomeUnknown && !savedToolAwaitingRead)}
       onCreate={kind => requestLeave(() => void create(kind))} onOpen={tool => requestLeave(() => void open(tool))} onReload={() => void reload()}/>
-    <section className="tool-detail-view" aria-label="工具详情">
+    {importing && session && httpSchema ? <OpenApiImportPanel ref={importer} session={session} schema={httpSchema}
+      occupiedNames={[...reservedNames,...(tools ?? []).map(tool => tool.name)]} onNavigation={onNavigation}
+      onLibrary={library => {setTools(library.data);setReservedNames(library.reserved_names);setVerified(true);}}
+      onOpen={tool => void open(tool)} onClose={closeEditor}/> : <section className="tool-detail-view" aria-label="工具详情">
       <div className="tool-detail-toolbar" role="toolbar" aria-label="工具操作">
         {onNavigation && <button className="icon-button tool-navigation-toggle" aria-label="打开主导航" onClick={onNavigation}><SidebarSimple/></button>}
         <div className="tool-breadcrumb"><button aria-label="返回工具列表" disabled={Boolean(busy) || saveOutcomeUnknown}
@@ -347,7 +359,7 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
         </> : <div className="tool-detail-empty"><span className="tool-summary-icon"><Globe size={28}/></span><h1>{session ? '选择工具，查看配置与测试结果' : '连接后端后管理工具'}</h1>
           <p>{session ? '从左侧工具库选择已有工具，或接入一个 HTTP／Python 工具。' : '后端尚未连接，工具配置和测试暂不可用。'}</p><span><ArrowLeft size={14}/>工具库位于左侧</span></div>}
       </div>
-    </section>
+    </section>}
     {leaveAction && <Overlay title={savedToolAwaitingRead ? '工具已保存' : saveOutcomeUnknown ? '保存结果不确定' : '未保存的工具修改'} onClose={() => {if (!busy) {setLeaveAction(null);leaveAfterSave.current=false;}}} fallbackFocus=".tool-toolbar-actions button">
       <div className="tool-confirmation"><p>{savedToolAwaitingRead ? '保存已成功，详情尚未读取成功。可以重新读取详情，或直接离开。' : saveOutcomeUnknown ? '没有收到保存响应，无法确认是否生效。放弃草稿并重读工具库后可以继续离开；不会再次保存。' : '当前草稿尚未保存。测试不会保存工具，离开后草稿不再保留。'}</p>
         {error && <p role="alert">{error}</p>}
