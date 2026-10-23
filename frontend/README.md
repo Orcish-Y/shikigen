@@ -22,6 +22,8 @@ MCP 服务支持 stdio 与 Streamable HTTP，重新发现先预览差异、勾�
 
 保存提交点、配置／源码版本冲突、外部修改草稿保留及当前／下次调用生效规则见 [配置与调用生命周期](../docs/wayfinder/tools-workflow/config-conflicts-call-snapshot.md)。
 
+详情中的稳定 ID、来源、完整 schema 查看复制及后续消费者的直接调用入口见 [稳定 ID 与消费者复用](../docs/wayfinder/tools-workflow/stable-id-consumer-reuse.md)。
+
 ```bash
 cd frontend
 pnpm install --frozen-lockfile

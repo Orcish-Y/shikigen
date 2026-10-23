@@ -7,6 +7,10 @@ import time
 from pathlib import Path
 from urllib.request import urlopen
 
+# MCP stdio 使用 UTF-8，不能继承 Windows 控制台的区域编码。
+sys.stdin.reconfigure(encoding="utf-8")
+sys.stdout.reconfigure(encoding="utf-8")
+
 if os.getenv("MCP_FIXTURE_PID_FILE"):
   Path(os.environ["MCP_FIXTURE_PID_FILE"]).write_text(str(os.getpid()))
 

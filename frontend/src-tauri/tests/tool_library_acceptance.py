@@ -259,6 +259,118 @@ class ToolLibraryAcceptance(WindowAcceptance):
     self.quit(host)
     self.assertEqual(host.wait(timeout=10), 0)
 
+  def test_stable_identity_schema_and_complete_result(self):
+    payload = {"nested": {"values": [1, False, None]}, "message": "真实字段"}
+
+    class Handler(BaseHTTPRequestHandler):
+      def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps(payload).encode())
+
+      def log_message(self, *args):
+        pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    Thread(target=server.serve_forever, daemon=True).start()
+    self.addCleanup(server.server_close)
+    self.addCleanup(server.shutdown)
+    host = self.launch()
+    self.connect()
+    base = self.state("ready")["base_url"]
+    created = self.client.post(
+      base + "/api/tools",
+      json={
+        "name": "original_call",
+        "display_name": "稳定引用工具",
+        "url": f"http://127.0.0.1:{server.server_port}/",
+      },
+    )
+    self.assertEqual(created.status_code, 201, created.text)
+    tool_id = created.json()["data"]["id"]
+    wait_until(lambda: "新建会话开始对话" in self.body())
+    self.evaluate("document.querySelector('[aria-label=工具]').click()")
+    wait_until(lambda: "稳定引用工具" in self.body())
+    self.evaluate("document.querySelector('.tool-library-list button').click()")
+    wait_until(lambda: "复制工具 ID" in self.body())
+    self.assertIn(tool_id, self.body())
+    self.assertIn("HTTP · 手工创建", self.body())
+    self.assertIn("未声明输出结构", self.body())
+    self.replace("tool-config_name", "renamed_call")
+    self.click("保存工具")
+    wait_until(lambda: "工具已保存" in self.body())
+    saved = self.client.get(base + f"/api/tools/{tool_id}").json()["data"]
+    self.assertEqual((saved["id"], saved["name"]), (tool_id, "renamed_call"))
+    self.evaluate(
+      "[...document.querySelectorAll('summary')]"
+      ".find(el => el.textContent === '查看完整输入结构').click()"
+    )
+    displayed_schema = self.evaluate(
+      "document.querySelector('[aria-label=完整输入结构]').textContent"
+    )
+    self.assertEqual(json.loads(displayed_schema), saved["input_schema"])
+    self.assertTrue(
+      self.evaluate(
+        "[...document.querySelectorAll('button')]"
+        ".some(el => el.textContent === '复制输入结构' && !el.disabled)"
+      )
+    )
+    self.click("执行测试")
+    wait_until(lambda: "测试成功" in self.body())
+    self.assertEqual(
+      json.loads(
+        self.evaluate(
+          "document.querySelector('[aria-label=\"工具返回 data\"]').textContent"
+        )
+      ),
+      payload,
+    )
+    layout = self.evaluate("""(() => {
+      const rect = selector => document.querySelector(selector).getBoundingClientRect();
+      const columns = document.querySelector('.tool-editor-layout').children;
+      return {rail:rect('.workspace > .navigation').width,
+        sidebar:rect('.tool-library-sidebar').width,
+        toolbar:rect('.tool-detail-toolbar').height,
+        ratio:columns[0].getBoundingClientRect().width /
+          columns[1].getBoundingClientRect().width};
+    })()""")
+    self.assertAlmostEqual(layout["rail"], 64, delta=1)
+    self.assertAlmostEqual(layout["sidebar"], 256, delta=1)
+    self.assertAlmostEqual(layout["toolbar"], 48, delta=1)
+    self.assertAlmostEqual(layout["ratio"], 7 / 5, delta=0.02)
+    for width, height in ((1440, 900), (390, 844)):
+      self.call(
+        "Emulation.setDeviceMetricsOverride",
+        width=width,
+        height=height,
+        deviceScaleFactor=1,
+        mobile=False,
+      )
+      wait_until(lambda width=width: self.evaluate("window.innerWidth") == width)
+      self.assertFalse(
+        self.evaluate("document.documentElement.scrollWidth > window.innerWidth")
+      )
+      self.evaluate("document.querySelector('.tool-detail-view').scrollTop=0")
+      screenshot = self.call("Page.captureScreenshot", format="png")["data"]
+      (self.artifacts / f"stable-identity-{width}.png").write_bytes(
+        base64.b64decode(screenshot)
+      )
+      self.evaluate(
+        "document.querySelector('.tool-schema-preview').scrollIntoView({block:'center'})"
+      )
+      screenshot = self.call("Page.captureScreenshot", format="png")["data"]
+      (self.artifacts / f"schema-result-{width}.png").write_bytes(
+        base64.b64decode(screenshot)
+      )
+    self.click("查看完整结果")
+    wait_until(lambda: "完整工具结果" in self.body())
+    self.assertIn('"duration_ms"', self.body())
+    self.assertIn('"headers"', self.body())
+    self.record(tool_id=tool_id, layout=layout, body=self.body())
+    self.quit(host)
+    self.assertEqual(host.wait(timeout=10), 0)
+
   def replace(self, field, value):
     editable = self.evaluate(
       f"document.getElementById({json.dumps(field)}).isContentEditable"

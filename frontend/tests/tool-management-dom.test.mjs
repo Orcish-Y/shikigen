@@ -31,6 +31,34 @@ const {EditorState} = await import('@codemirror/state');
 const {forEachDiagnostic} = await import('@codemirror/lint');
 const {undo,redo,indentMore} = await import('@codemirror/commands');
 const {PythonSourceEditor} = await import('../src/components/tools/PythonSourceEditor.tsx');
+const {ToolSummaryCard} = await import('../src/components/tools/ToolSummaryCard.tsx');
+
+test('详情核对稳定 ID 和来源，完整 schema 可查看复制且未声明输出有明确提示',async () => {
+  const user=userEvent.setup({document:browser.window.document,delay:null});
+  const copied=[];
+  Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text => copied.push(text)}});
+  const input={type:'object',properties:{body:{type:'object',properties:{items:{type:'array',items:{type:['string','null']}}},additionalProperties:false}},additionalProperties:false};
+  const tool={...structuredClone(emptyToolDraft),id:'stable-identity',name:'renamed_call',display_name:'已改名的工具',url:'http://localhost/orders',
+    input_schema:input,output_schema:null,created_at:'2026-10-23T00:00:00Z',updated_at:'2026-10-23T00:00:00Z'};
+  render(React.createElement(ToolSummaryCard,{tool,initial:tool,dirty:false,version:'version'}));
+  assert.match(screen.getByLabelText('工具来源').textContent,/HTTP · 手工创建/);
+  assert.match(screen.getByLabelText('工具来源').textContent,/http:\/\/localhost\/orders/);
+  await user.click(screen.getByRole('button',{name:'复制工具 ID'}));
+  assert.equal(copied.at(-1),'stable-identity');
+  const form=render(React.createElement(ToolDefinitionForm,{schema,initial:tool,onSave:() => {}}));
+  await user.click(screen.getByText('查看完整输入结构'));
+  assert.deepEqual(JSON.parse(screen.getByLabelText('完整输入结构').textContent),input);
+  await user.click(screen.getByRole('button',{name:'复制输入结构'}));
+  assert.deepEqual(JSON.parse(copied.at(-1)),input);
+  assert.match(document.body.textContent,/未声明输出结构/);
+  assert.equal(screen.queryByRole('button',{name:'复制输出结构'}),null);
+  const output={type:'array',items:{type:['integer','null']}};
+  form.rerender(React.createElement(ToolDefinitionForm,{key:'declared',schema,initial:{...tool,output_schema:output},onSave:() => {}}));
+  await user.click(screen.getByText('查看完整输出结构'));
+  assert.deepEqual(JSON.parse(screen.getByLabelText('完整输出结构').textContent),output);
+  await user.click(screen.getByRole('button',{name:'复制输出结构'}));
+  assert.deepEqual(JSON.parse(copied.at(-1)),output);
+});
 
 test('MCP 工具页面来源只读，动态输入直接发送并呈现完整原始结果',async () => {
   const sourceSchema={type:'object',properties:{query:{type:'string'}},required:['query']};

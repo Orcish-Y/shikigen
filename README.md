@@ -59,6 +59,7 @@ tools/
     sessions.py            # MCP 连接会话
     http_transport.py      # MCP HTTP 传输
   executor.py              # 校验、超时预算及按 kind 分发
+  tool_instance.py         # 按稳定 ID 调用最新保存定义的 BaseTool 封装
 core/
   tool_registry.py         # ToolRegistry 集合、去重与筛选
   tool_assembly.py         # 内置工具及启动配置中的 MCP 工具组装
@@ -73,6 +74,10 @@ core/
 共享定义和执行协议仍归 `contracts`，源码与配置存取仍归 `persistence`。
 迁移后的内部模块直接使用上述路径，不保留旧路径的兼容导出。
 本次目录归属及后续工具票据使用规则见[工具模块布局](docs/wayfinder/tools-workflow/tool-module-layout.md)。
+
+已保存工具可通过 `runtime.tools.get_tool()`、`build_tools()`、`execute_tool()`
+按稳定 ID 读取、装配或直接执行；普通消费者不需要创建 Agent 或 Run。
+完整结果、重新校验和非 LLM 字段传递见[复用接口](docs/wayfinder/tools-workflow/stable-id-consumer-reuse.md)。
 
 公共导入 `from shikigen import create_lead_agent, execute_agent_loop` 和
 `from shikigen.runtime import open_runtime` 保持不变。直接引用旧内部模块的代码

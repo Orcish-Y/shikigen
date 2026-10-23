@@ -13,6 +13,18 @@ import { analyzePythonSource, type PythonSourceAnalysis } from '../../python-sou
 import { syncHttpMappings, type HttpParameterMapping } from '../../tool-library';
 import type { ToolNameValidation } from '../../tool-library';
 
+function SchemaPreview({label,value}:{label:string;value:unknown}) {
+  const [copied,setCopied]=useState<string | null>(null);
+  const text=JSON.stringify(value,null,2);
+  return <details className="tool-schema-preview"><summary>查看完整{label}</summary>
+    <pre aria-label={`完整${label}`}>{text}</pre>
+    <Button type="button" size="sm" variant="outline" onClick={async () => {
+      try {await navigator.clipboard.writeText(text);setCopied('已复制');}
+      catch {setCopied('复制失败，可手动选择');}
+    }}>复制{label}</Button>{copied && <p role="status">{copied}</p>}
+  </details>;
+}
+
 function OpenApiSource({formData}:FieldProps) {
   return formData ? <details className="tool-panel-body"><summary>OpenAPI 原始来源</summary><pre className="openapi-source">{JSON.stringify(formData,null,2)}</pre></details> : null;
 }
@@ -25,7 +37,11 @@ function DefinitionSections({properties, registry}: ObjectFieldTemplateProps) {
     </section>
     <section className="tool-panel tool-schema-panel" aria-label="输入与输出结构"><header className="tool-panel-heading"><BracketsCurly size={16}/><h2>输入与输出结构</h2><span>JSON Schema</span></header>
       <div className="tool-schema-fields">{properties.filter(property => structureFields.has(property.name)).map(property =>
-        <div key={property.name}>{property.content}</div>)}</div>
+        <div key={property.name}>{property.content}</div>)}
+        {registry.formContext?.inputSchema !== undefined && <SchemaPreview label="输入结构" value={registry.formContext.inputSchema}/>}
+        {registry.formContext?.outputSchema != null && <SchemaPreview label="输出结构" value={registry.formContext.outputSchema}/>}
+        <p className="tool-muted">输出结构用于字段提示；下游调用仍按实际输入结构校验。请先检查执行状态，再从真实返回数据中取值。</p>
+      </div>
     </section>
   </div>;
 }
@@ -83,7 +99,7 @@ export function ToolDefinitionForm({schema, initial, enabled, disabled = false, 
   return <SchemaForm className="tool-definition-form" id={formId} idPrefix="tool-config" schema={schema}
     fields={{InputSchema:InputSchemaEditor,HttpAuth:HttpAuthEditor,PythonParameters,OpenApiSource}}
     widgets={{PythonSource:PythonSourceEditor}}
-    formContext={{python,mcp,pythonAnalysis:analysis,localPythonAnalysis:localAnalysis,backendOnly,onBackendValidation:() => setBackendSource(source),
+    formContext={{python,mcp,inputSchema:value.input_schema,outputSchema:value.output_schema,pythonAnalysis:analysis,localPythonAnalysis:localAnalysis,backendOnly,onBackendValidation:() => setBackendSource(source),
       pythonChanges:changes,onConfirmPythonChanges:() => setChanges(current => current.map(change => ({...change,review:false})))}}
     templates={{ObjectFieldTemplate:DefinitionSections}}
     extraErrors={nameError ? {name:{__errors:[nameError]}} : undefined} extraErrorsBlockSubmit

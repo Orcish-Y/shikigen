@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID, uuid4
 
+from langchain_core.tools import BaseTool
 from pydantic import TypeAdapter, ValidationError
 
 from shikigen.contracts.mcp_connections import AnyMcpConnection, AnyMcpSettings
@@ -43,6 +44,7 @@ from shikigen.tools.mcp.sessions import (
 )
 from shikigen.tools.python.execution import PythonAdapter
 from shikigen.tools.redaction import execution_secrets, redact_tool_value
+from shikigen.tools.tool_instance import ToolInstance
 
 definition_adapter = TypeAdapter(AnyToolDefinition)
 name_adapter = TypeAdapter(ToolName)
@@ -389,7 +391,9 @@ class ToolLibrary:
     for tool in tools:
       if tool.id == tool_id:
         return tool, version
-    raise ToolLibraryError("not_found", "Tool does not exist", 404)
+    raise ToolLibraryError(
+      "not_found", f"Tool {tool_id} does not exist", 404, resource_ids=[tool_id]
+    )
 
   async def delete_mcp_connection(self, connection_id: str, version: str) -> None:
     async with self._lock:
@@ -436,11 +440,72 @@ class ToolLibrary:
       return {"valid": False, "code": error.code, "message": str(error)}
     return {"valid": True, "code": None, "message": None}
 
-  async def execute_tool(self, tool_id: str, inputs: dict):
+  async def execute_tool(self, tool_id: str, inputs: dict) -> ToolResult:
     async def load():
       return await self._load_saved_execution(tool_id)
 
-    return await self.executor.execute(load, inputs)
+    result = await self.executor.execute(load, inputs)
+    result.details["tool_id"] = tool_id
+    return result
+
+  async def build_tools(self, tool_ids: list[str]) -> list[BaseTool]:
+    """按 ID 装配；名称与 schema 为装配时信息，每次调用仍读取最新定义。"""
+    selected_ids = list(dict.fromkeys(tool_ids))
+    return await self._run_coordinated_io(lambda: self._build_tools(selected_ids))
+
+  def _build_tools(self, tool_ids: list[str]) -> list[BaseTool]:
+    try:
+      _, library, _ = self._read()
+    except ToolLibraryError as error:
+      raise ToolLibraryError(
+        error.code,
+        f"Tools {', '.join(tool_ids)}: {error}",
+        error.status,
+        resource_ids=tool_ids,
+      ) from None
+    tools: list[BaseTool] = []
+    for definition in self._get_executable_definitions(library, tool_ids):
+      # 构建时检查源码/连接，但不启动业务操作或保留可执行快照。
+      self._prepare_tool_execution(definition, library)
+      try:
+        tool = ToolInstance(
+          tool_id=definition.id,
+          name=definition.name,
+          description=definition.description,
+          args_schema=definition.input_schema,
+          metadata={"tool_id": definition.id},
+          execute_fn=self.execute_tool,
+        )
+      except Exception:
+        raise ToolLibraryError(
+          "build_failed",
+          f"Cannot build tool {definition.name} ({definition.id})",
+          resource_ids=[definition.id],
+        ) from None
+      tools.append(tool)
+    return tools
+
+  def _get_executable_definitions(
+    self, library: ToolLibraryConfig, tool_ids: list[str]
+  ) -> list[AnyToolDefinition]:
+    definitions = []
+    for tool_id in tool_ids:
+      tool = next((item for item in library.tools if item.id == tool_id), None)
+      if tool is None:
+        raise ToolLibraryError(
+          "not_found", f"Tool {tool_id} does not exist", 404, resource_ids=[tool_id]
+        )
+      if not tool.enabled:
+        code, message = "disabled", "Tool is disabled"
+      elif tool.kind not in self.executor.adapters:
+        code, message = "unsupported_kind", "Tool adapter is not registered"
+      else:
+        definitions.append(tool)
+        continue
+      raise ToolLibraryError(
+        code, f"{tool.name} ({tool.id}): {message}", resource_ids=[tool.id]
+      )
+    return definitions
 
   def _prepare_saved_execution(self, tool_id: str) -> ToolExecution:
     """在同一次协调读取中取得定义、连接和完整源码。"""
@@ -450,6 +515,11 @@ class ToolLibrary:
       raise ToolLibraryError(
         "not_found", "Tool does not exist", 404, resource_ids=[tool_id]
       )
+    return self._prepare_tool_execution(tool, library)
+
+  def _prepare_tool_execution(
+    self, tool: AnyToolDefinition, library: ToolLibraryConfig
+  ) -> ToolExecution:
     if tool.kind == "python":
       source = self._read_python_source(tool)
       try:
@@ -537,18 +607,12 @@ class ToolLibrary:
     self, tool_ids: list[str]
   ) -> list[AnyToolDefinition]:
     """按 ID 读取已保存定义，检查存在、启用和适配器支持。"""
-    tools, _ = await self.list_tools()
-    definitions = []
-    for tool_id in tool_ids:
-      tool = next((item for item in tools if item.id == tool_id), None)
-      if tool is None:
-        raise ToolLibraryError("not_found", "Tool does not exist", 404)
-      if not tool.enabled:
-        raise ToolLibraryError("disabled", "Tool is disabled")
-      if tool.kind not in self.executor.adapters:
-        raise ToolLibraryError("unsupported_kind", "Tool adapter is not registered")
-      definitions.append(tool)
-    return definitions
+
+    def read():
+      _, library, _ = self._read()
+      return self._get_executable_definitions(library, tool_ids)
+
+    return await self._run_coordinated_io(read)
 
   async def delete_tool(self, tool_id: str, version: str) -> None:
     async with self._lock:
