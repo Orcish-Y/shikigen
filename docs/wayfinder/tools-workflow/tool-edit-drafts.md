@@ -8,7 +8,7 @@ Ticket 03 已接入 HTTP 工具的编辑、启用、删除和草稿测试。页�
 
 2026-10-14 按用户截图及 demo 校正整个页面：紧凑主导航移除额外扩展占位和折叠按钮，工具目录改为原型的三行条目及类型 tab，新增隐藏禁用工具开关；详情操作集中在右侧，新增启用／禁用草稿快捷按钮，与配置表单同步并由保存提交。概览、配置／结构、测试／最近记录保持 64／256／48px 外壳与 7:5 双栏、24px 留白；窄屏保留类型、搜索、开关与工具状态，并将详情改为单栏。具体继承规则统一记录在 [前端设计规范](../../../frontend/design.md#工具页面原型)。
 
-本次布局校正验证：前端全量 321 项通过（包含 24 项工具页面交互），TypeScript／生产构建和原生验收脚本 Ruff 检查通过；运行 `.venv\Scripts\python.exe frontend/src-tauri/tests/tool_library_acceptance.py`，5 项工具页真实 Tauri 验收通过，覆盖保存恢复、草稿导航／启用／删除、真实 HTTP 参数请求及类型／隐藏筛选。四个视口 1440×900、1280×800、1024×768、390×844 均无页面横向溢出，桌面验证 64／256／48px 与 7:5 比例。对照截图保存在 [布局验收目录](../../../.scratch/tools-workflow/verification/native/test_prototype_layout_type_tabs_and_hide_disabled/)。
+本次布局校正验证：前端全量 321 项通过（包含 24 项工具页面交互），TypeScript／生产构建和原生验收脚本 Ruff 检查通过；运行 `.venv\Scripts\python.exe frontend/src-tauri/tests/tool_library_acceptance.py`，5 项工具页真实 Tauri 验收通过，覆盖保存恢复、草稿导航／启用／删除、真实 HTTP 参数请求及类型／隐藏筛选。四个视口 1440×900、1280×800、1024×768、390×844 均无页面横向溢出，桌面验证 64／256／48px 与 7:5 比例。对照截图保存在本机 `.scratch/tools-workflow/verification/native/test_prototype_layout_type_tabs_and_hide_disabled/`，该目录受 Git 忽略。
 
 验证范围补充：首次使用 unittest discovery 时连带收集了导入的 `ClientAcceptance`，其中 `test_page_reads_persisted_messages_and_run_then_sends_only_on_click` 在 `send` 等待“发送”按钮可用时超时；单独复跑该聊天用例仍未通过，原因尚未定位，不能据此宣称聊天原生验收全部通过。本次工具页按脚本自己的入口单独运行，5 项全部通过。首次工具参数用例还因原方法展示从列表底行移到类型徽标而失败，已更新对应可见元素断言并通过完整工具页复跑。
 

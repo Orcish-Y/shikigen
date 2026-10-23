@@ -3,6 +3,8 @@
 更新：2026-09-24。Run 迁移第 1—8 步已完成：持久化、消息归属、只读重建、审批恢复、取消、用量累计与启动恢复均已接通。
 运行方式见[项目 README](../README.md)，设计调查见[research/](research/README.md)。本文统一归档原 `docs/project/` 下的分支比较、迁移清单、4A 存储契约和第 5 步消息契约，按当前实现整理，字段细节以代码和测试为准。历史建议不再作为当前待办；阶段验收与尚未闭环的问题保留在文末。
 
+2026-10-23 工具模块补充：持久工具库、HTTP／Python／MCP、OpenAPI、草稿测试及同步／异步复用已有实现。工具自身能力归 `tools`，Agent 注册与组装归 `core`，Agent／Run 协调归 `runtime`；具体开发依据见[工具库指南](wayfinder/tools-workflow/README.md)和[模块布局](wayfinder/tools-workflow/tool-module-layout.md)。
+
 ## 架构与入口
 
 产品 Run 表示一次用户任务，可跨多次 Graph 调用；RunExecution 表示进程内的一次执行。

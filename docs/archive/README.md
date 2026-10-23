@@ -1,6 +1,8 @@
 # 历史材料与证据归档
 
-最新整理见 [2026-10-07 开发文档归档](2026-10-07/README.md)和[开发交接](../development-handoff.md)。下面保留 2026-10-02 的归档背景；最新目录与验证范围以新索引为准。
+工具模块最新整理见 [2026-10-23 工具库资料](2026-10-23/tools-workflow/README.md)，包含历史 PRD、原发布索引及已迁入版本控制的 14 张开发票入口。当前工具开发从[工具库指南](../wayfinder/tools-workflow/README.md)进入。
+
+首版前端与 Windows 开发材料见 [2026-10-07 开发文档归档](2026-10-07/README.md)和[开发交接](../development-handoff.md)。下面保留 2026-10-02 的归档背景，按各阶段范围阅读。
 
 归档日期：2026-10-02。先查 [文档导航](../README.md)、[Windows 收尾摘要](../windows-backend-lifecycle.md) 和 [研究索引](../research/README.md)。本次只整理材料与校正文档阶段信息，没有重新运行产品测试或重新核验外部项目。
 

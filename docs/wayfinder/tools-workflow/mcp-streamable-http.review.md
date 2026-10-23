@@ -2,7 +2,7 @@
 
 基准：`1554c330c894d38925e066c5b9cf3eb5750a00e5`，2026-10-20。本次开始时工作区干净；两个独立审查代理分别审查暂存实现的规范和规格，修正后再次复查。
 
-规格：[08 接入 Streamable HTTP MCP](../../../.scratch/tools-workflow/issues/08-mcp-streamable-http.md)。用户本轮明确确认 headers 继续直接编辑和保存，凭据隐藏留待统一设计；09／12／13 尚未完成的共同生命周期内容按预留契约处理。
+规格：[08 接入 Streamable HTTP MCP](implementation/08-mcp-streamable-http.md)。用户本轮明确确认 headers 继续直接编辑和保存，凭据隐藏留待统一设计；09／12／13 尚未完成的共同生命周期内容按预留契约处理。
 
 ## Standards
 

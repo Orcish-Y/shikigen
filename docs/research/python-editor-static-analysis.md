@@ -17,7 +17,7 @@
 - [`ToolDefinitionForm.tsx`](../../frontend/src/components/tools/ToolDefinitionForm.tsx)：`source` 使用 `ui:widget: textarea`；源码变化后等待 250ms 请求 `parseSource`，并取消过期请求。成功结果同时更新参数预览和草稿的 `input_schema`；旧源码的结果不可继续视作有效。
 - [`python_source.py`](../../packages/harness/shikigen/contracts/python_source.py)：先 `ast.parse`，再 `compile(tree, ..., "exec")`；检查唯一顶层同步 `main`、装饰器、签名、生成器入口；当前支持普通具名参数及 `str/int/float/bool` 注解。函数默认值决定可否省略，`None` 默认值不会自动把 `int` 变为 nullable。
 - 当前默认表达式保留源码原文，后端只通过 `ast.literal_eval` 读取支持的标量字面量，不调用用户函数、不导入源码、不执行默认表达式。
-- [ticket 06](../../.scratch/tools-workflow/issues/06-python-schema-sync.md) 将继续增加容器、nullable、关键字参数、未知类型补齐和源码变更合并。前端提取器应有独立模块与可扩展的类型表示，避免把 05 的四种标量判断散落在组件中。
+- [ticket 06](../wayfinder/tools-workflow/implementation/06-python-schema-sync.md) 将继续增加容器、nullable、关键字参数、未知类型补齐和源码变更合并。前端提取器应有独立模块与可扩展的类型表示，避免把 05 的四种标量判断散落在组件中。
 
 后端的 `compile` 有实际作用：Python 官方说明，`ast.parse` 成功仍可能在编译时抛出 `SyntaxError`，并不会执行编译阶段的作用域检查；例如顶层 `return` 能形成 AST，但不能编译为模块。[Python ast 文档](https://docs.python.org/3.12/library/ast.html#ast.parse)
 
@@ -92,13 +92,13 @@ Pyodide 314.0.7 的 12.90 MiB 来自五个核心文件：`pyodide.mjs` 17,931 B�
 
 网络传输也应单列：按文件 gzip 压缩，CodeMirror 构建约 **152 KiB**、Monaco 构建约 **1.17 MiB**；实际 CDN gzip 响应中的 Pyodide 核心分别约 **6.04 MiB**（314.0.7）和 **5.46 MiB**（0.27.7），均未加编辑器。gzip 数字不代表安装后的文件占用。
 
-原始证据和复现脚本位于 [python-storage](../../.scratch/tools-workflow/research/python-storage/)：`editor-sizes.json`、`bundle-probe/measure.mjs`、`bundle-probe/package-lock.json`、`pyodide-*.json`、`pyodide-*-bootstrap.json`。这些是隔离样本的实测，所有安装与构建均在 scratch 目录，没有改动项目依赖或锁文件。
+原始证据和复现脚本位于本机 `.scratch/tools-workflow/research/python-storage/`：`editor-sizes.json`、`bundle-probe/measure.mjs`、`bundle-probe/package-lock.json`、`pyodide-*.json`、`pyodide-*-bootstrap.json`。这些是隔离样本的实测，所有安装与构建均在 scratch 目录，没有改动项目依赖或锁文件；目录受 Git 忽略，表中的测量结论保留在本文。
 
 ## 隔离验证
 
 主调查在项目 scratch 目录下载并按 registry SHA512 核对独立 npm 包，没有安装到 frontend、没有修改锁文件。验证使用 `@lezer/python` 1.1.19，对同一组 19 段源码运行 Lezer 和项目现有后端解析器。
 
-记录在 [python-parser](../../.scratch/tools-workflow/research/python-parser/)：`packages.json`、`cases.json`、`probe.mjs`、`backend-results.json`、`lezer-results.json`。这些是本仓库此次实测证据，不是上游保证。
+记录在本机 `.scratch/tools-workflow/research/python-parser/`：`packages.json`、`cases.json`、`probe.mjs`、`backend-results.json`、`lezer-results.json`。这些是本仓库此次实测证据，不是上游保证，目录受 Git 忽略。
 
 | 样例 | Lezer 观察 | 现有后端观察 | 设计含义 |
 | --- | --- | --- | --- |

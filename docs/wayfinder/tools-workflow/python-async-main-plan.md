@@ -2,6 +2,8 @@
 
 状态：待实施。记录日期：2026-10-17。
 
+2026-10-23 复核范围：已有 `ToolInstance.invoke()`／`ainvoke()` 是调用方接口，不表示源码中的 `async def main` 已支持。当前工具能力与延期项见[开发指南](README.md)。
+
 目标是在保留同步 `def main` 的基础上，支持协程入口 `async def main`。本次只记录方案，不修改运行行为。现行行为见 [Python 工具执行说明](python-tool-execution.md)。
 
 ## 当前行为与引入原因

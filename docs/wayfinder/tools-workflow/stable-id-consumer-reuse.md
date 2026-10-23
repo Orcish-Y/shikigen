@@ -87,4 +87,6 @@ async def price_and_send(tools, http_id, python_id, mcp_id):
 
 同步调用补充验证（2026-10-23）：后端全量 487 项，486 通过、1 跳过，耗时 692.091 秒；修改文件的 Ruff／格式检查及全部后端源码 ty 通过。全量日志位于 `.scratch/tools-workflow/sync-tools-backend-full.log`。本次没有修改前端。
 
+`c42a50f` 提交前最终复核：同步专项 15 项通过（16.088 秒），修改文件 Ruff／格式、全部后端源码 ty 和 diff 检查通过。同步入口已并入 `tools/tool_library.py`；历史完整回归与迁移专项的范围见[验证索引](validation.md)。
+
 本票没有新增工作流编辑器、连线选择、定制 Agent 页面、引用关系表或当前聊天自动挂载。验证与审查结果见[验收记录](stable-id-consumer-reuse.review.md)。

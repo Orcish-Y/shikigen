@@ -1,5 +1,7 @@
 # 工具执行接缝调查
 
+> 开发前历史调查，环境、依赖版本和缺口均指 2026-10-12。当前执行、同步调用和清理契约见[工具库指南](README.md)中的对应主题。
+
 调查日期：2026-10-12。只读调查，未修改应用代码、运行产品测试或读取实际凭据。
 
 本 worktree 没有 `.venv`。锁定依赖的实现从主工作区 `C:/code/shikigen-agent/.venv/Lib/site-packages` 只读检查，版本与本 worktree 的 [uv.lock](../../../uv.lock) 一致：langchain-core 1.5.1、langchain-mcp-adapters 0.3.2、MCP SDK 1.29.0、HTTPX 0.28.1、jsonschema 4.26.0。此处记录现状事实，不替用户决定产品契约。

@@ -11,6 +11,10 @@
 - 评论和讨论追加到 `## Comments`
 - `.scratch/` 或 feature 目录不存在时，首次使用时创建
 
+## 已完成任务的长期保存
+
+已完成 feature 的 PRD、开发票及实现／验收结论可整理到 `docs/` 中的对应专题，补充当前行为、历史范围和验证入口。原 scratch 路径保留指向长期正文的说明；后续查阅使用版本化正文，本机日志和缓存继续留在 scratch。工具模块的实例见[开发指南](../wayfinder/tools-workflow/README.md)与[实施索引](../wayfinder/tools-workflow/implementation/index.md)。新任务发布仍使用上面的 scratch 路径约定。
+
 ## 技能的 tracker 操作
 
 - 技能要求发布 PRD 或任务时，在 `.scratch/<feature-slug>/` 下创建文件

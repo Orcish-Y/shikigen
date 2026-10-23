@@ -81,6 +81,7 @@ core/
 `shikigen.tools.tool_library.open_sync_tool_library()` 管理后台循环及资源关闭，
 与异步入口 `ToolLibrary` 位于同一模块。
 完整结果、重新校验和非 LLM 字段传递见[复用接口](docs/wayfinder/tools-workflow/stable-id-consumer-reuse.md)。
+后续工具开发从[工具库开发指南](docs/wayfinder/tools-workflow/README.md)进入，按主题查当前契约、14 张开发票及验证记录；页面继续参照工具原型。
 
 公共导入 `from shikigen import create_lead_agent, execute_agent_loop` 和
 `from shikigen.runtime import open_runtime` 保持不变。直接引用旧内部模块的代码

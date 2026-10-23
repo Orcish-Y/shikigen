@@ -1,6 +1,6 @@
 # 文档导航
 
-更新于 2026-10-13。后续 agent 先读 [开发交接与当前状态](development-handoff.md)：首版前端 23 张票据已完成；后端近期重构、验证范围和三项待调查问题在此汇总。临时目录已迁移到 [本次归档](archive/2026-10-07/README.md)。工具模块的已确认规划见下表。
+更新于 2026-10-23。后续 agent 先读 [开发交接与当前状态](development-handoff.md)。工具相关开发进入[工具库开发指南](wayfinder/tools-workflow/README.md)，查当前约定、14 张开发票、同步／异步调用及验证范围。2026-10-07 的首版前端与后端整理继续保留在[历史归档](archive/2026-10-07/README.md)。
 
 开发时从这里找材料。当前项目行为以 [项目开发参考](project.md)、最终接口契约及代码/测试为准；外部调查保留原调查日期，历史建议不自动成为当前待办。
 
@@ -16,10 +16,10 @@
 | 首版实施与验收 | [23 票实施索引](wayfinder/frontend-completion/implementation/index.md)、[原生验收汇总](wayfinder/frontend-completion/native-acceptance-summary.md) | 2026-10-07 已验收；分批结果及未覆盖硬件范围分别记录 |
 | 近期开发与遗留问题 | [开发交接](development-handoff.md)、[待调查问题](issues/README.md)、[开发归档](archive/2026-10-07/README.md) | 消息事务、分页、响应头、端口回退和网络模块；保留实际回归错误 |
 | 外部 Agent 架构对照 | [研究索引](research/README.md) | 持久化/执行边界、子 Agent/多会话、MCP 三个主题摘要 |
-| 工具库与消费者复用 | [工具模块决策地图](wayfinder/tools-workflow/map.md)、[页面与生命周期决议](wayfinder/tools-workflow/tickets/004-management-ui-lifecycle.resolution.md)、[稳定 ID 与复用接口](wayfinder/tools-workflow/stable-id-consumer-reuse.md) | HTTP／Python／MCP 工具管理、导入和测试；按 ID 同步／异步调用，保留完整结果及非 LLM 字段传递 |
+| 工具库与消费者复用 | [开发指南](wayfinder/tools-workflow/README.md)、[14 票实施索引](wayfinder/tools-workflow/implementation/index.md)、[验证与报告](wayfinder/tools-workflow/validation.md) | HTTP／Python／MCP、OpenAPI、草稿与冲突、同步／异步复用；当前约定和延期项集中索引 |
 | 框架 API 速查 | [LangGraph 标识](research/langgraph-identifiers.md)、[状态存储](research/runtime-context-and-storage-strategy.md) | 开发参考，保留原文 |
 | 决策依据 | [Windows 决策地图](wayfinder/windows-backend-lifecycle/map.md) | 保留已关闭票据和最终 resolution；长讨论已归档 |
-| 学习与走读 | [learning-records/](../learning-records/)、[DeerFlow 架构导读](../doc/1.txt)、[run_agent 走读](../doc/带你一行行走读%20run_agent%28%29.md) | 教学材料保留，不混入当前实施待办 |
+| 学习与走读 | [learning-records/](../learning-records/) | 教学材料保留；本机 `doc/1.txt` 与 `doc/带你一行行走读 run_agent().md` 未纳入版本控制，按本机环境查阅 |
 | 旧材料与验收证据 | [归档索引](archive/README.md) | 原文、日志、结果 JSON、截图、设计探索和恢复方式 |
 
 长期目标见 [MISSION](../MISSION.md)，学习资源见 [RESOURCES](../RESOURCES.md)，协作与追踪约定保留在 [agents/](agents/issue-tracker.md)。

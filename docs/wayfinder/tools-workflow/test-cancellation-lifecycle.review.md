@@ -1,6 +1,6 @@
 # 12 号票审查与验证
 
-需求：[测试取消、超时与运行中交互](../../../.scratch/tools-workflow/issues/12-test-cancellation-lifecycle.md)。实现说明见[测试生命周期](test-cancellation-lifecycle.md)。
+需求：[测试取消、超时与运行中交互](implementation/12-test-cancellation-lifecycle.md)。实现说明见[测试生命周期](test-cancellation-lifecycle.md)。
 
 以下两轴审查与全量证据记录初次实现，后续各节保留中间调整历史。当前协议以实现说明和文末“单次请求开始测试”为准，独立登记流程已按用户决定移除。
 
