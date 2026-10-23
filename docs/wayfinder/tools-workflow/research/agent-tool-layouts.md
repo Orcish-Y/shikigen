@@ -34,7 +34,7 @@
 
 ## 对当前目录拆分的启示
 
-当前项目里，这两类职责已经能从调用方区分出来：`core/agent.py` 用 `ToolRegistry`、内置 `BaseTool` 和 `mcp_loader` 组装传给 LangChain Agent 的工具；`runtime/tool_library.py` 管理持久工具定义，并通过 `ToolExecutor` 和 HTTP/Python/MCP adapters 执行工具库中的定义。`contracts/tool_definitions.py` 与 `contracts/tool_execution.py` 分别承载定义和执行协议。
+当前项目里，这两类职责已经能从调用方区分出来：`core/agent.py` 用 `ToolRegistry`、内置 `BaseTool` 和 `mcp_loader` 组装传给 LangChain Agent 的工具；`tools/tool_library.py` 管理持久工具定义，并通过 `ToolExecutor` 和 HTTP/Python/MCP adapters 执行工具库中的定义。`contracts/tool_definitions.py` 与 `contracts/tool_execution.py` 分别承载定义和执行协议。
 
 如果要整理目录，建议按调用边界把两组代码分开，而让一个内置工具的 LangChain schema/描述和 handler 继续共置：
 
@@ -50,7 +50,7 @@ shikigen/
     adapters/          # HTTP、Python、MCP 的执行实现
     mcp/               # MCP session 和 transport 辅助
   contracts/           # 可持久化定义与执行协议
-  runtime/tool_library.py  # 工具库配置、CRUD、测试等应用服务
+  tools/tool_library.py  # 工具库配置、CRUD、测试等应用服务
 ```
 
-这里的文件名是职责示意，不是必须照搬的框架约定。若把“工具定义”与“业务实现”拆成两个平行列表，需要额外维护名称/schema 到 handler 的映射；因此优先拆 Agent 工具包与工具库执行包，再按工具或领域分文件。`runtime/tool_library.py` 继续作为应用服务，通过依赖组装使用执行器。
+这里的文件名是职责示意，不是必须照搬的框架约定。若把“工具定义”与“业务实现”拆成两个平行列表，需要额外维护名称/schema 到 handler 的映射；因此优先拆 Agent 工具包与工具库执行包，再按工具或领域分文件。`tools/tool_library.py` 继续作为应用服务，通过依赖组装使用执行器。

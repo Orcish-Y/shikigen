@@ -2,7 +2,7 @@
 
 import json
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, TypeGuard
 
 from langchain_core.messages import ToolCall, ToolMessage
 from langchain_core.runnables import RunnableConfig, ensure_config
@@ -17,6 +17,41 @@ class ToolInstance(BaseTool):
   execute_fn: Callable[[str, dict], Awaitable[ToolResult]] = Field(
     exclude=True, repr=False
   )
+  execute_sync_fn: Callable[[str, dict], ToolResult] = Field(exclude=True, repr=False)
+
+  @staticmethod
+  def _is_business_input(
+    input: str | dict[str, Any] | ToolCall,
+  ) -> TypeGuard[dict[str, Any]]:
+    return (
+      isinstance(input, dict)
+      and input.get("type") == "tool_call"
+      and not (
+        isinstance(input.get("id"), str)
+        and isinstance(input.get("name"), str)
+        and isinstance(input.get("args"), dict)
+      )
+    )
+
+  def invoke(
+    self,
+    input: str | dict[str, Any] | ToolCall,
+    config: RunnableConfig | None = None,
+    **kwargs: Any,
+  ) -> Any:
+    if not self._is_business_input(input):
+      return super().invoke(input, config, **kwargs)
+    run_config = ensure_config(config)
+    return self.run(
+      dict(input),
+      callbacks=run_config.get("callbacks"),
+      tags=run_config.get("tags"),
+      metadata=run_config.get("metadata"),
+      run_name=run_config.get("run_name"),
+      run_id=run_config.pop("run_id", None),
+      config=run_config,
+      **kwargs,
+    )
 
   async def ainvoke(
     self,
@@ -24,15 +59,7 @@ class ToolInstance(BaseTool):
     config: RunnableConfig | None = None,
     **kwargs: Any,
   ) -> Any:
-    if (
-      not isinstance(input, dict)
-      or input.get("type") != "tool_call"
-      or (
-        isinstance(input.get("id"), str)
-        and isinstance(input.get("name"), str)
-        and isinstance(input.get("args"), dict)
-      )
-    ):
+    if not self._is_business_input(input):
       return await super().ainvoke(input, config, **kwargs)
     # LangChain 仅凭 type 判断封装；合法业务对象也可有 type='tool_call'。
     # 非完整封装通过公开 arun 进入同一执行流程，并保留调用上下文。
@@ -57,11 +84,14 @@ class ToolInstance(BaseTool):
       raise ValueError("Tool instances require an inputs object")
     return (tool_input, tool_call_id), {}
 
-  def _run(self, *args, **kwargs):
-    raise NotImplementedError("Tool instances use ainvoke for asynchronous execution")
+  def _run(self, inputs: dict, tool_call_id: str | None = None):
+    return self._format_result(self.execute_sync_fn(self.tool_id, inputs), tool_call_id)
 
   async def _arun(self, inputs: dict, tool_call_id: str | None = None):
     result = await self.execute_fn(self.tool_id, inputs)
+    return self._format_result(result, tool_call_id)
+
+  def _format_result(self, result: ToolResult, tool_call_id: str | None):
     envelope = result.model_dump(mode="json")
     if tool_call_id is None:
       return envelope

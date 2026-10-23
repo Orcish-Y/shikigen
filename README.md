@@ -69,7 +69,7 @@ core/
 
 `create_lead_agent()` 与 `open_runtime()` 共用
 `core.tool_assembly.create_agent_tool_registry()` 组装默认工具。
-`runtime/tool_library.py` 负责持久工具的管理、发现与测试协调，并组装
+`tools/tool_library.py` 负责持久工具的管理、发现与测试协调，并组装
 `tools` 中的执行器和各类型适配器；执行器与适配器不反向依赖 runtime。
 共享定义和执行协议仍归 `contracts`，源码与配置存取仍归 `persistence`。
 迁移后的内部模块直接使用上述路径，不保留旧路径的兼容导出。
@@ -77,6 +77,9 @@ core/
 
 已保存工具可通过 `runtime.tools.get_tool()`、`build_tools()`、`execute_tool()`
 按稳定 ID 读取、装配或直接执行；普通消费者不需要创建 Agent 或 Run。
+装配的工具支持同步 `invoke()` 和异步 `ainvoke()`；同步脚本使用
+`shikigen.tools.tool_library.open_sync_tool_library()` 管理后台循环及资源关闭，
+与异步入口 `ToolLibrary` 位于同一模块。
 完整结果、重新校验和非 LLM 字段传递见[复用接口](docs/wayfinder/tools-workflow/stable-id-consumer-reuse.md)。
 
 公共导入 `from shikigen import create_lead_agent, execute_agent_loop` 和

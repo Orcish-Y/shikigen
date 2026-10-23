@@ -1,7 +1,7 @@
 from fastapi import HTTPException
 from shikigen.contracts.python_source import PythonSourceError
-from shikigen.runtime.tool_library import ToolLibraryError
 from shikigen.tools.http.openapi_import import OpenApiImportError
+from shikigen.tools.tool_library import ToolLibraryError
 
 
 def fail(error: ToolLibraryError | PythonSourceError | OpenApiImportError):

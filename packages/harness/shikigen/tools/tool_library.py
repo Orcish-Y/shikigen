@@ -1,4 +1,4 @@
-"""从实际配置来源读取工具，只更新原始文档中的工具库分组。"""
+"""工具库管理与同步／异步调用入口，只更新原始文档中的工具库分组。"""
 
 import asyncio
 import hashlib
@@ -7,10 +7,13 @@ import logging
 import os
 import tempfile
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Generator
+from concurrent.futures import Future
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import Thread
 from uuid import UUID, uuid4
 
 from langchain_core.tools import BaseTool
@@ -44,6 +47,7 @@ from shikigen.tools.mcp.sessions import (
 )
 from shikigen.tools.python.execution import PythonAdapter
 from shikigen.tools.redaction import execution_secrets, redact_tool_value
+from shikigen.tools.tool_calls import ToolCallBridge
 from shikigen.tools.tool_instance import ToolInstance
 
 definition_adapter = TypeAdapter(AnyToolDefinition)
@@ -86,6 +90,7 @@ class ToolLibrary:
     self.source_path = source_path.resolve() if source_path else None
     self.python_source_store = PythonSourceStore(self.source_path)
     self._lock = asyncio.Lock()
+    self._calls = ToolCallBridge()
     self._reserved_names = set(create_builtin_registry().names) | {"task"}
     self.mcp_session_provider = McpConnectionSessionProvider(
       self.source_path.parent if self.source_path else Path.cwd()
@@ -98,6 +103,8 @@ class ToolLibrary:
       }
     )
     self._test_records: dict[str, ToolTestRecord] = {}
+    self._execution_tasks: set[asyncio.Task[ToolResult]] = set()
+    self._shutdown_task: asyncio.Task[None] | None = None
     self._discoveries: dict[str, dict] = {}
 
   def _read(self) -> tuple[dict, ToolLibraryConfig, str]:
@@ -149,12 +156,12 @@ class ToolLibrary:
       )
 
   async def list_tools(self) -> tuple[list[AnyToolDefinition], str]:
-    async with self._lock:
+    async with self._coordinate_config():
       _, library, version = await asyncio.to_thread(self._read)
       return library.tools, version
 
   async def list_mcp_connections(self):
-    async with self._lock:
+    async with self._coordinate_config():
       _, library, version = await asyncio.to_thread(self._read)
       return list(library.mcp_connections.values()), version
 
@@ -166,7 +173,7 @@ class ToolLibrary:
     raise ToolLibraryError("not_found", "MCP connection does not exist", 404)
 
   async def inspect_mcp_connection(self, connection_id: str, *, discover: bool):
-    async with self._lock:
+    async with self._coordinate_config():
       _, library, version = await asyncio.to_thread(self._read)
       connection = library.mcp_connections.get(connection_id)
       if connection is None:
@@ -263,7 +270,7 @@ class ToolLibrary:
   async def import_mcp_tools(
     self, connection_id: str, discovery_id: str, selections: list[dict]
   ):
-    async with self._lock:
+    async with self._coordinate_config():
       raw, library, current_version = await asyncio.to_thread(self._read)
       discovery = self._discoveries.get(discovery_id)
       if (
@@ -361,7 +368,7 @@ class ToolLibrary:
       raise ToolLibraryError(
         "connection_invalid", "Invalid MCP connection settings"
       ) from None
-    async with self._lock:
+    async with self._coordinate_config():
       raw, library, current_version = await asyncio.to_thread(self._read)
       previous = library.mcp_connections.get(connection_id) if connection_id else None
       if connection_id and previous is None:
@@ -396,7 +403,7 @@ class ToolLibrary:
     )
 
   async def delete_mcp_connection(self, connection_id: str, version: str) -> None:
-    async with self._lock:
+    async with self._coordinate_config():
       raw, library, current_version = await asyncio.to_thread(self._read)
       if connection_id not in library.mcp_connections:
         raise ToolLibraryError("not_found", "MCP connection does not exist", 404)
@@ -441,17 +448,41 @@ class ToolLibrary:
     return {"valid": True, "code": None, "message": None}
 
   async def execute_tool(self, tool_id: str, inputs: dict) -> ToolResult:
-    async def load():
-      return await self._load_saved_execution(tool_id)
+    return await self._calls.call(lambda: self._execute_tool(tool_id, inputs))
 
-    result = await self.executor.execute(load, inputs)
-    result.details["tool_id"] = tool_id
-    return result
+  async def _execute_tool(self, tool_id: str, inputs: dict) -> ToolResult:
+    async def run():
+      async def load():
+        return await self._load_saved_execution(tool_id)
+
+      result = await self.executor.execute(load, inputs)
+      result.details["tool_id"] = tool_id
+      return result
+
+    task = asyncio.create_task(run())
+    self._execution_tasks.add(task)
+    try:
+      while True:
+        try:
+          return await asyncio.shield(task)
+        except asyncio.CancelledError:
+          if task.cancelled():
+            raise
+          # 多个调用方的取消或 shutdown 不能重复打断适配器的资源清理。
+          if not task.cancelling():
+            task.cancel()
+    finally:
+      self._execution_tasks.discard(task)
+
+  def _execute_tool_sync(self, tool_id: str, inputs: dict) -> ToolResult:
+    return self._calls.call_sync(lambda: self.execute_tool(tool_id, inputs))
 
   async def build_tools(self, tool_ids: list[str]) -> list[BaseTool]:
     """按 ID 装配；名称与 schema 为装配时信息，每次调用仍读取最新定义。"""
     selected_ids = list(dict.fromkeys(tool_ids))
-    return await self._run_coordinated_io(lambda: self._build_tools(selected_ids))
+    return await self._calls.call(
+      lambda: self._run_coordinated_io(lambda: self._build_tools(selected_ids))
+    )
 
   def _build_tools(self, tool_ids: list[str]) -> list[BaseTool]:
     try:
@@ -475,6 +506,7 @@ class ToolLibrary:
           args_schema=definition.input_schema,
           metadata={"tool_id": definition.id},
           execute_fn=self.execute_tool,
+          execute_sync_fn=self._execute_tool_sync,
         )
       except Exception:
         raise ToolLibraryError(
@@ -550,7 +582,7 @@ class ToolLibrary:
     )
 
   async def _run_coordinated_io[T](self, operation: Callable[[], T]) -> T:
-    async with self._lock:
+    async with self._coordinate_config():
       io_task = asyncio.create_task(asyncio.to_thread(operation))
       try:
         return await asyncio.shield(io_task)
@@ -558,6 +590,12 @@ class ToolLibrary:
         # 取消时等工作线程结束，防止文件处理越过协调锁。
         await asyncio.gather(io_task, return_exceptions=True)
         raise
+
+  @asynccontextmanager
+  async def _coordinate_config(self):
+    self._calls.bind()
+    async with self._lock:
+      yield
 
   def _read_python_source(self, tool) -> str:
     try:
@@ -615,7 +653,7 @@ class ToolLibrary:
     return await self._run_coordinated_io(read)
 
   async def delete_tool(self, tool_id: str, version: str) -> None:
-    async with self._lock:
+    async with self._coordinate_config():
       raw, library, current_config_version = await asyncio.to_thread(self._read)
       if not any(tool.id == tool_id for tool in library.tools):
         raise ToolLibraryError("not_found", "Tool does not exist", 404)
@@ -627,6 +665,7 @@ class ToolLibrary:
       await asyncio.to_thread(self._commit, raw, current_config_version)
 
   async def start_test(self, tool_id: str, inputs: dict):
+    self._calls.check_open()
     execution = await self._load_saved_execution(tool_id)
     return self._start_test(execution, inputs, tool_id)
 
@@ -636,7 +675,8 @@ class ToolLibrary:
     inputs: dict,
     tool_id: str | None = None,
   ):
-    async with self._lock:
+    self._calls.check_open()
+    async with self._coordinate_config():
       _, library, _ = await asyncio.to_thread(self._read)
       previous = next((tool for tool in library.tools if tool.id == tool_id), None)
       if tool_id is not None and previous is None:
@@ -693,6 +733,8 @@ class ToolLibrary:
     inputs: dict,
     tool_id: str | None,
   ):
+    # 准备期间可能已关闭；检查到任务登记之间不能让出所属事件循环。
+    self._calls.check_open()
     observed_inputs = redact_tool_value(inputs, execution_secrets(execution))
     record = self._create_test_record(tool_id, observed_inputs)
     snapshot = record.snapshot
@@ -756,11 +798,33 @@ class ToolLibrary:
         task.cancel()
 
   async def shutdown(self):
+    self._calls.bind()
+    if self._shutdown_task is None:
+      self._calls.close()
+      self._shutdown_task = asyncio.create_task(self._shutdown())
+    caller_cancelled = False
+    while True:
+      try:
+        await asyncio.shield(self._shutdown_task)
+        break
+      except asyncio.CancelledError:
+        if self._shutdown_task.cancelled():
+          raise
+        # 重复取消只记录在调用方，不能再次打断共享任务的资源清理。
+        caller_cancelled = True
+    if caller_cancelled:
+      raise asyncio.CancelledError
+
+  async def _shutdown(self):
     tasks = []
     for record in tuple(self._test_records.values()):
       if record.task is not None:
         tasks.append(record.task)
         self._request_test_cancellation(record)
+    for task in tuple(self._execution_tasks):
+      tasks.append(task)
+      if not task.done() and not task.cancelling():
+        task.cancel()
     await asyncio.gather(*tasks, return_exceptions=True)
 
   async def save_tool(
@@ -770,7 +834,7 @@ class ToolLibrary:
     tool_id: str | None = None,
     version: str | None = None,
   ) -> tuple[AnyToolDefinition, str]:
-    async with self._lock:
+    async with self._coordinate_config():
       raw, library, current_config_version = await asyncio.to_thread(self._read)
       previous = next((tool for tool in library.tools if tool.id == tool_id), None)
       if tool_id is not None and previous is None:
@@ -797,7 +861,7 @@ class ToolLibrary:
     definitions = await asyncio.to_thread(
       selected_openapi_definitions, document, selections
     )
-    async with self._lock:
+    async with self._coordinate_config():
       raw, library, current_version = await asyncio.to_thread(self._read)
       self._check_version(
         version, current_version, *[item["operation_key"] for item in selections]
@@ -933,3 +997,57 @@ class ToolLibrary:
         except OSError:
           # A best-effort temporary-file cleanup cannot change commit outcome.
           pass
+
+
+class SyncToolLibrary:
+  """ToolLibrary 的同步调用视图，执行统一转交给所属事件循环。"""
+
+  def __init__(self, library: ToolLibrary):
+    self._library = library
+
+  def build_tools(self, tool_ids: list[str]) -> list[BaseTool]:
+    return self._library._calls.call_sync(lambda: self._library.build_tools(tool_ids))
+
+  def execute_tool(self, tool_id: str, inputs: dict) -> ToolResult:
+    return self._library._calls.call_sync(
+      lambda: self._library.execute_tool(tool_id, inputs)
+    )
+
+
+@contextmanager
+def open_sync_tool_library(source_path: Path | None) -> Generator[SyncToolLibrary]:
+  """在 with 期间复用一个后台循环；退出前停止执行并回收子进程等资源。"""
+  ready: Future[tuple[ToolLibrary, asyncio.AbstractEventLoop, asyncio.Event]] = Future()
+
+  async def serve():
+    library = ToolLibrary(source_path)
+    library._calls.bind()
+    stop = asyncio.Event()
+    ready.set_result((library, asyncio.get_running_loop(), stop))
+    await stop.wait()
+
+  def run():
+    try:
+      with asyncio.Runner() as runner:
+        runner.run(serve())
+    except BaseException as error:
+      if not ready.done():
+        ready.set_exception(error)
+      else:
+        raise
+
+  thread = Thread(target=run, name="shikigen-tools")
+  thread.start()
+  try:
+    library, loop, stop = ready.result()
+    try:
+      yield SyncToolLibrary(library)
+    finally:
+      library._calls.call_sync(library.shutdown)
+  finally:
+    # 启动期间被中断也要等装配结束，再让后台循环退出。
+    try:
+      library, loop, stop = ready.result()
+      loop.call_soon_threadsafe(stop.set)
+    finally:
+      thread.join()

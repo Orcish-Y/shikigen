@@ -4,7 +4,7 @@ from shikigen.contracts.mcp_connections import (
   McpStdioSettings,
   McpStreamableHttpSettings,
 )
-from shikigen.runtime.tool_library import ToolLibraryError
+from shikigen.tools.tool_library import ToolLibraryError
 
 from app.routes.tools.errors import fail
 

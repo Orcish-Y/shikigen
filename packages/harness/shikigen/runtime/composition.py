@@ -1,6 +1,6 @@
 """HTTP 与普通 Python 入口共享的资源装配。"""
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,8 +21,8 @@ from shikigen.runtime.run_events import RunEventIngestor
 from shikigen.runtime.run_execution import RunExecutionCoordinator
 from shikigen.runtime.runs import RunService, RunTransitions
 from shikigen.runtime.threads import ThreadService
-from shikigen.runtime.tool_library import ToolLibrary
 from shikigen.runtime.workspace_resources import WorkspaceResources
+from shikigen.tools.tool_library import ToolLibrary
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,7 +86,7 @@ def assemble_runtime(
 @asynccontextmanager
 async def open_runtime(
   config: AppConfig | None = None,
-) -> AsyncIterator[Runtime]:
+) -> AsyncGenerator[Runtime]:
   """使用项目 Agent 工厂装配工具、审批和 Runtime，并管理资源生命周期。"""
   app_config = config if config is not None else load_app_config()
   async with AsyncExitStack() as stack:

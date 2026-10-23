@@ -416,7 +416,7 @@ class ToolConfigLifecycleTests(unittest.IsolatedAsyncioTestCase):
 
     with (
       patch.object(Path, "iterdir", inaccessible_directory),
-      self.assertLogs("shikigen.runtime.tool_library", level="WARNING"),
+      self.assertLogs("shikigen.tools.tool_library", level="WARNING"),
     ):
       response = await self.client.put(
         f"/api/tools/{saved['data']['id']}",
@@ -478,7 +478,7 @@ class ToolConfigLifecycleTests(unittest.IsolatedAsyncioTestCase):
     self.addAsyncCleanup(runtime.lifecycle.shutdown)
     app = create_app(runtime=runtime)
     self.path.write_text("broken JSON", encoding="utf-8")
-    with self.assertLogs("shikigen.runtime.tool_library", level="WARNING"):
+    with self.assertLogs("shikigen.tools.tool_library", level="WARNING"):
       async with app.router.lifespan_context(app):
         self.assertTrue(orphan.exists())
         self.assertTrue(code.exists())

@@ -991,7 +991,7 @@ class ToolLibraryApiTests(unittest.IsolatedAsyncioTestCase):
     )
 
   async def test_executable_definitions_recheck_enabled_and_deleted_tools(self):
-    from shikigen.runtime.tool_library import ToolLibraryError
+    from shikigen.tools.tool_library import ToolLibraryError
 
     library = self.app.state.runtime.tools
     payload = {

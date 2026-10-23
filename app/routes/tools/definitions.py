@@ -6,7 +6,7 @@ from shikigen.contracts.tool_definitions import (
   McpToolDefinition,
   PythonToolDefinition,
 )
-from shikigen.runtime.tool_library import ToolLibraryError
+from shikigen.tools.tool_library import ToolLibraryError
 
 from app.routes.tools.errors import fail
 
