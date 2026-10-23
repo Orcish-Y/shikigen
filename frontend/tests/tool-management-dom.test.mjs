@@ -25,6 +25,7 @@ const {ToolInputForm} = await import('../src/components/tools/ToolInputForm.tsx'
 const {ToolTestResult} = await import('../src/components/tools/ToolTestResult.tsx');
 const {ToolsWorkspace} = await import('../src/components/tools/ToolsWorkspace.tsx');
 const {BackendSession} = await import('../src/backend-client.ts');
+const {emptyToolDraft} = await import('../src/tool-library.ts');
 const {EditorView} = await import('@codemirror/view');
 const {EditorState} = await import('@codemirror/state');
 const {forEachDiagnostic} = await import('@codemirror/lint');
@@ -78,6 +79,58 @@ function replacePythonSource(source) {
   return view;
 }
 afterEach(cleanup);
+
+test('刷新自动重读未编辑详情，外部变化保留脏草稿并阻止覆盖直到明确重读',async () => {
+  let version='v1',writes=0;
+  let tool={...structuredClone(emptyToolDraft),id:'external',name:'external',display_name:'外部变动',url:'http://localhost/old',created_at:'2026-10-23T00:00:00Z',updated_at:'2026-10-23T00:00:00Z'};
+  const session=toolSession(async (url,init) => {
+    if(url.endsWith('/schema/http')) return response({data:schema});
+    if(url.includes('/validate-name?')) return response({data:{valid:true}});
+    if(init?.method === 'PUT') {writes++;return new Response(null,{status:204});}
+    return response({data:url.endsWith('/api/tools') ? [tool] : tool,version,reserved_names:[]});
+  });
+  const user=userEvent.setup({document:browser.window.document,delay:null});
+  render(React.createElement(ToolsWorkspace,{session,onView:() => {}}));
+  await user.click(await screen.findByRole('button',{name:/external.*外部变动/}));
+  await screen.findByLabelText(/请求地址/);
+  tool={...tool,url:'http://localhost/external'};version='v2';
+  await user.click(screen.getByRole('button',{name:'刷新工具列表'}));
+  await waitFor(() => assert.equal(screen.getByLabelText(/请求地址/).value,tool.url));
+  fireEvent.change(screen.getByLabelText(/请求地址/),{target:{value:'http://localhost/draft'}});
+  tool={...tool,url:'http://localhost/new-external'};version='v3';
+  await user.click(screen.getByRole('button',{name:'刷新工具列表'}));
+  await screen.findByText(/草稿已保留.*重读/);
+  assert.equal(screen.getByLabelText(/请求地址/).value,'http://localhost/draft');
+  assert.equal(screen.getByRole('button',{name:'保存工具'}).disabled,true);
+  await user.click(screen.getByRole('button',{name:'保存工具'}));
+  assert.equal(writes,0);
+  await user.click(screen.getByRole('button',{name:'放弃草稿并重读工具详情'}));
+  await waitFor(() => assert.equal(screen.getByLabelText(/请求地址/).value,tool.url));
+  assert.equal(screen.getByRole('button',{name:'保存工具'}).disabled,false);
+});
+
+test('保存与删除的空 204 响应直接显示成功',async () => {
+  let tool={...structuredClone(emptyToolDraft),id:'maintenance',name:'maintenance',display_name:'清理维护',url:'http://localhost/',created_at:'2026-10-23T00:00:00Z',updated_at:'2026-10-23T00:00:00Z'};
+  let writes=0;
+  const session=toolSession(async (url,init) => {
+    if(url.endsWith('/schema/http')) return response({data:schema});
+    if(url.includes('/validate-name?')) return response({data:{valid:true}});
+    if(init?.method === 'PUT') {writes++;return new Response(null,{status:204});}
+    if(init?.method === 'DELETE') {tool=null;return new Response(null,{status:204});}
+    return response({data:url.endsWith('/api/tools') ? (tool ? [tool] : []) : tool,version:'v1',reserved_names:[]});
+  });
+  const user=userEvent.setup({document:browser.window.document,delay:null});
+  render(React.createElement(ToolsWorkspace,{session,onView:() => {}}));
+  await user.click(await screen.findByRole('button',{name:/maintenance.*清理维护/}));
+  await screen.findByLabelText(/请求地址/);
+  await user.click(screen.getByRole('button',{name:'保存工具'}));
+  await screen.findByText('工具已保存');
+  assert.equal(writes,1);assert.equal(screen.queryByText(/保存结果不确定/),null);
+  await user.click(screen.getByRole('button',{name:'删除工具'}));
+  await user.click(screen.getByRole('button',{name:'确认删除'}));
+  await screen.findByText('工具已删除');
+  assert.equal(screen.queryByLabelText(/请求地址/),null);
+});
 
 test('Python 本地预览不改写草稿，源码错误立即清除旧结构，默认值不注入实际输入', async () => {
   const user=userEvent.setup({document:browser.window.document,delay:null});

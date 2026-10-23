@@ -3,9 +3,11 @@
 import asyncio
 import hashlib
 import json
+import logging
 import os
 import tempfile
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -15,6 +17,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from shikigen.contracts.mcp_connections import AnyMcpConnection, AnyMcpSettings
 from shikigen.contracts.python_schema import prepare_python_input_schema
+from shikigen.contracts.python_source import PythonSourceError
 from shikigen.contracts.tool_definitions import (
   AnyToolDefinition,
   ToolLibraryConfig,
@@ -52,13 +55,22 @@ MCP_SOURCE_FIELDS = (
   "output_schema",
   "source_tool",
 )
+logger = logging.getLogger(__name__)
 
 
 class ToolLibraryError(ValueError):
-  def __init__(self, code: str, message: str, status: int = 422):
+  def __init__(
+    self,
+    code: str,
+    message: str,
+    status: int = 422,
+    *,
+    resource_ids: list[str] | None = None,
+  ):
     super().__init__(message)
     self.code = code
     self.status = status
+    self.resource_ids = resource_ids or []
 
 
 @dataclass(slots=True)
@@ -87,7 +99,7 @@ class ToolLibrary:
     self._discoveries: dict[str, dict] = {}
 
   def _read(self) -> tuple[dict, ToolLibraryConfig, str]:
-    """读取原始配置、工具库和配置文件内容的 SHA-256 版本标识。"""
+    """读取原始配置、工具库，以及覆盖配置与 Python 文件内容的版本。"""
     if self.source_path is None:
       raise ToolLibraryError("config_source", "No loaded configuration source", 503)
     try:
@@ -104,12 +116,35 @@ class ToolLibrary:
         raise ValueError("Duplicate tool identity or name")
       if set(names) & self._reserved_names:
         raise ValueError("Tool name conflicts with a built-in tool")
-      config_version = hashlib.sha256(content).hexdigest()
+      config_version = self._configuration_version(content, library)
       return raw, library, config_version
     except (OSError, ValueError, UnicodeError):
       raise ToolLibraryError(
         "config_read", "Cannot read valid tool configuration", 503
       ) from None
+
+  def _configuration_version(self, content: bytes, library: ToolLibraryConfig) -> str:
+    """代码内容也属于编辑版本；坏文件仍可列出，详情与执行再定位具体错误。"""
+    sources = []
+    for tool in library.tools:
+      if tool.kind != "python":
+        continue
+      try:
+        source = self.python_source_store.resolve(tool.code_path).read_bytes()
+        fingerprint = hashlib.sha256(source).hexdigest()
+      except (OSError, PythonSourceError):
+        fingerprint = "unreadable"
+      sources.append((tool.id, fingerprint))
+    return hashlib.sha256(content + json.dumps(sources).encode()).hexdigest()
+
+  def _check_version(self, expected: str | None, current: str, *resource_ids: str):
+    if expected != current:
+      raise ToolLibraryError(
+        "version_conflict",
+        "配置或 Python 源码已变化；草稿未提交，请重读后再修改",
+        409,
+        resource_ids=list(resource_ids),
+      )
 
   async def list_tools(self) -> tuple[list[AnyToolDefinition], str]:
     async with self._lock:
@@ -237,12 +272,8 @@ class ToolLibrary:
         raise ToolLibraryError(
           "discovery_expired", "Discover this connection again before importing", 409
         )
-      if discovery["version"] != current_version:
-        raise ToolLibraryError(
-          "version_conflict",
-          "Configuration changed; discover again before importing",
-          409,
-        )
+      # discovery_id 在服务端绑定读取版本，客户端不能替换该版本。
+      self._check_version(discovery["version"], current_version, connection_id)
       discovered_tools = {tool["name"]: tool for tool in discovery["tools"]}
       selected_names = [selection["remote_name"] for selection in selections]
       if not selections or len(set(selected_names)) != len(selected_names):
@@ -333,10 +364,8 @@ class ToolLibrary:
       previous = library.mcp_connections.get(connection_id) if connection_id else None
       if connection_id and previous is None:
         raise ToolLibraryError("not_found", "MCP connection does not exist", 404)
-      if connection_id and version != current_version:
-        raise ToolLibraryError(
-          "version_conflict", "Configuration changed; reload before saving", 409
-        )
+      if connection_id:
+        self._check_version(version, current_version, connection_id)
       now = datetime.now(UTC)
       if previous and previous.transport != settings.transport:
         raise ToolLibraryError(
@@ -367,10 +396,7 @@ class ToolLibrary:
       raw, library, current_version = await asyncio.to_thread(self._read)
       if connection_id not in library.mcp_connections:
         raise ToolLibraryError("not_found", "MCP connection does not exist", 404)
-      if version != current_version:
-        raise ToolLibraryError(
-          "version_conflict", "Configuration changed; reload before deleting", 409
-        )
+      self._check_version(version, current_version, connection_id)
       del library.mcp_connections[connection_id]
       library.tools = [
         tool
@@ -412,34 +438,100 @@ class ToolLibrary:
 
   async def execute_tool(self, tool_id: str, inputs: dict):
     async def load():
-      tool, _ = await self.get_tool(tool_id)
-      return await self._load_saved_execution(tool)
+      return await self._load_saved_execution(tool_id)
 
     return await self.executor.execute(load, inputs)
 
-  async def _load_saved_execution(self, tool: AnyToolDefinition) -> ToolExecution:
-    """读取持久资源，形成完整执行快照；适配器只消费准备后的数据。"""
+  def _prepare_saved_execution(self, tool_id: str) -> ToolExecution:
+    """在同一次协调读取中取得定义、连接和完整源码。"""
+    _, library, _ = self._read()
+    tool = next((tool for tool in library.tools if tool.id == tool_id), None)
+    if tool is None:
+      raise ToolLibraryError(
+        "not_found", "Tool does not exist", 404, resource_ids=[tool_id]
+      )
     if tool.kind == "python":
-      source = await asyncio.to_thread(self.python_source_store.read, tool.code_path)
+      source = self._read_python_source(tool)
+      try:
+        prepare_python_input_schema(source, tool.input_schema)
+      except PythonSourceError as error:
+        raise ToolLibraryError(
+          error.code,
+          f"{tool.name} ({tool.id}): {error}；请重解析并保存",
+          error.status,
+          resource_ids=[tool.id],
+        ) from None
       return PythonToolExecution(definition=tool, source=source)
     if tool.kind == "mcp":
-      connection, _ = await self.get_mcp_connection(tool.connection_id)
+      connection = library.mcp_connections.get(tool.connection_id)
+      if connection is None:
+        raise ToolLibraryError(
+          "not_found",
+          f"{tool.name}: MCP connection does not exist",
+          404,
+          resource_ids=[tool.id, tool.connection_id],
+        )
       return McpToolExecution(definition=tool, connection=connection)
     return ToolExecution(definition=tool)
 
+  async def _load_saved_execution(self, tool_id: str) -> ToolExecution:
+    return await self._run_coordinated_io(
+      lambda: self._prepare_saved_execution(tool_id)
+    )
+
+  async def _run_coordinated_io[T](self, operation: Callable[[], T]) -> T:
+    async with self._lock:
+      io_task = asyncio.create_task(asyncio.to_thread(operation))
+      try:
+        return await asyncio.shield(io_task)
+      except asyncio.CancelledError:
+        # 取消时等工作线程结束，防止文件处理越过协调锁。
+        await asyncio.gather(io_task, return_exceptions=True)
+        raise
+
+  def _read_python_source(self, tool) -> str:
+    try:
+      return self.python_source_store.read(tool.code_path)
+    except PythonSourceError as error:
+      raise ToolLibraryError(
+        error.code,
+        f"{tool.name} ({tool.id}): {error}",
+        error.status,
+        resource_ids=[tool.id],
+      ) from None
+
   async def get_tool_detail(self, tool_id: str):
-    tool, version = await self.get_tool(tool_id)
+    return await self._run_coordinated_io(lambda: self._read_tool_detail(tool_id))
+
+  def _read_tool_detail(self, tool_id: str):
+    _, library, version = self._read()
+    tool = next((tool for tool in library.tools if tool.id == tool_id), None)
+    if tool is None:
+      raise ToolLibraryError(
+        "not_found", "Tool does not exist", 404, resource_ids=[tool_id]
+      )
     data = tool.model_dump(mode="json")
     if tool.kind == "python":
-      data["source"] = await asyncio.to_thread(
-        self.python_source_store.read, tool.code_path
-      )
+      data["source"] = self._read_python_source(tool)
     return data, version
 
-  def _cleanup_python_source_files(self, library: ToolLibraryConfig):
-    self.python_source_store.cleanup(
-      {tool.code_path for tool in library.tools if tool.kind == "python"}
-    )
+  async def cleanup_unused_python_sources(self) -> None:
+    """启动时尽力清理残留；后续配置提交仍会重新核对引用并重试。"""
+    await self._run_coordinated_io(self._cleanup_python_source_files)
+
+  def _cleanup_python_source_files(self) -> None:
+    if self.source_path is None:
+      return
+    try:
+      # 提交后外部编辑器可能再次保存；仅按此刻仍可确认的引用清理。
+      _, library, _ = self._read()
+      self.python_source_store.cleanup(
+        {tool.code_path for tool in library.tools if tool.kind == "python"}
+      )
+    except (OSError, PythonSourceError, ToolLibraryError):
+      logger.warning(
+        "Cannot clean unused Python sources; will retry on next cleanup", exc_info=True
+      )
 
   async def get_executable_tool_definitions(
     self, tool_ids: list[str]
@@ -458,26 +550,20 @@ class ToolLibrary:
       definitions.append(tool)
     return definitions
 
-  async def delete_tool(self, tool_id: str, version: str) -> str:
+  async def delete_tool(self, tool_id: str, version: str) -> None:
     async with self._lock:
       raw, library, current_config_version = await asyncio.to_thread(self._read)
       if not any(tool.id == tool_id for tool in library.tools):
         raise ToolLibraryError("not_found", "Tool does not exist", 404)
-      if version != current_config_version:
-        raise ToolLibraryError(
-          "version_conflict", "Configuration changed; reload before deleting", 409
-        )
+      self._check_version(version, current_config_version, tool_id)
       library.tools = [tool for tool in library.tools if tool.id != tool_id]
       raw["tool_library"] = library.model_dump(mode="json")
       # Code-file cleanup belongs to the managed Python lifecycle; arbitrary
       # code_path values must never cause deletion of user files.
-      saved_version = await asyncio.to_thread(self._commit, raw, current_config_version)
-      await asyncio.to_thread(self._cleanup_python_source_files, library)
-      return saved_version
+      await asyncio.to_thread(self._commit, raw, current_config_version)
 
   async def start_test(self, tool_id: str, inputs: dict):
-    tool, _ = await self.get_tool(tool_id)
-    execution = await self._load_saved_execution(tool)
+    execution = await self._load_saved_execution(tool_id)
     return self._start_test(execution, inputs, tool_id)
 
   async def start_draft_test(
@@ -625,10 +711,8 @@ class ToolLibrary:
       previous = next((tool for tool in library.tools if tool.id == tool_id), None)
       if tool_id is not None and previous is None:
         raise ToolLibraryError("not_found", "Tool does not exist", 404)
-      if tool_id is not None and version != current_config_version:
-        raise ToolLibraryError(
-          "version_conflict", "Configuration changed; reload before saving", 409
-        )
+      if tool_id is not None:
+        self._check_version(version, current_config_version, tool_id)
       self._check_tool_edit_permissions(payload, previous)
       payload, source = self._prepare_python_payload(payload)
       tool = self._prepare_tool(payload, library, previous)
@@ -641,15 +725,19 @@ class ToolLibrary:
         library.tools.append(tool)
       raw["tool_library"] = library.model_dump(mode="json")
       saved_version = await asyncio.to_thread(self._commit, raw, current_config_version)
-      await asyncio.to_thread(self._cleanup_python_source_files, library)
       return tool, saved_version
 
-  async def import_openapi_tools(self, document: str, selections: list[dict]):
+  async def import_openapi_tools(
+    self, document: str, selections: list[dict], version: str
+  ):
     definitions = await asyncio.to_thread(
       selected_openapi_definitions, document, selections
     )
     async with self._lock:
-      raw, library, version = await asyncio.to_thread(self._read)
+      raw, library, current_version = await asyncio.to_thread(self._read)
+      self._check_version(
+        version, current_version, *[item["operation_key"] for item in selections]
+      )
       imported = []
       for selection, definition in zip(selections, definitions, strict=True):
         self._check_tool_edit_permissions(definition, None)
@@ -662,7 +750,7 @@ class ToolLibrary:
         library.tools.append(tool)
         imported.append({"id": tool.id})
       raw["tool_library"] = library.model_dump(mode="json")
-      await asyncio.to_thread(self._commit, raw, version)
+      await asyncio.to_thread(self._commit, raw, current_version)
       return imported
 
   def _prepare_python_payload(self, payload: dict) -> tuple[dict, str | None]:
@@ -757,12 +845,19 @@ class ToolLibrary:
         target.write(content)
         target.flush()
         os.fsync(target.fileno())
-      if hashlib.sha256(self.source_path.read_bytes()).hexdigest() != expected_version:
-        raise ToolLibraryError(
-          "version_conflict", "Configuration changed before commit", 409
-        )
+      saved_version = self._configuration_version(
+        content, ToolLibraryConfig.model_validate_json(json.dumps(raw["tool_library"]))
+      )
+      _, _, current_version = self._read()
+      self._check_version(
+        expected_version,
+        current_version,
+        *[tool["id"] for tool in raw["tool_library"]["tools"]],
+      )
       os.replace(temporary_path, self.source_path)
-      return hashlib.sha256(content).hexdigest()
+      # 配置替换就是提交点；清理失败只记录日志，后续提交或启动再重试。
+      self._cleanup_python_source_files()
+      return saved_version
     except OSError as error:
       raise ToolLibraryError(
         "config_write", "Cannot save tool configuration", 503

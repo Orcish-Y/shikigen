@@ -1,5 +1,6 @@
 """受管理 Python 源码的文件存取；保存先写新文件，再由工具库提交配置引用。"""
 
+import logging
 import os
 import re
 from pathlib import Path, PurePosixPath
@@ -8,6 +9,7 @@ from uuid import uuid4
 from shikigen.contracts.python_source import PythonSourceError
 
 GENERATED_NAME = re.compile(r"[0-9a-f-]{36}-[0-9a-f]{32}\.py\Z")
+logger = logging.getLogger(__name__)
 
 
 class PythonSourceStore:
@@ -58,15 +60,23 @@ class PythonSourceStore:
       ) from error
     return relative
 
-  def cleanup(self, referenced: set[str]):
+  def cleanup(self, referenced: set[str]) -> None:
     if self.root is None:
       return
-    for target in (self.root / "config" / "tools").glob("*.py"):
+    try:
+      targets = list((self.root / "config" / "tools").iterdir())
+    except FileNotFoundError:
+      return
+    # 显式枚举，让调用者记录目录读取失败，留待后续提交或启动时重试。
+    for target in targets:
       relative = target.relative_to(self.root).as_posix()
       if relative in referenced or not GENERATED_NAME.fullmatch(target.name):
         continue
       try:
         self.resolve(relative).unlink(missing_ok=True)
       except (OSError, PythonSourceError):
-        # Cleanup cannot turn a confirmed configuration commit into a save failure.
-        pass
+        logger.warning(
+          "Cannot remove unused Python source %s; will retry on next cleanup",
+          relative,
+          exc_info=True,
+        )

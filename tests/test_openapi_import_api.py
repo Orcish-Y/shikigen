@@ -179,6 +179,7 @@ class OpenApiImportTests(unittest.IsolatedAsyncioTestCase):
     rejected = await self.client.post(
       "/api/tools/openapi/imports",
       json={
+        "version": (await self.client.get("/api/tools")).json()["version"],
         "document": text,
         "tools": [{**selection, "security_option": "security_0"}],
       },
@@ -188,6 +189,7 @@ class OpenApiImportTests(unittest.IsolatedAsyncioTestCase):
     accepted = await self.client.post(
       "/api/tools/openapi/imports",
       json={
+        "version": (await self.client.get("/api/tools")).json()["version"],
         "document": text,
         "tools": [{**selection, "security_option": "security_2"}],
       },
@@ -602,6 +604,7 @@ class OpenApiImportTests(unittest.IsolatedAsyncioTestCase):
     return await self.client.post(
       "/api/tools/openapi/imports",
       json={
+        "version": (await self.client.get("/api/tools")).json()["version"],
         "document": document,
         "tools": [
           {
@@ -760,6 +763,7 @@ class OpenApiImportTests(unittest.IsolatedAsyncioTestCase):
     response = await self.client.post(
       "/api/tools/openapi/imports",
       json={
+        "version": (await self.client.get("/api/tools")).json()["version"],
         "document": json.dumps(other),
         "tools": selections + [{**selections[0], "operation_key": "GET /second"}],
       },
@@ -935,6 +939,7 @@ class OpenApiImportTests(unittest.IsolatedAsyncioTestCase):
     response = await self.client.post(
       "/api/tools/openapi/imports",
       json={
+        "version": (await self.client.get("/api/tools")).json()["version"],
         "document": document,
         "tools": [{"operation_key": candidate["key"], "definition": definition}],
       },

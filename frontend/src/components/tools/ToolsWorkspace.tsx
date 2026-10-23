@@ -2,7 +2,7 @@ import { useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref
 import { ArrowLeft, ClockCounterClockwise, Globe, Play, SidebarSimple, FloppyDisk, Trash, ToggleLeft, ToggleRight } from '@phosphor-icons/react';
 import type { RJSFSchema } from '@rjsf/utils';
 import { BackendRequestError, type BackendSession } from '../../backend-client';
-import { saveWasRejected } from '../../tool-save-errors';
+import { isVersionConflict, saveWasRejected } from '../../tool-save-errors';
 import type { ContentView } from '../MessageBody';
 import { Button } from '../ui/button';
 import { Overlay } from '../Overlay';
@@ -33,6 +33,8 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
   const [mcpSchema,setMcpSchema]=useState<RJSFSchema | null>(null);
   const [pythonAnalysis, setPythonAnalysis] = useState<PythonSourceAnalysis | null>(null);
   const [tools, setTools] = useState<AnyToolDefinition[] | null>(null);
+  const [libraryVersion,setLibraryVersion]=useState('');
+  const [conflicted,setConflicted]=useState(false);
   const [reservedNames, setReservedNames] = useState<string[]>([]);
   const [editor, setEditor] = useState<Editor | null>(null);
   const schema=editor?.draft.kind === 'python' ? pythonSchema : editor?.draft.kind === 'mcp' ? mcpSchema : httpSchema;
@@ -68,6 +70,7 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
   },[tools,initialToolId]);
   useEffect(() => {
     setImporting(false);
+    setLibraryVersion('');setConflicted(false);
     setMcpSchema(null);openedInitial.current=undefined;
     setPythonSchema(null);setPythonAnalysis(null);setSchema(null); setTools(null); setReservedNames([]); setEditor(null); setTest(null); setVerified(false); setSaveOutcomeUnknown(false);
     setSavedToolAwaitingRead(null);
@@ -79,7 +82,7 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
     const controller = new AbortController();
     setBusy('loading'); setError(null);
     Promise.all([session.getToolManagementSchema(controller.signal), session.listTools(controller.signal)])
-      .then(([management, library]) => {setSchema(management.data); setTools(library.data); setReservedNames(library.reserved_names ?? []); setVerified(true);})
+      .then(([management, library]) => {setLibraryVersion(library.version);setSchema(management.data); setTools(library.data); setReservedNames(library.reserved_names ?? []); setVerified(true);})
       .catch(failure => {if (!controller.signal.aborted) setError(`工具库读取失败：${message(failure)}`);})
       .finally(() => {if (!controller.signal.aborted) setBusy(null);});
     return () => {controller.abort();testStartRequest.current?.abort();testStartRequest.current=null;selection.current++;testObservationRevision.current++;};
@@ -117,6 +120,7 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
     action?.();
   }
   function closeEditor() {
+    setConflicted(false);
     setImporting(false);
     selection.current++;setEditor(null);setTest(null);setDirty(false);setBusy(null);setNotice(null);setTestDefinition(null);
     setSavedToolAwaitingRead(null);
@@ -146,16 +150,22 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
   }, [session, test,cancellingTest,testStartState]);
 
   async function reload() {
-    if (!session) return;
+    if (!session || saveOutcomeUnknown || savedToolAwaitingRead) return;
     const request = ++selection.current;
     setBusy('loading'); setError(null); setVerified(false);
     try {
       const result = await session.listTools();
       if (request !== selection.current) return;
       setTools(result.data);
+      setLibraryVersion(result.version);
       setReservedNames(result.reserved_names ?? []);
-      if (editor?.tool && result.version !== editor.version) {
-        setVerified(false);setNotice('工具库已有变化，请重新选择工具读取最新配置。');
+      if (editor && result.version !== editor.version) {
+        if (dirty) {
+          setConflicted(true);setVerified(false);setNotice('配置或代码已有变化，草稿已保留；请放弃草稿并重读后再修改。');
+        } else if (editor.tool) {
+          if (result.data.some(tool => tool.id === editor.tool!.id)) await open(editor.tool);
+          else {closeEditor();setVerified(true);setNotice('工具已被外部删除');}
+        } else setVerified(true);
       } else setVerified(true);
     }
     catch (failure) {if (request === selection.current) setError(`工具库读取失败：${message(failure)}`);}
@@ -181,6 +191,7 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
       }
       setPythonAnalysis(null);
       const draft=editTool(saved.data);
+      setConflicted(false);setLibraryVersion(saved.version);
       setEditor({tool:saved.data, initial:draft, draft, version:saved.version, revision:request, inputKey:request});
       const previous=recent[tool.id];
       setTest(previous?.test ?? null);setInputs(previous?.inputs ?? {});setTestDefinition(previous?.definition ?? null);
@@ -195,6 +206,7 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
       const saved=await session.getTool(toolId);
       if (request !== selection.current) return;
       const draft=editTool(saved.data);
+      setConflicted(false);setLibraryVersion(saved.version);
       setEditor({tool:saved.data,initial:draft,draft,version:saved.version,revision:request,inputKey:editor?.inputKey ?? request});
       setTools(current => [...(current ?? []).filter(tool => tool.id !== saved.data.id),saved.data]);
       setSavedToolAwaitingRead(null);setDirty(false);setVerified(true);setError(null);setNotice('工具已保存');
@@ -211,14 +223,15 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
     finally {if (request === selection.current) setBusy(null);}
   }
   async function save(value:Record<string, unknown>) {
-    if (!session || !editor || busy || saveOutcomeUnknown || savedToolAwaitingRead || (editor.draft.kind === 'python' && !sourceValid)) return;
+    if (!session || !editor || !verified || conflicted || busy || saveOutcomeUnknown || savedToolAwaitingRead || (editor.draft.kind === 'python' && !sourceValid)) return;
     const request = ++selection.current;
     setBusy('saving'); setError(null); setNotice(null);
     let savedToolId:string;
     try {
-      savedToolId = await session.saveTool(value as ToolDraft, editor.tool ? {id:editor.tool.id,version:editor.version} : undefined);
+      savedToolId=await session.saveTool(value as ToolDraft, editor.tool ? {id:editor.tool.id,version:editor.version} : undefined);
     } catch (failure) {
       if (request !== selection.current) return;
+      if (isVersionConflict(failure)) {setConflicted(true);setVerified(false);}
       if (saveWasRejected(failure)) setError(`保存失败：${message(failure)}`);
       else {
         setSaveOutcomeUnknown(true); setVerified(false);
@@ -239,12 +252,25 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
       const loaded = await session.listTools();
       if (request !== selection.current) return;
       setTools(loaded.data);
+      setLibraryVersion(loaded.version);
       setReservedNames(loaded.reserved_names ?? []);
       closeEditor();setInputs({});setVerified(true);setError(null);
       setNotice('已放弃草稿并重读工具库；此前保存结果仍不确定，请查看已保存配置。');
       if (leaveAfterSave.current) finishLeave();
     } catch (failure) {if (request === selection.current) setError(`工具库重读失败：${message(failure)}。保存结果仍不确定，草稿已保留。`);}
     finally {if (request === selection.current) setBusy(null);}
+  }
+  async function discardConflictedDraft() {
+    if (!session || !editor || busy) return;
+    const request=++selection.current;setBusy('loading');setError(null);
+    try {
+      const library=await session.listTools();
+      if (request !== selection.current) return;
+      setTools(library.data);setLibraryVersion(library.version);setReservedNames(library.reserved_names ?? []);
+      if (editor.tool && library.data.some(tool => tool.id === editor.tool!.id)) await open(editor.tool);
+      else {closeEditor();setVerified(true);setNotice('已放弃草稿并重读工具库');}
+    } catch(failure) {if(request === selection.current) setError(`重读失败：${message(failure)}。草稿已保留。`);}
+    finally {if(request === selection.current) setBusy(null);}
   }
   async function runTest(value:Record<string, unknown>) {
     if (testInFlight.current) {setNotice('已有测试正在运行，请先取消或等待完成。');return;}
@@ -293,7 +319,8 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
     }
     setPythonAnalysis(null);
     const draft={...structuredClone(kind === 'python' ? emptyPythonToolDraft : emptyToolDraft),name:suggestName('')};
-    setEditor({tool:null,initial:draft,draft,version:'',revision:request,inputKey:request});
+    setConflicted(false);
+    setEditor({tool:null,initial:draft,draft,version:libraryVersion,revision:request,inputKey:request});
     setDirty(false);setTest(null);setNotice(null);setError(null);
     setSavedToolAwaitingRead(null);
     setInputs({});setTestDefinition(null);
@@ -349,7 +376,11 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
       setTools(current => current?.filter(tool => tool.id !== id) ?? []);
       setRecent(current => {const next={...current};delete next[id];return next;});
       setConfirmDelete(false);closeEditor();setBusy(null);setNotice('工具已删除');
-    } catch (failure) {if (request === selection.current) setError(`删除失败：${message(failure)}`);}
+    } catch (failure) {if (request === selection.current) {
+      if (isVersionConflict(failure)) {setConflicted(true);setVerified(false);setConfirmDelete(false);}
+      if (saveWasRejected(failure)) setError(`删除失败：${message(failure)}`);
+      else {setConfirmDelete(false);setSaveOutcomeUnknown(true);setVerified(false);setError(`删除结果不确定：${message(failure)}。请勿重复删除，可放弃草稿并重读工具库。`);}
+    }}
     finally {if (request === selection.current) setBusy(null);}
   }
   let validDraft=false;
@@ -361,7 +392,7 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
   const staleTest=Boolean(test?.result && editor && testDefinition !== toolDraftFingerprint(editor.draft));
   function editDraft(draft:ToolDraft) {
     setEditor(current => current ? {...current,draft} : current);
-    setDirty(Boolean(editor && toolDraftFingerprint(draft) !== toolDraftFingerprint(editor.initial)));setNotice(null);
+    setDirty(Boolean(editor && toolDraftFingerprint(draft) !== toolDraftFingerprint(editor.initial)));if(!conflicted) setNotice(null);
   }
   return <div className="tool-registry">
     <ToolLibrarySidebar tools={tools} recent={recent} selectedId={editor?.tool?.id} busy={Boolean(busy && busy !== 'testing')} verified={verified}
@@ -371,7 +402,7 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
       onCreate={kind => requestLeave(() => void create(kind))} onOpen={tool => requestLeave(() => void open(tool))} onReload={() => {if (!testInFlight.current) void reload();else setNotice('测试正在运行，请完成或取消后刷新。');}}/>
     {importing && session && httpSchema ? <OpenApiImportPanel ref={importer} session={session} schema={httpSchema}
       occupiedNames={[...reservedNames,...(tools ?? []).map(tool => tool.name)]} onNavigation={onNavigation}
-      onLibrary={library => {setTools(library.data);setReservedNames(library.reserved_names);setVerified(true);}}
+      version={libraryVersion} onLibrary={library => {setLibraryVersion(library.version);setTools(library.data);setReservedNames(library.reserved_names);setVerified(true);}}
       onOpen={tool => void open(tool)} onClose={closeEditor}/> : <section className="tool-detail-view" aria-label="工具详情">
       <div className="tool-detail-toolbar" role="toolbar" aria-label="工具操作">
         {onNavigation && <button className="icon-button tool-navigation-toggle" aria-label="打开主导航" onClick={onNavigation}><SidebarSimple/></button>}
@@ -383,7 +414,7 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
           <Button size="sm" variant="outline" disabled={Boolean(busy) || saveOutcomeUnknown || Boolean(savedToolAwaitingRead)}
             onClick={() => editDraft({...editor.draft,enabled:!editor.draft.enabled})}>
             {editor.draft.enabled ? <ToggleRight size={14}/> : <ToggleLeft size={14}/>}{editor.draft.enabled ? '禁用此工具' : '启用此工具'}</Button>
-          <Button size="sm" type="submit" form="tool-definition" disabled={!schema || (editor.draft.kind === 'python' && !sourceValid) || Boolean(busy) || saveOutcomeUnknown || Boolean(savedToolAwaitingRead)}><FloppyDisk size={14}/>保存工具</Button>
+          <Button size="sm" type="submit" form="tool-definition" disabled={!schema || !verified || conflicted || (editor.draft.kind === 'python' && !sourceValid) || Boolean(busy) || saveOutcomeUnknown || Boolean(savedToolAwaitingRead)}><FloppyDisk size={14}/>保存工具</Button>
           {editor.tool && <Button size="sm" variant="outline" aria-label="删除工具" disabled={Boolean(busy) || saveOutcomeUnknown || Boolean(savedToolAwaitingRead)} onClick={() => {setError(null);setConfirmDelete(true);}}><Trash size={14}/></Button>}
         </div>}
       </div>
@@ -391,6 +422,7 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
         <div className="tool-page-notices" aria-label="工具页面提示">
           {error && !leaveAction && !testLeaveAction && !confirmDelete && <p role="alert" className="business-notice">{error}</p>}
           {notice && <p role="status">{notice}</p>}
+          {conflicted && <Button variant="outline" disabled={Boolean(busy)} onClick={discardConflictedDraft}>放弃草稿并重读工具详情</Button>}
           {saveOutcomeUnknown && !leaveAction && <Button size="sm" variant="outline" disabled={Boolean(busy)} onClick={discardDraftAndReload}>放弃草稿并重读工具库</Button>}
           {savedToolAwaitingRead && !leaveAction && <><p>已保存工具 ID：<code>{savedToolAwaitingRead}</code></p><Button size="sm" variant="outline" disabled={Boolean(busy)} onClick={retrySavedToolRead}>重新读取工具详情</Button></>}
           {busy === 'loading' && tools !== null && <p role="status">正在读取工具库…</p>}
@@ -446,7 +478,7 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
         {error && <p role="alert">{error}</p>}
         {saveOutcomeUnknown && <Button disabled={Boolean(busy)} variant="outline" onClick={discardDraftAndReload}>放弃草稿并重读工具库</Button>}
         {savedToolAwaitingRead && <Button disabled={Boolean(busy)} variant="outline" onClick={retrySavedToolRead}>重新读取工具详情</Button>}
-        <div className="tool-actions"><Button type="submit" form="tool-definition" disabled={Boolean(busy) || saveOutcomeUnknown || Boolean(savedToolAwaitingRead)} onClick={() => {leaveAfterSave.current=true;}}>保存并离开</Button>
+        <div className="tool-actions"><Button type="submit" form="tool-definition" disabled={!verified || conflicted || Boolean(busy) || saveOutcomeUnknown || Boolean(savedToolAwaitingRead)} onClick={() => {leaveAfterSave.current=true;}}>保存并离开</Button>
           {savedToolAwaitingRead ? <Button variant="outline" disabled={Boolean(busy)} onClick={finishLeave}>已保存，直接离开</Button>
             : <Button variant="outline" disabled={Boolean(busy) || saveOutcomeUnknown} onClick={() => {closeEditor();finishLeave();}}>放弃修改</Button>}
           <Button variant="outline" disabled={Boolean(busy)} onClick={() => {setLeaveAction(null);leaveAfterSave.current=false;}}>继续编辑</Button></div>

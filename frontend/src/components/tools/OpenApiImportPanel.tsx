@@ -4,7 +4,7 @@ import {FileArrowUp, FloppyDisk, SidebarSimple} from '@phosphor-icons/react';
 import type {BackendSession} from '../../backend-client';
 import type {AnyToolDefinition, HttpToolDraft, ToolLibraryRead} from '../../tool-library';
 import {nameOpenApiOperations, openApiConfigurationErrors, type OpenApiOperation} from '../../openapi-import';
-import {saveWasRejected} from '../../tool-save-errors';
+import {isVersionConflict,saveWasRejected} from '../../tool-save-errors';
 import {Button} from '../ui/button';
 import {Textarea} from '../ui/textarea';
 import {Overlay} from '../Overlay';
@@ -12,12 +12,14 @@ import {ToolDefinitionForm} from './ToolDefinitionForm';
 import type {ToolsWorkspaceHandle} from './ToolsWorkspace';
 
 const message=(error:unknown) => error instanceof Error ? error.message : String(error);
-export function OpenApiImportPanel({session,schema,occupiedNames,onLibrary,onOpen,onClose,onNavigation,ref}: {
+export function OpenApiImportPanel({session,schema,occupiedNames,version,onLibrary,onOpen,onClose,onNavigation,ref}: {
   session:BackendSession; schema:RJSFSchema; occupiedNames:string[]; onLibrary:(library:ToolLibraryRead) => void;
+  version:string;
   onOpen:(tool:AnyToolDefinition) => void; onClose:() => void; onNavigation?:() => void; ref?:Ref<ToolsWorkspaceHandle>;
 }) {
   const [documentText,setDocumentText]=useState('');
   const [parsedDocument,setParsedDocument]=useState('');
+  const [parsedVersion,setParsedVersion]=useState(version);
   const [operations,setOperations]=useState<OpenApiOperation[]>([]);
   const [selected,setSelected]=useState<string[]>([]);
   const [activeKey,setActiveKey]=useState<string | null>(null);
@@ -29,6 +31,7 @@ export function OpenApiImportPanel({session,schema,occupiedNames,onLibrary,onOpe
   const [savedIds,setSavedIds]=useState<string[]>([]);
   const [savedTools,setSavedTools]=useState<AnyToolDefinition[]>([]);
   const [saveOutcomeUnknown,setSaveOutcomeUnknown]=useState(false);
+  const [conflicted,setConflicted]=useState(false);
   const [leaveAction,setLeaveAction]=useState<(() => void) | null>(null);
   const [replacePreview,setReplacePreview]=useState(false);
   const sequence=useRef(0);
@@ -43,7 +46,7 @@ export function OpenApiImportPanel({session,schema,occupiedNames,onLibrary,onOpe
     if (!savedIds.length && (occupiedNames.includes(item.definition.name) || chosen.some(other => other.key !== item.key && other.definition.name === item.definition.name))) errors.push('调用名称与已有工具或所选接口重名');
     return errors;
   }
-  const canSave=!locked && !outdated && chosen.length > 0 && chosen.every(item => !configurationErrors(item).length);
+  const canSave=!locked && !conflicted && !outdated && chosen.length > 0 && chosen.every(item => !configurationErrors(item).length);
   useEffect(() => () => {sequence.current++;},[]);
   useEffect(() => {
     if (!dirty) return;
@@ -65,6 +68,8 @@ export function OpenApiImportPanel({session,schema,occupiedNames,onLibrary,onOpe
       const result=await session.previewOpenApi(documentText);
       if (request !== sequence.current) return;
       const candidates=nameOpenApiOperations(result.data,occupiedNames);
+      setParsedVersion(result.version ?? version);
+      setConflicted(false);
       setOperations(candidates);setParsedDocument(documentText);setSelected([]);
       setActiveKey(candidates[0]?.key ?? null);setRevision(value => value+1);
       setTitle(`${result.data.title || 'OpenAPI 文档'} · ${result.data.openapi}`);
@@ -101,10 +106,11 @@ export function OpenApiImportPanel({session,schema,occupiedNames,onLibrary,onOpe
     const request=++sequence.current;setBusy(true);setError(null);setNotice(null);
     let ids:string[];
     try {
-      const result=await session.importOpenApiTools(parsedDocument,chosen.map(item => ({operation_key:item.key,definition:item.definition,security_option:item.security_option})));
+      const result=await session.importOpenApiTools(parsedDocument,chosen.map(item => ({operation_key:item.key,definition:item.definition,security_option:item.security_option})),parsedVersion);
       ids=result.data.map(item => item.id);
     } catch (failure) {
       if (request !== sequence.current) return;
+      if (isVersionConflict(failure)) setConflicted(true);
       if (saveWasRejected(failure)) setError(`保存失败：${message(failure)}。所选项与配置草稿已保留。`);
       else {setSaveOutcomeUnknown(true);setError(`保存结果不确定：${message(failure)}。请勿重复导入，可放弃草稿并重读工具库查看结果。`);}
       setBusy(false);return;
@@ -139,6 +145,7 @@ export function OpenApiImportPanel({session,schema,occupiedNames,onLibrary,onOpe
       <section className="tool-summary-card"><span className="tool-summary-icon"><FileArrowUp size={24}/></span><div className="tool-summary-information"><div className="tool-summary-title"><h1>从 OpenAPI 导入 HTTP 工具</h1></div><p>{title || '上传或粘贴单份 JSON／YAML · OpenAPI 3.0.x／3.1.x'}</p><p className="tool-muted">解析、预览和保存均不会调用接口；再次导入创建新工具。</p></div></section>
       <div className="tool-page-notices">
         {error && !leaveAction && <p role="alert">{error}</p>}{notice && <p role="status">{notice}</p>}
+        {conflicted && <p role="status">工具库已有变化，导入草稿已保留。请重新解析文档以重读版本，再修改和保存。</p>}
         {busy && <p role="status">正在处理…</p>}
         {savedIds.length > 0 && !leaveAction && <><p>已保存工具 ID：{savedIds.join('、')}</p><Button variant="outline" size="sm" disabled={busy} onClick={() => void readSaved()}>重新读取已保存工具</Button>
           {savedTools.map(tool => <Button key={tool.id} variant="outline" size="sm" onClick={() => onOpen(tool)}>编辑工具 {tool.display_name}</Button>)}</>}

@@ -20,6 +20,8 @@ MCP 服务支持 stdio 与 Streamable HTTP，重新发现先预览差异、勾�
 
 测试的取消、总预算、资源回收、结果脱敏及运行中离开规则见 [测试生命周期](../docs/wayfinder/tools-workflow/test-cancellation-lifecycle.md)。
 
+保存提交点、配置／源码版本冲突、外部修改草稿保留及当前／下次调用生效规则见 [配置与调用生命周期](../docs/wayfinder/tools-workflow/config-conflicts-call-snapshot.md)。
+
 ```bash
 cd frontend
 pnpm install --frozen-lockfile

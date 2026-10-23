@@ -63,6 +63,202 @@ class ToolLibraryAcceptance(WindowAcceptance):
     )
     self.call("Input.dispatchKeyEvent", type="keyUp", key=key, code=code, modifiers=0)
 
+  def test_config_conflict_cleanup_retry_and_unknown_save(self):
+    host = self.launch()
+    self.connect()
+    base = self.state("ready")["base_url"]
+    created = self.client.post(
+      base + "/api/tools",
+      json={
+        "kind": "python",
+        "name": "lifecycle",
+        "display_name": "文件生命周期",
+        "source": "def main(): return 'old'\n",
+      },
+    )
+    self.assertEqual(created.status_code, 201, created.text)
+    tool_id = created.json()["data"]["id"]
+    detail = self.client.get(base + f"/api/tools/{tool_id}").json()
+    code = self.root / detail["data"]["code_path"]
+    self.call("Page.enable")
+    self.call(
+      "Page.addScriptToEvaluateOnNewDocument",
+      source="""(() => {
+      const original=window.fetch.bind(window);window.__lostSaveRequests=0;
+      window.fetch=async (input,init) => {
+        const response=await original(input,init);
+        if(window.__dropSaveResponse && init?.method === 'PUT'
+          && String(input).includes('/api/tools/')) {
+          window.__dropSaveResponse=false;window.__lostSaveRequests++;
+          throw new TypeError('acceptance: save reply lost');
+        }
+        return response;
+      };
+    })()""",
+    )
+    self.call("Page.reload")
+    wait_until(lambda: "新建会话开始对话" in self.body())
+    self.evaluate("document.querySelector('[aria-label=工具]').click()")
+    wait_until(lambda: "文件生命周期" in self.body())
+    self.evaluate("document.querySelector('.tool-library-list button').click()")
+    wait_until(
+      lambda: self.evaluate("Boolean(document.getElementById('tool-config_source'))")
+    )
+    code.write_text("def main(): return 'external'\n", encoding="utf-8")
+    self.evaluate("document.querySelector('[aria-label=刷新工具列表]').click()")
+    wait_until(
+      lambda: (
+        "external"
+        in self.evaluate("document.getElementById('tool-config_source').textContent")
+      )
+    )
+    self.replace("tool-config_display_name", "保留脏草稿")
+    code.write_text("def main(): return 'external2'\n", encoding="utf-8")
+    self.evaluate("document.querySelector('[aria-label=刷新工具列表]').click()")
+    wait_until(lambda: "草稿已保留" in self.body())
+    self.assertEqual(
+      self.evaluate("document.getElementById('tool-config_display_name').value"),
+      "保留脏草稿",
+    )
+    self.assertTrue(
+      self.evaluate("document.querySelector('button[form=tool-definition]').disabled")
+    )
+    for width, height in ((1440, 900), (390, 844)):
+      self.call(
+        "Emulation.setDeviceMetricsOverride",
+        width=width,
+        height=height,
+        deviceScaleFactor=1,
+        mobile=False,
+      )
+      wait_until(lambda width=width: self.evaluate("window.innerWidth") == width)
+      self.evaluate(
+        "[...document.querySelectorAll('button')]"
+        ".find(el => el.textContent === '放弃草稿并重读工具详情')"
+        ".scrollIntoView({block:'center'})"
+      )
+      self.assertFalse(
+        self.evaluate("document.documentElement.scrollWidth > window.innerWidth")
+      )
+      screenshot = self.call("Page.captureScreenshot", format="png")["data"]
+      (self.artifacts / f"config-conflict-{width}.png").write_bytes(
+        base64.b64decode(screenshot)
+      )
+    self.call(
+      "Emulation.setDeviceMetricsOverride",
+      width=1440,
+      height=900,
+      deviceScaleFactor=1,
+      mobile=False,
+    )
+    wait_until(
+      lambda: self.evaluate("Boolean(document.querySelector('.tool-primary-rail'))")
+    )
+    layout = self.evaluate("""(() => {
+      const rect=selector => document.querySelector(selector).getBoundingClientRect();
+      const columns=document.querySelector('.tool-editor-layout').children;
+      return {rail:rect('.tool-primary-rail').width,
+        sidebar:rect('.tool-library-sidebar').width,
+        toolbar:rect('.tool-detail-toolbar').height,
+        ratio:columns[0].getBoundingClientRect().width
+          / columns[1].getBoundingClientRect().width};
+    })()""")
+    self.assertAlmostEqual(layout["rail"], 64, delta=1)
+    self.assertAlmostEqual(layout["sidebar"], 256, delta=1)
+    self.assertAlmostEqual(layout["toolbar"], 48, delta=1)
+    self.assertAlmostEqual(layout["ratio"], 7 / 5, delta=0.02)
+    self.click("放弃草稿并重读工具详情")
+    wait_until(
+      lambda: (
+        "external2"
+        in self.evaluate("document.getElementById('tool-config_source').textContent")
+      )
+    )
+    with code.open("rb"):
+      self.replace("tool-config_source", "def main(): return 'saved'\n")
+      wait_until(
+        lambda: (
+          not self.evaluate(
+            "document.querySelector('button[form=tool-definition]').disabled"
+          )
+        )
+      )
+      self.click("保存工具")
+      wait_until(lambda: "工具已保存" in self.body())
+      wait_until(
+        lambda: (
+          not self.evaluate(
+            "document.querySelector('button[form=tool-definition]').disabled"
+          )
+        )
+      )
+      self.assertNotIn("保存结果不确定", self.body())
+      self.assertNotIn("清理失败", self.body())
+      self.assertTrue(code.exists())
+      self.evaluate(
+        "document.querySelector('.tool-page-notices').scrollIntoView({block:'center'})"
+      )
+      screenshot = self.call("Page.captureScreenshot", format="png")["data"]
+      (self.artifacts / "saved-with-pending-cleanup-1440.png").write_bytes(
+        base64.b64decode(screenshot)
+      )
+      self.call(
+        "Emulation.setDeviceMetricsOverride",
+        width=390,
+        height=844,
+        deviceScaleFactor=1,
+        mobile=False,
+      )
+      self.assertFalse(
+        self.evaluate("document.documentElement.scrollWidth > window.innerWidth")
+      )
+      self.evaluate(
+        "document.querySelector('.tool-page-notices').scrollIntoView({block:'center'})"
+      )
+      screenshot = self.call("Page.captureScreenshot", format="png")["data"]
+      (self.artifacts / "saved-with-pending-cleanup-390.png").write_bytes(
+        base64.b64decode(screenshot)
+      )
+    # 文件占用解除后，下一次配置保存会重新扫描；连接保存也复用同一提交入口。
+    retried = self.client.post(
+      base + "/api/mcp/connections",
+      json={"display_name": "清理重试", "command": "missing-executable"},
+    )
+    self.assertEqual(retried.status_code, 201, retried.text)
+    self.assertFalse(code.exists())
+    # 外部保存改变配置版本；先刷新未编辑详情，再模拟下一次保存响应丢失。
+    version = self.client.get(base + f"/api/tools/{tool_id}").json()["version"]
+    self.evaluate("document.querySelector('[aria-label=刷新工具列表]').click()")
+    wait_until(
+      lambda: (
+        self.evaluate("document.querySelector('.tool-system-fields code').title")
+        == version
+      )
+    )
+    self.evaluate("window.__dropSaveResponse=true")
+    self.replace("tool-config_display_name", "响应丢失仍保留")
+    self.click("保存工具")
+    wait_until(lambda: "保存结果不确定" in self.body())
+    self.assertTrue(
+      self.evaluate("document.querySelector('button[form=tool-definition]').disabled")
+    )
+    self.assertEqual(
+      self.evaluate("document.getElementById('tool-config_display_name').value"),
+      "响应丢失仍保留",
+    )
+    self.assertEqual(self.evaluate("window.__lostSaveRequests"), 1)
+    self.assertEqual(
+      self.client.get(base + f"/api/tools/{tool_id}").json()["data"]["display_name"],
+      "响应丢失仍保留",
+    )
+    self.screenshot()
+    self.click("放弃草稿并重读工具库")
+    wait_until(lambda: "此前保存结果仍不确定" in self.body())
+    self.assertEqual(self.evaluate("window.__lostSaveRequests"), 1)
+    self.assertEqual(len(self.client.get(base + "/api/tools").json()["data"]), 1)
+    self.quit(host)
+    self.assertEqual(host.wait(timeout=10), 0)
+
   def replace(self, field, value):
     editable = self.evaluate(
       f"document.getElementById({json.dumps(field)}).isContentEditable"

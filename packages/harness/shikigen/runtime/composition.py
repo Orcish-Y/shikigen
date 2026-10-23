@@ -116,6 +116,7 @@ async def open_runtime(
       resources=resources,
     )
     try:
+      await runtime.tools.cleanup_unused_python_sources()
       await runtime.runs.recovery.reconcile_all()
       yield runtime
     finally:

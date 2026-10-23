@@ -1,5 +1,11 @@
 import {BackendRequestError} from './backend-client';
 
+export function isVersionConflict(failure:unknown):boolean {
+  if (!(failure instanceof BackendRequestError) || failure.status !== 409) return false;
+  try {return JSON.parse(failure.detail).detail?.code === 'version_conflict';}
+  catch {return false;}
+}
+
 /** A known rejection means the write did not commit. Other failures stay uncertain. */
 export function saveWasRejected(failure:unknown):boolean {
   if (!(failure instanceof BackendRequestError)) return false;

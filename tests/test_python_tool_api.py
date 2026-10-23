@@ -465,9 +465,11 @@ class PythonToolApiTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.path.read_bytes(), before)
     self.assertEqual(list(old_path.parent.glob("*.py")), [])
 
+    # 外部删除也改变编辑版本；先确认磁盘状态，再显式修复。
+    current_version = (await self.client.get("/api/tools")).json()["version"]
     update = await self.client.put(
       f"/api/tools/{tool_id}",
-      json={"definition": definition, "version": saved["version"]},
+      json={"definition": definition, "version": current_version},
     )
     self.assertEqual(update.status_code, 204, update.text)
     updated = (await self.client.get(f"/api/tools/{tool_id}")).json()["data"]

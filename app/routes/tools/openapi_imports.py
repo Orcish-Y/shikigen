@@ -24,13 +24,18 @@ class OpenApiSelection(BaseModel):
 
 class OpenApiImport(OpenApiDocument):
   tools: list[OpenApiSelection]
+  version: str
 
 
 @router.post("/preview")
-async def preview(payload: OpenApiDocument):
+async def preview(payload: OpenApiDocument, request: Request):
   try:
-    return {"data": await asyncio.to_thread(preview_openapi, payload.document)}
-  except OpenApiImportError as error:
+    _, version = await request.app.state.runtime.tools.list_tools()
+    return {
+      "data": await asyncio.to_thread(preview_openapi, payload.document),
+      "version": version,
+    }
+  except (OpenApiImportError, ToolLibraryError) as error:
     fail(error)
 
 
@@ -39,7 +44,7 @@ async def import_tools(payload: OpenApiImport, request: Request):
   try:
     data = await request.app.state.runtime.lifecycle.accept(
       request.app.state.runtime.tools.import_openapi_tools(
-        payload.document, [item.model_dump() for item in payload.tools]
+        payload.document, [item.model_dump() for item in payload.tools], payload.version
       )
     )
     return {"data": data}

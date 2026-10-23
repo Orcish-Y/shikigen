@@ -214,13 +214,13 @@ export class BackendSession {
     return this.json<ToolLibraryRead>('/api/tools', {cache:'no-store'}, signal);
   }
   previewOpenApi(document:string, signal?:AbortSignal) {
-    return this.json<{data:OpenApiPreview}>('/api/tools/openapi/preview',{
+    return this.json<ToolRead<OpenApiPreview>>('/api/tools/openapi/preview',{
       method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({document}),
     },signal);
   }
-  importOpenApiTools(document:string, tools:OpenApiSelection[]) {
+  importOpenApiTools(document:string, tools:OpenApiSelection[], version:string) {
     return this.json<{data:{id:string}[]}>('/api/tools/openapi/imports',{
-      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({document,tools}),
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({document,tools,version}),
     });
   }
   validateToolName(name: string, toolId?: string, signal?: AbortSignal) {

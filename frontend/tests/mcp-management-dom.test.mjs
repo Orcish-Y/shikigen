@@ -34,6 +34,65 @@ const httpSchema={type:'object',required:['display_name','url'],properties:{
   test_timeout_seconds:{type:'number',title:'连接测试预算（秒）'},discovery_timeout_seconds:{type:'number',title:'工具发现预算（秒）'},
 }};
 
+test('连接刷新保留外部变动后的脏草稿，重读前不能覆盖保存或发现',async () => {
+  let current={...connection},version='v1',writes=0;
+  const session=new BackendSession('test','http://backend',new AbortController().signal,async (url,init) => {
+    const path=new URL(url).pathname;
+    if(path.endsWith('/schema/stdio')) return json({data:schema});
+    if(path.endsWith('/schema/streamable_http')) return json({data:httpSchema});
+    if(path === '/api/tools') return json({data:[],reserved_names:[],version});
+    if(init?.method === 'PUT') {writes++;return new Response(null,{status:204});}
+    return json({data:path.endsWith('/connections') ? [current] : current,version});
+  });
+  const user=userEvent.setup({document:browser.window.document,delay:null});
+  render(React.createElement(McpWorkspace,{session,onOpenTool:() => {},initialConnectionId:connection.id}));
+  await screen.findByLabelText(/启动命令/);
+  fireEvent.change(screen.getByLabelText(/启动命令/),{target:{value:'draft-python'}});
+  current={...current,command:'external-python'};version='v2';
+  await user.click(screen.getByRole('button',{name:'刷新连接列表'}));
+  await screen.findByText(/草稿已保留.*重读/);
+  assert.equal(screen.getByLabelText(/启动命令/).value,'draft-python');
+  assert.equal(screen.getByRole('button',{name:'保存连接'}).disabled,true);
+  assert.equal(screen.getByRole('button',{name:'发现工具'}).disabled,true);
+  assert.equal(writes,0);
+  await user.click(screen.getByRole('button',{name:'放弃草稿并重读连接详情'}));
+  await waitFor(() => assert.equal(screen.getByLabelText(/启动命令/).value,'external-python'));
+  assert.equal(screen.getByRole('button',{name:'保存连接'}).disabled,false);
+});
+
+test('新建连接草稿刷新不误报冲突，外部删除已有连接后可明确放弃并恢复列表',async () => {
+  let current={...connection},version='v1';
+  const session=new BackendSession('test','http://backend',new AbortController().signal,async url => {
+    const path=new URL(url).pathname;
+    if(path.endsWith('/schema/stdio')) return json({data:schema});
+    if(path.endsWith('/schema/streamable_http')) return json({data:httpSchema});
+    if(path === '/api/tools') return json({data:[],reserved_names:[],version});
+    if(!current && !path.endsWith('/connections')) return json({detail:{code:'not_found'}},404);
+    return json({data:path.endsWith('/connections') ? (current ? [current] : []) : current,version});
+  });
+  const user=userEvent.setup({document:browser.window.document,delay:null});
+  render(React.createElement(McpWorkspace,{session,onOpenTool:() => {}}));
+  await waitFor(() => assert.equal(screen.getByRole('button',{name:'接入 MCP 服务'}).disabled,false));
+  await user.click(screen.getByRole('button',{name:'接入 MCP 服务'}));
+  await user.click(screen.getByRole('button',{name:'新建 stdio 连接'}));
+  fireEvent.change(screen.getByLabelText(/连接名称/),{target:{value:'未保存连接'}});
+  await user.click(screen.getByRole('button',{name:'刷新连接列表'}));
+  await waitFor(() => assert.equal(screen.getByRole('button',{name:'保存连接'}).disabled,false));
+  assert.equal(screen.getByLabelText(/连接名称/).value,'未保存连接');
+  assert.equal(screen.queryByText(/草稿已保留.*重读/),null);
+  await user.click(screen.getByRole('button',{name:/本地服务.*stdio/}));
+  await user.click(screen.getByRole('button',{name:'放弃修改并离开'}));
+  await screen.findByLabelText(/启动命令/);
+  fireEvent.change(screen.getByLabelText(/启动命令/),{target:{value:'dirty-command'}});
+  current=null;version='v2';
+  await user.click(screen.getByRole('button',{name:'刷新连接列表'}));
+  await screen.findByText(/草稿已保留.*重读/);
+  await user.click(screen.getByRole('button',{name:'放弃草稿并重读连接详情'}));
+  await screen.findByText('暂无 MCP 连接');
+  await waitFor(() => assert.equal(screen.queryByLabelText(/启动命令/),null));
+  assert.equal(screen.getByRole('button',{name:'接入 MCP 服务'}).disabled,false);
+});
+
 test('重新发现预览来源变化和未发现项，只应用勾选更新并展示所属工具',async () => {
   const opened=[],requests=[];
   const saved={id:'tool-search',kind:'mcp',connection_id:connection.id,remote_name:'search',name:'local_search',display_name:'本地搜索',source_tool:source};

@@ -21,6 +21,8 @@ def create_app(*, runtime: Runtime | None = None) -> FastAPI:
   async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     context = open_runtime() if runtime is None else nullcontext(runtime)
     async with context as active_runtime:
+      if runtime is not None:
+        await active_runtime.tools.cleanup_unused_python_sources()
       app.state.runtime = active_runtime
       try:
         yield
