@@ -9,14 +9,22 @@ import {SchemaForm} from './SchemaForm';
 import {Button} from '../ui/button';
 import {Input} from '../ui/input';
 import {Overlay} from '../Overlay';
+import type {McpLibrarySnapshot} from '../../extension-library';
 import type {ToolsWorkspaceHandle} from './ToolsWorkspace';
 
 interface Editor {connection:McpConnection | null;draft:McpConnectionDraft;initial:McpConnectionDraft;version:string;revision:number}
 const message=(error:unknown) => error instanceof Error ? error.message : String(error);
 
-export function McpWorkspace({session,onOpenTool,onNavigation,initialConnectionId,ref}:{
-  session:BackendSession | null;onOpenTool:(id:string) => void;onNavigation?:() => void;ref?:Ref<ToolsWorkspaceHandle>;
-  initialConnectionId?:string;
+export interface McpWorkspaceHandle extends ToolsWorkspaceHandle {
+  resetEditor: () => void;
+  createConnection: (transport: McpTransport) => void;
+  openConnection: (connectionId: string) => void;
+  reloadLibrary: (isBackgroundRefresh?: boolean) => void;
+}
+
+export function McpWorkspace({session,onOpenTool,onNavigation,initialConnectionId,hideSidebar,onLibrarySnapshot,onActivate,ref}:{
+  session:BackendSession | null;onOpenTool:(id:string) => void;onNavigation?:() => void;ref?:Ref<McpWorkspaceHandle>;
+  initialConnectionId?:string; hideSidebar?: boolean; onLibrarySnapshot?: (snapshot: McpLibrarySnapshot) => void; onActivate?: (action: () => void) => void;
 }) {
   const [schemas,setSchemas]=useState<Partial<Record<McpTransport,RJSFSchema>>>({});
   const [connections,setConnections]=useState<McpConnection[] | null>(null);
@@ -70,10 +78,21 @@ export function McpWorkspace({session,onOpenTool,onNavigation,initialConnectionI
     return () => {controller.abort();sequence.current++;};
   },[session]);
   function requestLeave(action:() => void) {
+    if (onActivate) {onActivate(action);return;}
     if (busy || unknownSave || unknownDelete) {setNotice('当前操作尚未核实，请完成后再离开。');return;}
     if (dirty) setLeaveAction(() => action);else action();
   }
-  useImperativeHandle(ref,() => ({requestLeave}));
+  useImperativeHandle(ref,() => ({requestLeave,
+    resetEditor: () => {
+      sequence.current++;openedInitial.current=undefined;
+      setEditor(null);setBusy(null);clearResults();setError(null);setNotice(null);
+      setCreateMenu(false);setPendingRead(null);setUnknownSave(false);setUnknownDelete(false);
+      setConflicted(false);setDeleteImpact(null);setLeaveAction(null);leaveAfterSave.current=false;
+    },
+    createConnection: transport => requestLeave(() => create(transport)),
+    openConnection: connectionId => requestLeave(() => void open(connectionId)),
+    reloadLibrary: isBackgroundRefresh => void reload(false,isBackgroundRefresh),
+  }));
   useEffect(() => {
     if (!dirty) return;
     const warn=(event:BeforeUnloadEvent) => {event.preventDefault();event.returnValue='';};
@@ -105,9 +124,11 @@ export function McpWorkspace({session,onOpenTool,onNavigation,initialConnectionI
     setEditor({connection:null,draft,initial:draft,version:libraryVersion,revision:++sequence.current});
     setError(null);setNotice(null);clearResults();
   }
-  async function reload(discardDraft=false) {
+  async function reload(discardDraft=false,isBackgroundRefresh=false) {
+    // Let the initial schema/list read finish instead of superseding its sequence.
+    if (isBackgroundRefresh && connections === null) return;
     if (!session) return;
-    const request=++sequence.current;setBusy('读取中');setError(null);
+    const request=++sequence.current;setBusy(isBackgroundRefresh ? 'refreshing' : '读取中');setError(null);
     try {
       const [list,library]=await Promise.all([session.listMcpConnections(),session.listTools()]);
       if (request !== sequence.current) return;
@@ -238,8 +259,13 @@ export function McpWorkspace({session,onOpenTool,onNavigation,initialConnectionI
   }
   const canInspect=Boolean(editor?.connection && !dirty && !locked);
   const status=(value:McpObservation,prefix:string) => `${prefix}${value.status === 'success' ? '成功' : value.status === 'timeout' ? '超时' : '失败'} · ${value.duration_ms.toFixed(1)} ms`;
-  return <div className="tool-registry mcp-workspace">
-    <aside className="tool-library-sidebar" aria-label="MCP 连接列表">
+  const canCreate = Boolean(session && schemas.stdio && schemas.streamable_http && !locked);
+  const canReload = Boolean(session && !busy && !pendingRead && !unknownSave && !unknownDelete);
+  useEffect(() => {
+    onLibrarySnapshot?.({connections, selectedId:editor?.connection?.id, busy:Boolean(busy), locked,
+      canCreate, canReload, error:connections === null ? error : null});
+  }, [onLibrarySnapshot, connections, editor?.connection?.id, busy, locked, canCreate, canReload, error]);
+  const sidebar = <aside className="tool-library-sidebar" aria-label="MCP 连接列表">
       <header className="tool-library-heading"><div className="tool-sidebar-title"><h2>MCP 服务</h2>
         <div className="tool-create-actions">
         <Button size="xs" aria-label="接入 MCP 服务" aria-expanded={createMenu} disabled={!session || !schemas.stdio || !schemas.streamable_http || locked} onClick={() => setCreateMenu(current => !current)}><Plus/>接入服务</Button>
@@ -252,7 +278,10 @@ export function McpWorkspace({session,onOpenTool,onNavigation,initialConnectionI
           <span className="tool-list-name"><strong>{connection.display_name}</strong><span className="tool-type-tag">{mcpTransportLabel(connection.transport)}</span></span>
           <span className="tool-list-description">{connection.transport === 'stdio' ? connection.command : connection.url}</span><span className="tool-list-footer">需测试确认连接状态</span></button></li>)}</ul></div>
       <footer className="tool-library-footer"><div><span>{connections?.length ?? 0} 个连接</span><button className="icon-button" aria-label="刷新连接列表" disabled={!session || Boolean(busy) || Boolean(pendingRead) || unknownSave || unknownDelete} onClick={() => void reload()}><ArrowClockwise/></button></div></footer>
-    </aside>
+    </aside>;
+  return <div className={`tool-registry mcp-workspace ${hideSidebar ? "tool-registry-embedded" : ""}`}>
+    {!hideSidebar && sidebar}
+
     <section className="tool-detail-view" aria-label="MCP 服务详情"><div className="tool-detail-toolbar" role="toolbar" aria-label="MCP 服务操作">
       {onNavigation && <button className="icon-button tool-navigation-toggle" aria-label="打开主导航" onClick={onNavigation}><SidebarSimple/></button>}
       <div className="tool-breadcrumb"><span>MCP 服务</span>{editor && <><span>/</span><strong>{editor.draft.display_name || '新建连接'}</strong></>}</div>
@@ -261,7 +290,7 @@ export function McpWorkspace({session,onOpenTool,onNavigation,initialConnectionI
         <Button size="sm" type="submit" form="mcp-connection" disabled={locked}>保存连接</Button>
         {editor.connection && <Button size="sm" variant="outline" aria-label="删除连接" disabled={locked} onClick={prepareDelete}><Trash size={14}/></Button>}</div>}</div>
       <div className="tool-detail-body"><div className="tool-page-notices">
-        {error && !leaveAction && !deleteImpact && <p role="alert" className="business-notice">{error}</p>}{notice && <p role="status">{notice}</p>}{busy && <p role="status">{busy}…</p>}
+        {error && !leaveAction && !deleteImpact && <p role="alert" className="business-notice">{error}</p>}{notice && <p role="status">{notice}</p>}{busy && busy !== 'refreshing' && <p role="status">{busy}…</p>}
         {pendingRead && !leaveAction && <Button disabled={Boolean(busy)} onClick={retryRead}>重新读取连接详情</Button>}
         {conflicted && <Button disabled={Boolean(busy)} onClick={() => void reload(true)}>{editor?.connection ? '放弃草稿并重读连接详情' : '放弃草稿并重读连接列表'}</Button>}
         {unknownSave && !leaveAction && <Button disabled={Boolean(busy)} onClick={() => void reload()}>放弃草稿并重读连接列表</Button>}</div>

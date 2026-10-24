@@ -1,13 +1,4 @@
 /* Tool page layout follows design/demo-工具.html; colors use the existing theme. */
-.tools-layout .workspace > .tool-primary-rail { padding: 14px 8px; }
-.tools-layout .workspace > .tool-primary-rail nav { gap: 12px; }
-.tools-layout .workspace > .tool-primary-rail .nav-item { width: 40px; height: 40px; min-height: 40px; margin: 0 auto; border-radius: 12px; padding: 0; }
-.tools-layout .workspace > .tool-primary-rail .nav-item.active { background: var(--ui-primary); color: var(--ui-primary-foreground); border-color: var(--ui-primary); box-shadow: 0 0 0 2px #4f46e530, 0 1px 2px #4f46e520; }
-.tools-layout .workspace > .tool-primary-rail .nav-item.active:hover { background: #4338ca; }
-.tool-primary-rail .navigation-footer { display: grid; gap: 12px; padding: 0; border: 0; }
-.tool-rail-status { display: flex; justify-content: center; padding-top: 14px; margin: 0 8px; border-top: 1px solid var(--border); }
-.tool-rail-status .status-dot { width: 10px; height: 10px; border: 2px solid white; box-shadow: 0 0 0 1px var(--border); }
-.tool-rail-status .status-dot.ready { background: #10b981; }
 .tool-registry { display: grid; grid-template-columns: 256px minmax(0, 1fr); flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
 .tool-registry code, .tool-registry pre { font-family: 'JetBrains Mono', monospace; }
 .tool-library-sidebar { display: flex; flex-direction: column; min-width: 0; min-height: 0; border-right: 1px solid var(--border); background: var(--sidebar); }
@@ -240,3 +231,23 @@
   .mcp-workspace .tool-breadcrumb { max-width: 60px; }
   .mcp-workspace .tool-toolbar-actions { margin-left: auto; }
 }
+
+/* Extension navigation is local to the shared library, never the primary rail. */
+.extensions-workspace { display: grid; grid-template-columns: 280px minmax(0, 1fr); flex: 1; min-height: 0; min-width: 0; overflow: hidden; }
+.extensions-library { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--border); background: var(--sidebar); }
+.extensions-library h1 { font-size: 14px; font-weight: 600; }
+.extensions-library-content { flex: 1; min-height: 0; overflow: auto; }
+.extensions-detail, .extensions-editor { display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; }
+.extensions-editor { flex: 1; }
+.extensions-editor[hidden] { display: none; }
+.tool-registry.tool-registry-embedded { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+.extensions-library .tool-create-actions { margin-left: auto; }
+@media (max-width: 767px) {
+  .extensions-workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(160px, 35%) minmax(0, 1fr); }
+  .extensions-library { border-right: 0; border-bottom: 1px solid var(--border); }
+  .extensions-library > .tool-library-heading { padding: 4px 12px; }
+  .extensions-library .tool-sidebar-title { margin-bottom: 0; }
+}
+
+.extensions-library .tool-library-footer { display: block; flex-shrink: 0; }
+.extensions-library .tool-library-heading { flex-shrink: 0; }

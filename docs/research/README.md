@@ -19,6 +19,8 @@
 
 - [Python 源码编辑与前端静态分析](python-editor-static-analysis.md)（2026-10-15）：比较 CodeMirror／Lezer、Monaco／Pyright、Pyodide 和 Tree-sitter，附隔离样例与存储测量。CodeMirror 6 + Lezer 已采用，后端保留权威复核；现行能力见[工具库指南](../wayfinder/tools-workflow/README.md)。
 
+- [智能体与工作流编排架构调查](agent-and-workflow-orchestration.md)（2026-10-25）：对照 DeepSeek Harness、OpenClaw、Hermes、deer-flow/LangGraph、Dify、Coze 与 AutoGen Studio，分析 Agent 与 Workflow 在前端的独立性、功能清单与异同点，并附 Shikigen 落地建议。
+
 - [工具配置字段与适配器调查](tool-configuration-fields.md)（2026-10-12）：对照 LangChain、Dify、AutoGen、Claude Code 与 MCP/OpenAPI，区分共有定义、连接配置、自动发现与导入字段。原始产品取舍见[规划地图](../wayfinder/tools-workflow/map.md)，当前实现及范围调整见[工具库指南](../wayfinder/tools-workflow/README.md)。
 
 [返回文档导航](../README.md)

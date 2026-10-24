@@ -11,6 +11,7 @@ import { hasNonFiniteNumber } from './JsonEditor';
 import { ToolDefinitionForm } from './ToolDefinitionForm';
 import { ToolInputForm } from './ToolInputForm';
 import { ToolTestResult } from './ToolTestResult';
+import type { ToolLibrarySnapshot } from '../../extension-library';
 import { ToolLibrarySidebar } from './ToolLibrarySidebar';
 import { ToolSummaryCard } from './ToolSummaryCard';
 import { editTool, emptyToolDraft, emptyPythonToolDraft, isToolTestActive, suggestToolName, toolDraftFingerprint, toolTestStatus, type AnyToolDefinition, type RecentToolTest, type ToolDraft, type ToolTest } from '../../tool-library';
@@ -21,10 +22,19 @@ const message = (error:unknown) => error instanceof Error ? error.message : Stri
 interface Editor {tool:AnyToolDefinition | null; initial:ToolDraft; draft:ToolDraft; version:string; revision:number; inputKey:number}
 export interface ToolsWorkspaceHandle {requestLeave:(action:() => void) => void}
 
-export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initialToolId, ref }: {
+export interface ToolEditorHandle extends ToolsWorkspaceHandle {
+  resetEditor: () => void;
+  createTool: (kind: 'http' | 'python') => void;
+  openTool: (tool: AnyToolDefinition) => void;
+  importOpenApi: () => void;
+  reloadLibrary: (isBackgroundRefresh?: boolean) => void;
+}
+
+export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initialToolId, hideSidebar, onLibrarySnapshot, onActivate, ref }: {
+  hideSidebar?: boolean; onLibrarySnapshot?: (snapshot: ToolLibrarySnapshot) => void; onActivate?: (action: () => void) => void;
   session: BackendSession | null; onView: (view: ContentView) => void;
-  onNavigation?:() => void; ref?:Ref<ToolsWorkspaceHandle>;
-  onOpenMcp?:(serverId?:string) => void; initialToolId?:string;
+  onNavigation?:() => void; ref?:Ref<ToolEditorHandle>;
+  onOpenMcp?:(connectionId?:string) => void; initialToolId?:string;
 }) {
   const [httpSchema, setSchema] = useState<RJSFSchema | null>(null);
   const [importing,setImporting]=useState(false);
@@ -42,7 +52,7 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
   const sourceValid=Boolean(currentPythonSchema);
   const [dirty, setDirty] = useState(false);
   const [verified, setVerified] = useState(false);
-  const [busy, setBusy] = useState<'loading' | 'saving' | 'testing' | 'deleting' | null>('loading');
+  const [busy, setBusy] = useState<'loading' | 'refreshing' | 'saving' | 'testing' | 'deleting' | null>('loading');
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [test, setTest] = useState<ToolTest | null>(null);
@@ -89,13 +99,20 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
   }, [session]);
 
   function requestLeave(action:() => void) {
+    if (onActivate) {onActivate(action);return;}
     if (importing && importer.current) {importer.current.requestLeave(action);return;}
     if (testInFlight.current) {setTestLeaveAction(() => action);return;}
     if (busy || saveOutcomeUnknown) {setNotice('当前操作尚未完成，请完成后再离开。');return;}
     if (dirty) {setLeaveAction(() => action);leaveAfterSave.current=false;}
     else action();
   }
-  useImperativeHandle(ref, () => ({requestLeave}));
+  useImperativeHandle(ref, () => ({requestLeave,
+    resetEditor: () => {closeEditor();openedInitial.current=undefined;setError(null);},
+    createTool: kind => requestLeave(() => void create(kind)),
+    openTool: tool => requestLeave(() => void open(tool)),
+    importOpenApi: () => requestLeave(() => {closeEditor();setImporting(true);}),
+    reloadLibrary: isBackgroundRefresh => {if (!testInFlight.current) void reload(isBackgroundRefresh);else setNotice('测试正在运行，请完成或取消后刷新。');},
+  }));
   useEffect(() => {
     if (testLeaveAction && !test && busy === null) {
       const action=testLeaveAction;setTestLeaveAction(null);
@@ -149,10 +166,11 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
     return () => {window.clearTimeout(timer); controller.abort();};
   }, [session, test,cancellingTest,testStartState]);
 
-  async function reload() {
+  async function reload(isBackgroundRefresh=false) {
     if (!session || saveOutcomeUnknown || savedToolAwaitingRead) return;
+    if (isBackgroundRefresh && tools === null) return;
     const request = ++selection.current;
-    setBusy('loading'); setError(null); setVerified(false);
+    setBusy(isBackgroundRefresh ? 'refreshing' : 'loading'); setError(null); setVerified(false);
     try {
       const result = await session.listTools();
       if (request !== selection.current) return;
@@ -394,12 +412,20 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
     setEditor(current => current ? {...current,draft} : current);
     setDirty(Boolean(editor && toolDraftFingerprint(draft) !== toolDraftFingerprint(editor.initial)));if(!conflicted) setNotice(null);
   }
-  return <div className="tool-registry">
-    <ToolLibrarySidebar tools={tools} recent={recent} selectedId={editor?.tool?.id} busy={Boolean(busy && busy !== 'testing')} verified={verified}
+  const canCreate = Boolean(session && schema && verified && (!busy || busy === 'testing') && !saveOutcomeUnknown && !savedToolAwaitingRead);
+  const canReload = Boolean(session && !busy && !saveOutcomeUnknown && !savedToolAwaitingRead);
+  useEffect(() => {
+    onLibrarySnapshot?.({tools, recent, selectedId:editor?.tool?.id, busy:Boolean(busy && busy !== 'testing'),
+      verified, canCreate, canReload, error:tools === null ? error : null});
+  }, [onLibrarySnapshot, tools, recent, editor?.tool?.id, busy, verified, canCreate, canReload, error]);
+  const sidebar = <ToolLibrarySidebar tools={tools} recent={recent} selectedId={editor?.tool?.id} busy={Boolean(busy && busy !== 'testing')} verified={verified}
       onImportOpenApi={() => requestLeave(() => {closeEditor();setImporting(true);})}
       onOpenMcp={onOpenMcp ? () => requestLeave(() => onOpenMcp()) : undefined}
       connected={Boolean(session)} canCreate={Boolean(session && schema && verified && (!busy || busy === 'testing') && !saveOutcomeUnknown && !savedToolAwaitingRead)}
-      onCreate={kind => requestLeave(() => void create(kind))} onOpen={tool => requestLeave(() => void open(tool))} onReload={() => {if (!testInFlight.current) void reload();else setNotice('测试正在运行，请完成或取消后刷新。');}}/>
+      onCreate={kind => requestLeave(() => void create(kind))} onOpen={tool => requestLeave(() => void open(tool))} onReload={() => {if (!testInFlight.current) void reload();else setNotice('测试正在运行，请完成或取消后刷新。');}}/>;
+  return <div className={`tool-registry ${hideSidebar ? "tool-registry-embedded" : ""}`}>
+    {!hideSidebar && sidebar}
+
     {importing && session && httpSchema ? <OpenApiImportPanel ref={importer} session={session} schema={httpSchema}
       occupiedNames={[...reservedNames,...(tools ?? []).map(tool => tool.name)]} onNavigation={onNavigation}
       version={libraryVersion} onLibrary={library => {setLibraryVersion(library.version);setTools(library.data);setReservedNames(library.reserved_names);setVerified(true);}}
@@ -407,7 +433,7 @@ export function ToolsWorkspace({ session, onView, onNavigation, onOpenMcp, initi
       <div className="tool-detail-toolbar" role="toolbar" aria-label="工具操作">
         {onNavigation && <button className="icon-button tool-navigation-toggle" aria-label="打开主导航" onClick={onNavigation}><SidebarSimple/></button>}
         <div className="tool-breadcrumb"><button aria-label="返回工具列表" disabled={Boolean(busy && busy !== 'testing') || saveOutcomeUnknown}
-          onClick={() => requestLeave(closeEditor)}>工具与技能</button>{editor && <><span>/</span><span>{editor.draft.kind.toUpperCase()}</span></>}
+          onClick={() => requestLeave(closeEditor)}>工具</button>{editor && <><span>/</span><span>{editor.draft.kind.toUpperCase()}</span></>}
           {editor && <><span>/</span><strong>{editor.tool?.display_name || '新建工具'}</strong></>}</div>
         {editor && <div className="tool-toolbar-actions"><Button size="sm" variant="outline" disabled={!canTest}
           onClick={() => document.getElementById('tool-test-panel')?.scrollIntoView({behavior:'smooth',block:'start'})}><Play size={14}/>测试运行</Button>

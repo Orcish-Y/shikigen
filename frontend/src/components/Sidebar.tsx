@@ -1,10 +1,6 @@
 import {
   ChatCircle,
-  Wrench,
   PuzzlePiece,
-  Stack,
-  ChartBar,
-  FileText,
   Database,
   GitBranch,
   Pulse,
@@ -60,7 +56,7 @@ function ListError({ failure, onRetry, onReload }: {
   </div>;
 }
 
-export type WorkspacePage = 'chat' | 'tools' | 'mcp';
+export type WorkspacePage = 'chat' | 'extensions';
 
 export function Navigation({
   backendReady,
@@ -79,17 +75,16 @@ export function Navigation({
   page?: WorkspacePage;
   onNavigate?: (page: WorkspacePage) => void;
 }) {
-  const compactToolsRail = page !== 'chat' && isCollapsed;
   const destinations = [
-    { icon: ChatCircle, label: "会话与对话", page:'chat' as WorkspacePage },
-    ...(compactToolsRail ? [{icon:PuzzlePiece,label:'工具',page:'tools' as WorkspacePage}] : []),
-    { icon: compactToolsRail ? Stack : Database, label: "知识库与向量空间" },
-    { icon: compactToolsRail ? ChartBar : GitBranch, label: "提示词与评估" },
-    { icon: compactToolsRail ? FileText : Pulse, label: "运行日志与追踪" },
+    { icon: ChatCircle, label: "对话", page: 'chat' as WorkspacePage },
+    { icon: PuzzlePiece, label: "扩展", page: 'extensions' as WorkspacePage },
+    { icon: Database, label: "知识库与向量空间" },
+    { icon: GitBranch, label: "提示词与评估" },
+    { icon: Pulse, label: "运行日志与追踪" },
   ];
   return (
-    <aside className={`navigation ${compactToolsRail ? 'tool-primary-rail' : ''}`} aria-label="主导航">
-      {!compactToolsRail && <div className="navigation-heading">
+    <aside className="navigation" aria-label="主导航">
+      <div className="navigation-heading">
         <h2 className="nav-label navigation-title">核心工作台</h2>
         <button
           className="icon-button"
@@ -99,7 +94,7 @@ export function Navigation({
         >
           <SidebarSimple size={19} />
         </button>
-      </div>}
+      </div>
       <nav aria-label="核心工作台">
         {destinations.map(({ icon: Icon, label, page: destination }) => (
           <button
@@ -116,22 +111,12 @@ export function Navigation({
             {!destination && <span className="nav-label soon">待开放</span>}
           </button>
         ))}
-        {!compactToolsRail && <><h2 className="nav-label navigation-title extension-heading">扩展</h2>
-        {([{page:'tools', label:'工具'}, {page:'mcp', label:'MCP 服务'}] as const).map(item =>
-          <button key={item.page} className={`nav-item ${page === item.page ? 'active' : ''}`}
-            title={item.label} aria-label={item.label} aria-current={page === item.page ? 'page' : undefined}
-            onClick={() => onNavigate?.(item.page)}>
-            <Wrench size={19}/><span className="nav-label">{item.label}</span>
-          </button>)}
-        <button className="nav-item" disabled title="技能 · 暂未开放" aria-label="技能 · 暂未开放">
-          <Wrench size={19}/><span className="nav-label">技能</span><span className="nav-label soon">暂未开放</span>
-        </button></>}
       </nav>
       <div className="navigation-footer">
-        {!compactToolsRail && <div className="connection-card" title={`${backendReady ? '后端已就绪' : '后端尚未连接'} · ${observationLabel}`}>
+        <div className="connection-card" title={`${backendReady ? '后端已就绪' : '后端尚未连接'} · ${observationLabel}`}>
           <span className="status-dot" />
           <span className="nav-label">{backendReady ? "后端已就绪" : "后端尚未连接"}<br />{observationLabel}</span>
-        </div>}
+        </div>
         <button className="nav-item" onClick={onCommands} title="命令面板" aria-label="快捷命令面板">
           <Terminal size={19} />
           <span className="nav-label">快捷命令面板</span>
@@ -140,9 +125,7 @@ export function Navigation({
           <Gear size={19} />
           <span className="nav-label">系统设置</span>
         </button>
-        {compactToolsRail ? <div className="tool-rail-status" title={`${backendReady ? '后端已就绪' : '后端尚未连接'} · ${observationLabel}`}>
-          <span className={`status-dot ${backendReady ? 'ready' : ''}`}/>
-        </div> : <div className="profile">
+        <div className="profile">
           <span className="avatar">
             <User size={17} />
           </span>
@@ -150,7 +133,7 @@ export function Navigation({
             <strong>Local Developer</strong>
             <small>个人工作空间</small>
           </div>
-        </div>}
+        </div>
       </div>
     </aside>
   );

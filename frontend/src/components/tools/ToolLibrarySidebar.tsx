@@ -28,7 +28,7 @@ export function ToolLibrarySidebar({tools, recent, selectedId, busy, verified, c
 
   return <aside className="tool-library-sidebar" aria-label="工具库">
     <header className="tool-library-heading">
-      <div className="tool-sidebar-title"><h2>工具与技能</h2>
+      <div className="tool-sidebar-title"><h2>工具</h2>
         <div className="tool-create-actions"><Button size="xs" aria-label="创建 HTTP 工具" disabled={!canCreate} onClick={() => onCreate('http')}><Plus/>接入工具</Button>
           <Button size="xs" variant="outline" aria-label="选择接入类型" aria-expanded={createMenu} disabled={!canCreate} onClick={() => setCreateMenu(!createMenu)}>⌄</Button>
           {createMenu && <div className="tool-create-menu"><Button variant="ghost" onClick={() => {setCreateMenu(false);onCreate('http');}}>新建 HTTP 工具</Button>
@@ -62,7 +62,28 @@ export function ToolLibrarySidebar({tools, recent, selectedId, busy, verified, c
       {connected && tools === null && <p className="tool-list-message" role="status">{busy ? '正在读取工具库…' : '工具库读取失败，请刷新重试。'}</p>}
       {tools?.length === 0 && verified && <p className="tool-list-message" role="status">工具库为空。接入 HTTP 或 Python 工具开始测试。</p>}
       {tools && tools.length > 0 && filtered?.length === 0 && <p className="tool-list-message">没有匹配的工具。{hideDisabled && '已隐藏禁用工具。'}</p>}
-      {filtered && filtered.length > 0 && <ul className="tool-library-list">{filtered.map(tool => {
+      {filtered && filtered.length > 0 && <ToolLibraryEntries tools={filtered} recent={recent} selectedId={selectedId} busy={busy} onOpen={onOpen}/>}
+    </div>
+    <footer className="tool-library-footer"><div><span className="tool-library-count">{tools ? `${tools.filter(tool => tool.enabled).length} / ${tools.length} 项已启用` : '工具库'}</span>
+      <button className="icon-button" disabled={!connected || busy} aria-label="刷新工具列表" title="刷新工具列表" onClick={onReload}><ArrowClockwise size={14}/></button></div>
+      <p>{verified ? '已保存定义 · 本页测试记录' : '读取尚未核实'}</p>
+    </footer>
+  </aside>;
+}
+
+
+/** Tool rows are shared by the standalone tool library and the extension list. */
+interface ToolLibraryEntriesProps {
+  tools: AnyToolDefinition[]; recent: Record<string, RecentToolTest>; selectedId?: string;
+  busy: boolean; onOpen: (tool: AnyToolDefinition) => void;
+}
+
+export function ToolLibraryEntries(props: ToolLibraryEntriesProps) {
+  return <ul className="tool-library-list"><ToolLibraryRows {...props}/></ul>;
+}
+
+export function ToolLibraryRows({tools, recent, selectedId, busy, onOpen}: ToolLibraryEntriesProps) {
+  return <>{tools.map(tool => {
         const source=tool.kind === 'http' ? tool.url : tool.kind === 'python' ? tool.code_path : `${tool.connection_id} / ${tool.remote_name}`;
         const description=[tool.display_name !== tool.name ? tool.display_name : '',tool.description].filter(Boolean).join(' · ') || '暂无说明';
         return <li key={tool.id}><button aria-current={selectedId === tool.id ? 'true' : undefined} disabled={busy} onClick={() => onOpen(tool)}>
@@ -74,11 +95,5 @@ export function ToolLibrarySidebar({tools, recent, selectedId, busy, verified, c
           {recent[tool.id] && <span className="tool-list-test">{toolTestStatus(recent[tool.id].test.status)} · <time dateTime={recent[tool.id].test.created_at}>{new Date(recent[tool.id].test.created_at).toLocaleString()}</time><span>（本页草稿测试）</span>
             {tool.kind === 'http' && recent[tool.id].definition !== toolDraftFingerprint(editTool(tool)) && <span>修改前的测试结果</span>}</span>}
         </button></li>;
-      })}</ul>}
-    </div>
-    <footer className="tool-library-footer"><div><span className="tool-library-count">{tools ? `${tools.filter(tool => tool.enabled).length} / ${tools.length} 项已启用` : '工具库'}</span>
-      <button className="icon-button" disabled={!connected || busy} aria-label="刷新工具列表" title="刷新工具列表" onClick={onReload}><ArrowClockwise size={14}/></button></div>
-      <p>{verified ? '已保存定义 · 本页测试记录' : '读取尚未核实'}</p>
-    </footer>
-  </aside>;
+      })}</>;
 }
