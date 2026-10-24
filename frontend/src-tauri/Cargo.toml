@@ -1,6 +1,6 @@
 [package]
 name = "shikigen-desktop"
-version = "0.1.0"
+version = "0.2.0"
 description = "Shikigen desktop application"
 authors = []
 edition = "2021"

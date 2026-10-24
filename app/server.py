@@ -31,7 +31,7 @@ def create_app(*, runtime: Runtime | None = None) -> FastAPI:
 
   app = FastAPI(
     title="Shikigen Agent API",
-    version="0.1.0",
+    version="0.2.0",
     lifespan=lifespan,
   )
 

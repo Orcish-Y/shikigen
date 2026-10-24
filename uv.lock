@@ -1423,7 +1423,7 @@ wheels = [
 
 [[package]]
 name = "shikigen-agent"
-version = "0.1.0"
+version = "0.2.0"
 source = { virtual = "." }
 dependencies = [
     { name = "fastapi" },
@@ -1462,7 +1462,7 @@ dev = [
 
 [[package]]
 name = "shikigen-harness"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "packages/harness" }
 dependencies = [
     { name = "aiosqlite" },
