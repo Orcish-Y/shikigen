@@ -1,3 +1,4 @@
+import { selectConversationWhenListed } from './helpers/select-conversation.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { BackendClient } from '../src/backend-client.ts';
@@ -33,7 +34,7 @@ function fixture(t, histories = [[saved(1, '已保存')]], snapshot = {id:'r', t
     snapshotReads.push(path);
     return snapshot instanceof Response ? snapshot : Response.json({data:snapshot});
   });
-  const store = new ConversationStore();
+  const store = new ConversationStore(); selectConversationWhenListed(store, 't');
   client.update({state:'ready', startup_id:'lease', base_url:'http://127.0.0.1:1'});
   store.setSession(client.session);
   t.after(() => {store.setSession(null); client.update(null);});
@@ -232,11 +233,11 @@ test('new POST identity survives a sparse follow-up query and starts with its ow
     }}), {headers:{'content-type':'text/event-stream'}});
     return Response.json({data:{id:'old',thread_id:'t',status:'error',error:'旧错误',usage:{total_input:5,total_output:5,total_tokens:10},completed_at:time}});
   });
-  const store = new ConversationStore();
+  const store = new ConversationStore(); selectConversationWhenListed(store, 't');
   client.update({state:'ready',startup_id:'new-target',base_url:'http://127.0.0.1:1'});
   store.setSession(client.session);
   t.after(() => {store.setSession(null);client.update(null);});
-  await until(() => store.canSend());
+  await until(() => store.getSnapshot().activeId && store.canSend());
   store.send('新任务');
   await until(() => postStream);
   postStream.push('metadata', {...metadata(),run_id:'new'});

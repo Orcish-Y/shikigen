@@ -1,7 +1,7 @@
 import { BackendRequestError, type BackendSession, type Run, type RunFrame, type RunEvent, type Thread } from "./backend-client.ts";
 import { RunProjection, sameFact, terminalRun, type ApprovalProjection, type ConversationMessage } from './run-projection.ts';
 import { RunProtocolError } from './run-protocol.ts';
-import { MessageDrafts, type DraftStorage, type MessageSubmission } from './message-drafts.ts';
+import { MessageDrafts, type DraftStorage, type MessageDraft, type MessageSubmission } from './message-drafts.ts';
 import { ObservationRecovery, StreamObservationError, UnexpectedObservationEnd, observationFailure, retryAfterTime, waitUntil, type ObservationState, type ObservationFailure, type RecoveryUpdate } from './observation-recovery.ts';
 import { collectApprovalRecords, createApprovalIdentity, buildApprovalResponses, parseApproval, updateApprovalChoice, type ApprovalChoice, type ApprovalDraft } from './approval-decisions.ts';
 import { ApprovalDrafts, type ApprovalBackup } from './approval-drafts.ts';
@@ -67,6 +67,7 @@ export interface ConversationState {
   activeId: string;
   views: Record<string, ConversationView>;
   drafts: Record<string, string>;
+  newConversationDraft: string;
   listing: boolean;
   listLoaded: boolean;
   loadingMore: boolean;
@@ -94,7 +95,7 @@ interface ObservationAttempt {
 /** 应用级会话所有者。Workspace 仅订阅；地址租约撤销只结束读取，不删除事实和输入。 */
 export class ConversationStore {
   private state: ConversationState = {
-    threads: [], activeId: "", views: {}, drafts: {}, listing: false,
+    threads: [], activeId: "", views: {}, drafts: {}, newConversationDraft:'', listing: false,
     listLoaded: false, loadingMore: false, nextCursor: null, pageError: null,
     creating: false, listError: null, notice: null, storageIssue:null, submissions:{}, approvalBackups:[], temporaryTitles:{}, titleStorageIssue:null,
   };
@@ -151,11 +152,12 @@ export class ConversationStore {
     this.inputs = new MessageDrafts(options.storage);
     this.approvals = new ApprovalDrafts(options.storage);
     this.titles = new ConversationTitles(options.storage);
-    this.state = {...this.state, activeId:this.inputs.selected, ...this.inputState()};
+    this.state = {...this.state, ...this.inputState()};
   }
 
   private inputState() {
     return {drafts:Object.fromEntries(Object.entries(this.inputs.drafts).map(([id, draft]) => [id, draft.text])),
+      newConversationDraft:this.inputs.newConversationDraft.text,
       storageIssue:this.approvals.storageIssue ?? this.inputs.storageIssue, titleStorageIssue:this.titles.storageIssue,
       submissions:this.inputs.submissions, approvalBackups:this.approvals.records, temporaryTitles:this.titles.getSnapshot()};
   }
@@ -318,7 +320,7 @@ export class ConversationStore {
       const list = this.entryList;
       this.entryList = false;
       if (!this.visible || !this.session || this.session.signal.aborted) return;
-      if (list) void this.loadThreads(true);
+      if (list) void this.loadThreads();
       if (this.state.activeId) void this.openSelected();
     });
   }
@@ -337,7 +339,7 @@ export class ConversationStore {
     if (!this.visible || !this.session || this.session.signal.aborted || this.listRequest) return;
     const delay = Math.max(5000, (this.state.listError?.retryAt ?? 0) - Date.now(),
       (this.state.pageError?.retryAt ?? 0) - Date.now());
-    this.pollTimer = setTimeout(() => {this.pollTimer = null; void this.loadThreads(false);}, Math.min(delay, 2_147_483_647));
+    this.pollTimer = setTimeout(() => {this.pollTimer = null; void this.loadThreads();}, Math.min(delay, 2_147_483_647));
   }
 
   private mergeThreads(items: Thread[], versions: Map<string, number>) {
@@ -363,7 +365,7 @@ export class ConversationStore {
       ? { ...thread, run_id: run.run_id, run_status: run.status } : thread) });
   }
 
-  private async loadThreads(chooseInitial = true, reset = false) {
+  private async loadThreads(reset = false) {
     const session = this.session;
     if (!this.visible || !session || session.signal.aborted) return;
     if (Date.now() < (this.state.listError?.retryAt ?? 0)
@@ -377,7 +379,6 @@ export class ConversationStore {
       this.publishState({ loadingMore: false });
     }
     const controller = this.listRequest = new AbortController();
-    const intent = this.intent;
     const versions = new Map(this.statusVersions);
     this.publishState({ listing: true, listError: null });
     try {
@@ -394,7 +395,6 @@ export class ConversationStore {
         nextCursor: page.data.length < THREAD_PAGE_SIZE ? null : page.next_cursor, pageError: null,
       });
       this.publishState({ listLoaded: true });
-      if (chooseInitial && !this.state.activeId && intent === this.intent && page.data.length) this.select(page.data[0].id);
     } catch (error) {
       if (this.live(session, controller)) this.publishState({ listError: listFailure(error) });
     } finally {
@@ -406,8 +406,8 @@ export class ConversationStore {
     }
   }
 
-  refreshThreads = () => this.loadThreads(false);
-  reloadThreads = () => this.loadThreads(true, true);
+  refreshThreads = () => this.loadThreads();
+  reloadThreads = () => this.loadThreads(true);
 
   loadMore = async (retry = false) => {
     const session = this.session;
@@ -436,18 +436,29 @@ export class ConversationStore {
 
   select(threadId: string) {
     if (!threadId || !this.state.threads.some(thread => thread.id === threadId)) return;
+    this.activateConversation(threadId);
+    this.enter();
+  }
+
+  private activateConversation(threadId: string) {
     this.intent++;
     this.stopSelection();
     this.publishState({ activeId: threadId });
     this.inputs.select(threadId);
     this.publishInputs();
-    this.enter();
   }
+
+  openNewConversation = () => {
+    this.intent++;
+    this.stopSelection();
+    this.inputs.select('');
+    this.publishState({activeId:'', notice:null, ...this.inputState()});
+  };
 
   updateDraft(value: string) {
     const id = this.state.activeId;
-    if (!id) return;
-    this.inputs.update(id, value);
+    if (id) this.inputs.update(id, value);
+    else this.inputs.updateNewConversationDraft(value);
     this.publishInputs();
   }
 
@@ -455,7 +466,7 @@ export class ConversationStore {
     return Boolean(this.visible && this.session && !this.session.signal.aborted && !this.creation && !this.state.listing);
   }
 
-  async create() {
+  async create(firstMessage?: MessageDraft) {
     const session = this.session;
     if (!this.canCreate() || !session) return;
     const intent = ++this.intent;
@@ -463,19 +474,27 @@ export class ConversationStore {
     this.publishState({ creating: true, notice: null });
     try {
       const { thread_id } = await session.createThread();
-      if (this.session !== session || session.signal.aborted) return;
+      if (this.creation !== creation || this.session !== session || session.signal.aborted) return;
       if (!this.state.threads.some(thread => thread.id === thread_id)) {
         // 创建响应不提供时间，不制造本地时间冒充服务端事实。
         this.publishState({ threads: [{ id: thread_id, user_id: null, title: null, created_at: "", updated_at: "", run_id: null, run_status: null }, ...this.state.threads] });
       }
-      if (intent === this.intent) this.select(thread_id);
+      if (intent === this.intent) {
+        if (firstMessage) {
+          // 创建期间仍可编辑；迁移最新草稿，仅提交点击发送时捕获的原文与版本。
+          this.inputs.transferNewConversationDraft(thread_id);
+          this.activateConversation(thread_id);
+          this.updateView(thread_id, {history:'ready', verified:true});
+          this.startSend(firstMessage.text, firstMessage.version);
+        } else this.select(thread_id);
+      }
       else this.publishState({ notice: `会话已创建（${thread_id}），已保留在列表中，继续当前会话。` });
-      await this.loadThreads(false);
+      await this.loadThreads();
       return thread_id;
     } catch (error) {
-      if (this.session !== session || session.signal.aborted) return;
+      if (this.creation !== creation || this.session !== session || session.signal.aborted) return;
       this.publishState({ notice: `创建结果待确认：${String(error)}。请核对会话列表；不会自动再次创建。` });
-      await this.loadThreads(false);
+      await this.loadThreads();
     } finally {
       if (this.creation === creation) {
         this.creation = null;
@@ -504,6 +523,7 @@ export class ConversationStore {
   }
 
   canSend() {
+    if (!this.state.activeId) return this.canCreate();
     const submission = this.inputs.submissions[this.state.activeId];
     return this.canStartRun() && (!submission || submission.status === 'accepted');
   }
@@ -534,6 +554,10 @@ export class ConversationStore {
   send(message: string): boolean {
     const session = this.session;
     if (!session || !this.canSend() || !message.trim()) return false;
+    if (!this.state.activeId) {
+      void this.create({text:message, version:this.inputs.newConversationDraft.version});
+      return true;
+    }
     return this.startSend(message);
   }
 
@@ -596,7 +620,7 @@ export class ConversationStore {
           }
           if (normal && this.live(session, controller)) {
             await this.readCommittedHistory(session, controller, threadId);
-            void this.loadThreads(false);
+            void this.loadThreads();
           }
         } else {
           // 接受前结果未知，只 GET 核实；不重发 POST。

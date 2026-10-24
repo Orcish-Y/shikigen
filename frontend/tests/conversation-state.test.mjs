@@ -1,3 +1,4 @@
+import { selectConversationWhenListed } from './helpers/select-conversation.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { BackendClient } from '../src/backend-client.ts';
@@ -28,7 +29,7 @@ test('opening a terminal conversation preserves complete facts, selection and dr
     if (path.endsWith('/runs/run-t')) return Response.json({data:{id:'run-t', thread_id:'t', status:'completed', usage:null}});
     assert.fail(`终态不应开启观察：${path}`);
   });
-  const store = new ConversationStore();
+  const store = new ConversationStore(); selectConversationWhenListed(store, 't');
   store.updateDraft('没有会话的输入');
   assert.deepEqual(store.getSnapshot().drafts, {});
   client.update(ready(1));
@@ -66,7 +67,7 @@ test('late history from a previous selection cannot replace the selected convers
     if (path === '/api/threads/b/messages') return Response.json({data:[]});
     assert.fail(path);
   });
-  const store = new ConversationStore();
+  const store = new ConversationStore(); selectConversationWhenListed(store, 'a');
   client.update(ready(1));
   store.setSession(client.session);
   await until(() => release);
@@ -97,7 +98,7 @@ test('a confirmed creation is retained after list failure and does not steal a n
     if (failList) return new Response('temporarily unavailable', {status:503});
     return Response.json({data:[thread('a'), thread('b')], next_cursor:null});
   });
-  const store = new ConversationStore();
+  const store = new ConversationStore(); selectConversationWhenListed(store, 'a');
   client.update(ready(1));
   store.setSession(client.session);
   await until(() => store.getSnapshot().views.a?.verified);
@@ -142,7 +143,7 @@ test('running and interrupted history reopens the existing stream; replay cannot
         ['metadata', {thread_id:'t', run_id:'run-t', status}],
       ], status === 'running');
     });
-    const store = new ConversationStore();
+    const store = new ConversationStore(); selectConversationWhenListed(store, 't');
     client.update(ready(1));
     store.setSession(client.session);
     await until(() => store.getSnapshot().views.t?.verified);
@@ -168,10 +169,10 @@ test('new run metadata does not inherit the previous failed runs error, usage or
     return Response.json({data:{id:'run-t', thread_id:'t', status:'error', error:'上一轮失败',
       completed_at:'2026-10-04T01:00:00Z', usage:{total_input:90, total_output:9, total_tokens:99}}});
   });
-  const store = new ConversationStore();
+  const store = new ConversationStore(); selectConversationWhenListed(store, 't');
   client.update(ready(1));
   store.setSession(client.session);
-  await until(() => store.canSend());
+  await until(() => store.getSnapshot().activeId && store.canSend());
   store.send('新任务');
   await until(() => store.getSnapshot().views.t.run.run_id === 'new-run');
   assert.deepEqual(store.getSnapshot().views.t.run, {thread_id:'t', run_id:'new-run', status:'running'});
@@ -198,14 +199,14 @@ test('normal send remains explicit and committed history is readable after the s
     if (url.endsWith('/messages')) return Response.json({data:sent ? [saved] : []});
     return Response.json({data:{id:'run-t', thread_id:'t', status:'completed'}});
   });
-  const store = new ConversationStore();
+  const store = new ConversationStore(); selectConversationWhenListed(store, 't');
   client.update(ready(1));
   store.setSession(client.session);
-  await until(() => store.canSend());
+  await until(() => store.getSnapshot().activeId && store.canSend());
   assert.equal(posts, 0);
   assert.equal(store.send('正常发送'), true);
   assert.equal(store.send('重复发送'), false);
-  await until(() => store.canSend());
+  await until(() => store.getSnapshot().activeId && store.canSend());
   assert.deepEqual(store.getSnapshot().views.t.messages, [saved]);
   assert.equal(posts, 1);
   store.setSession(null);
@@ -221,10 +222,10 @@ test('unknown creation outcome only reads the list and does not select a guessed
       listReads++;
       return Response.json({data:listReads === 1 ? [thread('t')] : [thread('new'), thread('t')], next_cursor:null});
     });
-    const store = new ConversationStore();
+    const store = new ConversationStore(); selectConversationWhenListed(store, 't');
     client.update(ready(1));
     store.setSession(client.session);
-    await until(() => store.canSend());
+    await until(() => store.getSnapshot().activeId && store.canSend());
     store.updateDraft('原来的输入');
     await store.create();
     assert.equal(posts, 1);
@@ -247,10 +248,10 @@ test('failed or invalid history is not an empty conversation and keeps previous 
     }
     return Response.json({data:{id:'run-t', thread_id:'t', status:'completed'}});
   });
-  const store = new ConversationStore();
+  const store = new ConversationStore(); selectConversationWhenListed(store, 't');
   client.update(ready(1));
   store.setSession(client.session);
-  await until(() => store.canSend());
+  await until(() => store.getSnapshot().activeId && store.canSend());
   for (const next of ['unavailable', 'invalid']) {
     mode = next;
     store.reload();

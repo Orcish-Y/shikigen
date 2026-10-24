@@ -1,3 +1,4 @@
+import { selectConversationWhenListed } from './helpers/select-conversation.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { BackendClient } from '../src/backend-client.ts';
@@ -40,7 +41,7 @@ function openWorkbench(storage,options={}) {
     return options.respondToSnapshot?.()??Response.json({data:{id:'r',thread_id:'t',status}});
   });
   client.update({state:'ready',startup_id:'lease',base_url:'http://127.0.0.1:45200'});
-  const store=new ConversationStore({storage});store.setSession(client.session);
+  const store=new ConversationStore({storage}); selectConversationWhenListed(store, 't');store.setSession(client.session);
   return {store,client,requests,readView:()=>store.getSnapshot().views.t,
     finishReplay:()=>replayController.close(),closeWorkbench:()=>{store.setSession(null);client.update(null);}};
 }

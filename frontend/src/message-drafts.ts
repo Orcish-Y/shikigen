@@ -17,6 +17,7 @@ const STORAGE_WARNING = '本地保存不可用；文字暂存于本次应用内�
 
 export class MessageDrafts {
   drafts: Record<string, MessageDraft> = {};
+  newConversationDraft: MessageDraft = {text:'', version:0};
   submissions: Record<string, MessageSubmission> = {};
   selected = '';
   storageIssue: string | null = null;
@@ -55,6 +56,11 @@ export class MessageDrafts {
             && ['http','sse','network','protocol','eof','unknown'].includes(value.failure.kind) ? {failure:value.failure} : {})}];
       }));
       this.selected = saved.selected;
+      if (saved.newConversationDraft !== undefined) {
+        const draft = saved.newConversationDraft;
+        if (!draft || typeof draft.text !== 'string' || !Number.isSafeInteger(draft.version) || draft.version < 0) throw new Error('新会话草稿字段无效');
+        this.newConversationDraft = {text:draft.text, version:draft.version};
+      }
     } catch {
       this.storage = null;
       this.storageIssue = STORAGE_WARNING;
@@ -72,6 +78,18 @@ export class MessageDrafts {
   }
 
   select(threadId: string) { this.selected = threadId; this.save(); }
+
+  updateNewConversationDraft(text: string) {
+    if (this.newConversationDraft.text === text) return;
+    this.newConversationDraft = {text, version:this.newConversationDraft.version + 1};
+    this.save();
+  }
+
+  transferNewConversationDraft(threadId: string) {
+    this.drafts = {...this.drafts, [threadId]:this.newConversationDraft};
+    this.newConversationDraft = {text:'', version:this.newConversationDraft.version + 1};
+    this.save();
+  }
 
   begin(threadId: string, text: string, previousRunId: string | null, version = this.get(threadId).version) {
     const submission: MessageSubmission = {id:crypto.randomUUID(), text, version, previousRunId,
@@ -123,7 +141,7 @@ export class MessageDrafts {
     if (!this.storage) return;
     try {
       this.storage.setItem(STORAGE_KEY, JSON.stringify({schema:1, selected:this.selected,
-        drafts:Object.entries(this.drafts), submissions:Object.entries(this.submissions)}));
+        drafts:Object.entries(this.drafts), submissions:Object.entries(this.submissions), newConversationDraft:this.newConversationDraft}));
     } catch {
       this.storage = null;
       this.storageIssue = STORAGE_WARNING;

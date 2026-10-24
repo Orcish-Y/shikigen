@@ -398,7 +398,7 @@ function Workspace({ session, conversations }: {
               <pre style={{maxHeight:320, overflow:'auto', whiteSpace:'pre-wrap'}}>{typeof conversations.protocolIssue.raw === 'string'
                 ? conversations.protocolIssue.raw : JSON.stringify(conversations.protocolIssue.raw, null, 2)}</pre>
             </details>}
-            {session && <button className="text-button" onClick={conversations.reload} disabled={conversations.sending || conversations.loading}>刷新数据</button>}
+            {session && activeId && <button className="text-button" onClick={conversations.reload} disabled={conversations.sending || conversations.loading}>刷新数据</button>}
             </div>
             <Conversation
               ref={timeline}
@@ -419,11 +419,7 @@ function Workspace({ session, conversations }: {
               toolPreferences={conversations.toolPreferences}
               preview={!session}
               session={active}
-              hasConversation={Boolean(activeId)}
-              isCreating={!conversations.canCreate}
-              onCreate={createSession}
-              readState={activeId ? conversations.historyState : conversations.pagination?.listError ? 'error'
-                : conversations.pagination && (!conversations.pagination.loaded || conversations.pagination.refreshing) ? 'loading' : 'ready'}
+              readState={conversations.historyState}
               onView={openContent}
               onSuggestion={(text) => {
                 if (document.querySelector('dialog[open]') || !conversations.appendExample(activeId, text)) return;

@@ -42,10 +42,10 @@ export function useConversations(session: BackendSession | null, previewMode = f
   });
   const active = sessions.find(conversation => conversation.id === activeId) ?? {
     id: activeId, title: activeId ? displayConversationTitle(null, state.temporaryTitles[activeId])
-      : state.listing ? "正在读取会话" : "新建会话开始对话", group: "日期待确认" as const,
+      : "新会话", group: "日期待确认" as const,
     summary: "", messages: [],
   };
-  let statusLabel = "未选择会话";
+  let statusLabel = "未开始";
   if (activeId) {
     if (view.run) statusLabel = runStatusLabels[view.run.status];
     else if (view.history === "ready" && view.verified) statusLabel = "未开始";
@@ -73,7 +73,7 @@ export function useConversations(session: BackendSession | null, previewMode = f
       : !visible ? '工作台暂不可见' : state.creating ? '正在创建会话，请稍候'
       : state.listing ? '正在读取会话列表，请稍候' : '新建会话',
     create: async () => {
-      if (!previewMode) return store.create();
+      if (!previewMode) return store.openNewConversation();
       const conversation: Session = { id: crypto.randomUUID(), title: "新会话", group: "今天", summary: "尚未开始对话", messages: [] };
       setPreview(conversations => [conversation, ...conversations]);
       setPreviewId(conversation.id);
@@ -89,9 +89,8 @@ export function useConversations(session: BackendSession | null, previewMode = f
     copyDraftToNewConversation: store.copyDraftToNewConversation,
     storageIssue: state.storageIssue,
     titleStorageIssue:state.titleStorageIssue,
-    draft: (previewMode ? previewDrafts[activeId] : state.drafts[activeId]) ?? "",
+    draft: (previewMode ? previewDrafts[activeId] : activeId ? state.drafts[activeId] : state.newConversationDraft) ?? "",
     updateDraft: (value: string) => {
-      if (!activeId) return;
       if (previewMode) setPreviewDrafts(current => ({ ...current, [activeId]: value }));
       else store.updateDraft(value);
     },
@@ -102,8 +101,8 @@ export function useConversations(session: BackendSession | null, previewMode = f
         setPreviewDrafts(current => ({...current, [threadId]:appendTaskExample(current[threadId] ?? '', example)}));
       } else {
         const currentState = store.getSnapshot();
-        if (!threadId || currentState.activeId !== threadId || currentState.views[threadId]?.history !== 'ready') return false;
-        store.updateDraft(appendTaskExample(currentState.drafts[threadId] ?? '', example));
+        if (currentState.activeId !== threadId || threadId && currentState.views[threadId]?.history !== 'ready') return false;
+        store.updateDraft(appendTaskExample(threadId ? currentState.drafts[threadId] ?? '' : currentState.newConversationDraft, example));
       }
       return true;
     },
@@ -117,10 +116,10 @@ export function useConversations(session: BackendSession | null, previewMode = f
     setDetailsOpen:store.setDetailsOpen,
     refreshDetails:store.refreshDetails,
     refreshRunEvents:store.refreshRunEvents,
-    historyState: previewMode ? "ready" as const : view.history,
+    historyState: previewMode || !activeId ? "ready" as const : view.history,
     loading: state.listing || view.history === "loading",
     verifying: Boolean(view.run && !view.verified && !view.error),
-    creating: state.creating, sending: view.sending,
+    creating: state.creating, sending: view.sending || !activeId && state.creating,
     error: view.error,
     protocolIssue:view.protocolIssue,
     sendFailure:view.sendFailure,

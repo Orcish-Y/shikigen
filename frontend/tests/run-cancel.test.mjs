@@ -1,3 +1,4 @@
+import { selectConversationWhenListed } from './helpers/select-conversation.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { BackendClient } from '../src/backend-client.ts';
@@ -30,7 +31,7 @@ async function setup(cancel, options={}) {
     }}), {headers:{'Content-Type':'text/event-stream'}});
     snapshots++; return options.snapshot?.(snapshots) ?? Response.json({data:{id:'r', thread_id:'a', status}});
   });
-  const store = new ConversationStore({storage:null});
+  const store = new ConversationStore({storage:null}); selectConversationWhenListed(store, 'a');
   client.update(ready); store.setSession(client.session);
   await until(()=>store.getSnapshot().views.a?.verified);
   return {store, client, stream:()=>stream, posts:()=>posts, reads:()=>reads, snapshots:()=>snapshots,

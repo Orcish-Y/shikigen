@@ -1,3 +1,4 @@
+import { selectConversationWhenListed } from './helpers/select-conversation.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { BackendClient } from '../src/backend-client.ts';
@@ -55,7 +56,7 @@ function createEventWorkbench(t) {
     return new Promise(resolveResponse=>queue.push({path,signal:init.signal,
       respondWithBody:value=>resolveResponse(value instanceof Response?value:Response.json({data:value}))}));
   });
-  const store=new ConversationStore({storage:null});
+  const store=new ConversationStore({storage:null}); selectConversationWhenListed(store, 't');
   client.update({state:'ready',startup_id:'lease',base_url:'http://127.0.0.1:45200'});
   store.setSession(client.session);
   t.after(()=>{store.setDetailsOpen(false);store.setSession(null);client.update(null);});

@@ -1,3 +1,4 @@
+import { selectConversationWhenListed } from './helpers/select-conversation.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { BackendClient } from '../src/backend-client.ts';
@@ -19,7 +20,7 @@ function fixture(t, fetcher) {
     calls.push({url, init, at:Date.now()});
     return fetcher(url, init);
   });
-  const store = new ConversationStore({storage:null});
+  const store = new ConversationStore({storage:null}); selectConversationWhenListed(store);
   const ready = {state:'ready', startup_id:'one', base_url:'http://127.0.0.1:1'};
   client.update(ready);
   store.setSession(client.session);
@@ -189,7 +190,7 @@ test('hidden initial ready makes no requests; showing starts once even with repe
   store.setVisible(true);
   store.setVisible(true);
   store.setSession(client.session);
-  await until(() => store.canSend());
+  await until(() => store.getSnapshot().activeId && store.canSend());
   assert.equal(lists(calls).length, 1);
   assert.equal(calls.filter(call => call.url.pathname.endsWith('/messages')).length, 1);
 });
@@ -202,7 +203,7 @@ test('HTTP-date Retry-After delays a single ordinary list poll', async t => {
     if(++reads === 2) return new Response('busy', {status:503, headers:{'Retry-After':deadline}});
     return Response.json({data:[row()], next_cursor:null});
   });
-  await until(() => store.canSend());
+  await until(() => store.getSnapshot().activeId && store.canSend());
   await advance(5000);
   await advance(19999);
   assert.equal(reads, 2);
@@ -235,7 +236,7 @@ test('hidden unconfirmed POST keeps the submission unknown and never automatical
     if(url.pathname === '/api/threads') return Response.json({data:[row()], next_cursor:null});
     return Response.json({data:[]});
   });
-  await until(() => store.canSend());
+  await until(() => store.getSnapshot().activeId && store.canSend());
   store.updateDraft('  原文\n');
   assert.equal(store.send('  原文\n'), true);
   await until(() => resolvePost);

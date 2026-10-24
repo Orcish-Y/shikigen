@@ -1,3 +1,4 @@
+import { selectConversationWhenListed } from './helpers/select-conversation.mjs';
 import assert from 'node:assert/strict';
 import test, { afterEach } from 'node:test';
 import { JSDOM } from 'jsdom';
@@ -70,12 +71,12 @@ function StoreWorkspace({store}) {
 
 async function startWorkspace(t, sendRequestFn) {
   const client = new BackendClient(sendRequestFn);
-  const store = new ConversationStore({storage:createDraftStorage()});
+  const store = new ConversationStore({storage:createDraftStorage()}); selectConversationWhenListed(store, 'a');
   client.update(backendSnapshot);
   store.setSession(client.session);
   render(React.createElement(StoreWorkspace, {store}));
   t.after(() => act(() => {store.setSession(null); client.update(null);}));
-  await waitForExpectation(() => store.canSend());
+  await waitForExpectation(() => store.getSnapshot().activeId && store.canSend());
   const draft = screen.getByRole('textbox', {name:'消息草稿'});
   return {store, draft, user:userEvent.setup({document:browser.window.document, delay:null})};
 }
@@ -252,10 +253,10 @@ test('运行和审批期间可编辑，普通 Enter 不转为取消或审批，�
   assert.equal(draft.disabled, false);
 });
 
-test('无会话禁止编辑，空白草稿禁发；命令面板按钮仍可键盘聚焦', async () => {
+test('欢迎页可编辑，空白草稿禁发；命令面板按钮仍可键盘聚焦', async () => {
   const actions = [];
   const {rerender} = render(React.createElement(Composer, {...baseProps, hasConversation:false, canSend:false}));
-  assert.equal(screen.getByRole('textbox', {name:'消息草稿'}).disabled, true);
+  assert.equal(screen.getByRole('textbox', {name:'消息草稿'}).disabled, false, '新会话欢迎页允许编辑草稿');
   rerender(React.createElement(Composer, {...baseProps, draft:' \n\t ', onSend:() => actions.push('发送')}));
   assert.equal(screen.getByRole('button', {name:'发送'}).disabled, true);
   const user = userEvent.setup({document:browser.window.document, delay:null});

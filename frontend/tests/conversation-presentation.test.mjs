@@ -1,3 +1,4 @@
+import { selectConversationWhenListed } from './helpers/select-conversation.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { BackendClient } from '../src/backend-client.ts';
@@ -31,7 +32,7 @@ async function until(predicate) {
 function startStore(storage, fetchFn) {
   const client = new BackendClient(fetchFn);
   client.update(readySessionState);
-  const store = new ConversationStore({storage});
+  const store = new ConversationStore({storage}); selectConversationWhenListed(store, 'a');
   store.setSession(client.session);
   return {store, close:() => {store.setSession(null); client.update(null);}};
 }
@@ -171,7 +172,7 @@ test('late selected history cannot change the next conversation title or draft',
     await until(() => store.getSnapshot().listLoaded);
     store.select('a');
     await until(() => store.getSnapshot().views.a?.history === 'loading');
-    store.select('b'); await until(() => store.canSend()); store.updateDraft('保持原文');
+    store.select('b'); await until(() => store.getSnapshot().activeId && store.canSend()); store.updateDraft('保持原文');
     delayed.resolve(Response.json({data:[message(1,'迟到消息')]}));
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(store.getSnapshot().activeId,'b');

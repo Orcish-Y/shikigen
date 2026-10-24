@@ -2,6 +2,8 @@
 
 基于 Tauri 2、React、TypeScript、Vite 和 Tailwind CSS 4。设计规范见 [design.md](design.md)，文档入口见 [总导航](../docs/README.md)。
 
+完整启动进入新会话欢迎页，历史会话在侧栏点击后才读取。欢迎页草稿独立保存在本地，首次发送时创建后端会话并提交原文；“新建”返回欢迎页，不提前创建空会话。历史会话草稿与发送待确认线索继续保留。从托盘恢复窗口或本次应用内重新连接后端时，保留当前选择。
+
 基础控件的固定来源、依赖版本、主题映射与回归入口见 [组件库接入说明](component-libraries.md)。
 
 工具页的 HTTP 参数映射、输入结构编辑、动态表单与 JSON 模式及验证入口见 [HTTP 参数实现](../docs/wayfinder/tools-workflow/http-parameters.md)。

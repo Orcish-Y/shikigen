@@ -1,3 +1,4 @@
+import { selectConversationWhenListed } from './helpers/select-conversation.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { BackendClient } from '../src/backend-client.ts';
@@ -34,7 +35,7 @@ function createFixture(t,{status='completed'}={}) {
     return new Promise(resolveResponse=>{request.respondWithRun=run=>resolveResponse(run instanceof Response?run:
       Response.json({data:{id:'r',thread_id:'t',status:latestStatus,usage,usage_pending:true,updated_at:instant,...run}}));});
   });
-  const store=new ConversationStore({storage:null});
+  const store=new ConversationStore({storage:null}); selectConversationWhenListed(store, 't');
   const readySessionState={state:'ready',startup_id:'lease',base_url:'http://127.0.0.1:45200'};
   client.update(readySessionState);store.setSession(client.session);
   t.after(()=>{store.setSession(null);client.update(null);});

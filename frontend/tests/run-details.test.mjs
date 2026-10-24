@@ -1,3 +1,4 @@
+import { selectConversationWhenListed } from './helpers/select-conversation.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { BackendClient } from '../src/backend-client.ts';
@@ -30,7 +31,7 @@ function setup(t) {
     return new Promise(resolveResponse=>snapshots.push({path,signal:init.signal,
       respondWithRun:run=>resolveResponse(run instanceof Response?run:Response.json({data:{id:'r',thread_id:'t',status:'running',...run}}))}));
   });
-  const store=new ConversationStore({storage:null});
+  const store=new ConversationStore({storage:null}); selectConversationWhenListed(store, 't');
   client.update({state:'ready',startup_id:'lease',base_url:'http://127.0.0.1:45200'});
   store.setSession(client.session);
   t.after(()=>{store.setSession(null);client.update(null);});

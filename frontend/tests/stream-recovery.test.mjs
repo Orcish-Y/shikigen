@@ -1,3 +1,4 @@
+import { selectConversationWhenListed } from './helpers/select-conversation.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { BackendClient } from '../src/backend-client.ts';
@@ -37,7 +38,7 @@ function fixture(t, reply, snapshotStatus = 'running', empty = false, history) {
       });
     }}), {headers:{'content-type':'text/event-stream'}});
   });
-  const store = new ConversationStore({storage:null});
+  const store = new ConversationStore({storage:null}); selectConversationWhenListed(store, 't');
   client.update({state:'ready', startup_id:'first', base_url:'http://127.0.0.1:1'});
   store.setSession(client.session);
   t.after(() => {store.setSession(null); client.update(null);});
@@ -199,7 +200,7 @@ test('an accepted POST disconnect recovers the known run by bounded GET and pres
   const {store, streams, view, requests, advance} = fixture(t, (_index, init) => init.method === 'POST'
     ? new Response(`event: metadata\ndata: ${JSON.stringify(run())}\n\n`, {headers:{'content-type':'text/event-stream'}})
     : undefined, 'completed', true);
-  await until(() => store.canSend());
+  await until(() => store.getSnapshot().activeId && store.canSend());
   store.updateDraft('  本次原文\n');
   assert.equal(store.send('  本次原文\n'), true);
   await until(() => view().observation === 'retry_wait');
@@ -224,7 +225,7 @@ test('accepted sending reads the committed user message during retry wait, keepi
     accepted = true;
     return new Response(`event: metadata\ndata: ${JSON.stringify(run())}\n\n`, {headers:{'content-type':'text/event-stream'}});
   }, 'running', true, () => accepted ? [{...message, run_status:'interrupted'}] : []);
-  await until(() => store.canSend());
+  await until(() => store.getSnapshot().activeId && store.canSend());
   store.send('已保存原文');
   await until(() => view().observation === 'retry_wait');
   await until(() => view().messages.length === 1);
@@ -238,7 +239,7 @@ test('accepted sending reads the committed user message during retry wait, keepi
 test('unaccepted POST 503 retains original error and Retry-After, then only verifies with GET', async t => {
   const {store, requests, view, advance} = fixture(t, () => new Response('接受情况未知',
     {status:503, headers:{'Retry-After':'2'}}), 'running', true);
-  await until(() => store.canSend());
+  await until(() => store.getSnapshot().activeId && store.canSend());
   store.updateDraft('  不能自动重发\n');
   store.send('  不能自动重发\n');
   await until(() => store.getSnapshot().submissions.t?.status === 'unknown');

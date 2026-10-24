@@ -15,6 +15,7 @@
 | 首版前端补全 | [前后端差距审计](frontend/frontend-gap-audit.md)、[决策地图](wayfinder/frontend-completion/map.md)、[查询契约](wayfinder/frontend-completion/tickets/001-run-discovery.contract.md)、[运行投影与恢复契约](wayfinder/frontend-completion/tickets/002-run-projection.contract.md)、[审批与取消交互契约](wayfinder/frontend-completion/tickets/003-approval-cancel.contract.md)、[消息、工具与本地资源契约](wayfinder/frontend-completion/tickets/004-message-tools-export.contract.md)、[运行详情、用量与事件契约](wayfinder/frontend-completion/tickets/005-run-details.contract.md)、[交互与验收契约](wayfinder/frontend-completion/tickets/006-interaction-acceptance.contract.md) | 差距审计是 2026-10-03 历史快照；定稿契约保留，实施 1–23 票已完成 |
 | 首版实施与验收 | [23 票实施索引](wayfinder/frontend-completion/implementation/index.md)、[原生验收汇总](wayfinder/frontend-completion/native-acceptance-summary.md) | 2026-10-07 已验收；分批结果及未覆盖硬件范围分别记录 |
 | 近期开发与遗留问题 | [开发交接](development-handoff.md)、[待调查问题](issues/README.md)、[开发归档](archive/2026-10-07/README.md) | 消息事务、分页、响应头、端口回退和网络模块；保留实际回归错误 |
+| 执行成本复盘 | [启动欢迎页修复复盘](retrospectives/2026-10-24-startup-welcome.md) | 重复验证、验收环境与日志缺口造成的耗时及改进检查点 |
 | 外部 Agent 架构对照 | [研究索引](research/README.md) | 持久化/执行边界、子 Agent/多会话、MCP 三个主题摘要 |
 | 工具库与消费者复用 | [开发指南](wayfinder/tools-workflow/README.md)、[14 票实施索引](wayfinder/tools-workflow/implementation/index.md)、[验证与报告](wayfinder/tools-workflow/validation.md) | HTTP／Python／MCP、OpenAPI、草稿与冲突、同步／异步复用；当前约定和延期项集中索引 |
 | 框架 API 速查 | [LangGraph 标识](research/langgraph-identifiers.md)、[状态存储](research/runtime-context-and-storage-strategy.md) | 开发参考，保留原文 |

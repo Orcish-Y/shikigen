@@ -1,3 +1,4 @@
+import { selectConversationWhenListed } from './helpers/select-conversation.mjs';
 import assert from 'node:assert/strict';
 import test, {afterEach} from 'node:test';
 import {JSDOM} from 'jsdom';
@@ -152,12 +153,12 @@ test('真实会话投影通过HTTP/SSE接收已保存推理，随后正文增量
     return new Response(new ReadableStream({start:controller => {stream = controller;}}),
       {headers:{'content-type':'text/event-stream'}});
   });
-  const store = new ConversationStore({storage:{getItem:() => null, setItem:() => {}}});
+  const store = new ConversationStore({storage:{getItem:() => null, setItem:() => {}}}); selectConversationWhenListed(store, 'a');
   client.update(backendSnapshot);
   store.setSession(client.session);
   render(React.createElement(StoreConversation, {store}));
   t.after(() => act(() => {store.setSession(null); client.update(null);}));
-  await waitForExpectation(() => store.canSend());
+  await waitForExpectation(() => store.getSnapshot().activeId && store.canSend());
   act(() => {store.send('公开消息链路');});
   await waitForExpectation(() => stream);
   const reasoning = createThinkingBlock('已保存的**真实推理**\n\n后续正文仍在生成。');
@@ -184,7 +185,7 @@ test('真实会话投影通过HTTP/SSE接收已保存推理，随后正文增量
     stream.enqueue(encodeSseFrame('metadata', {thread_id:'a', run_id:'run-reasoning', status:'completed'}));
     stream.close();
   });
-  await waitForExpectation(() => store.canSend());
+  await waitForExpectation(() => store.getSnapshot().activeId && store.canSend());
   assert.equal(toggle.getAttribute('aria-expanded'), 'false');
   assert.equal(document.activeElement, toggle);
   assert.equal(screen.queryByText('生成中 · 尚未保存'), null);

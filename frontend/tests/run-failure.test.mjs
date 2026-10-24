@@ -1,3 +1,4 @@
+import { selectConversationWhenListed } from './helpers/select-conversation.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
@@ -73,7 +74,7 @@ async function setup(messages) {
     }}),{headers:{'Content-Type':'text/event-stream'}});
     return Response.json({data:{id:'r',thread_id:'a',status,error:status==='error'?reason:null,error_code:status==='error'?'execution_failed':null}});
   });
-  const store = new ConversationStore({storage:null});
+  const store = new ConversationStore({storage:null}); selectConversationWhenListed(store, 'a');
   client.update(ready);store.setSession(client.session);
   await until(()=>store.getSnapshot().views.a?.verified && store.getSnapshot().views.a.messages.at(-1)?.preview);
   return {store,reason,reads:()=>reads,posts:()=>posts,

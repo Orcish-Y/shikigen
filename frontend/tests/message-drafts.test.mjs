@@ -1,3 +1,4 @@
+import { selectConversationWhenListed } from './helpers/select-conversation.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { BackendClient } from '../src/backend-client.ts';
@@ -24,7 +25,7 @@ function setup(storage, transport = async (url, init) => {
     ? Response.json({data:[thread('a'), thread('b')], next_cursor:null}) : Response.json({data:[]});
 }) {
   const client = new BackendClient(transport);
-  const store = new ConversationStore({storage});
+  const store = new ConversationStore({storage}); selectConversationWhenListed(store, 'a');
   client.update(ready);
   store.setSession(client.session);
   return {store, close:() => {store.setSession(null); client.update(null);}};
@@ -33,15 +34,17 @@ function setup(storage, transport = async (url, init) => {
 test('会话草稿按原文跨切换和应用重启保留，恢复不发出 POST', async () => {
   const storage = memory();
   const first = setup(storage);
-  await until(() => first.store.canSend());
+  await until(() => first.store.getSnapshot().activeId && first.store.canSend());
   assert.equal(first.store.getSnapshot().views.a.acceptedSendId, null, 'GET 不发起跟随意图');
   first.store.updateDraft('  第一条\n    中文缩进\n');
   first.store.select('b');
-  await until(() => first.store.canSend());
+  await until(() => first.store.getSnapshot().activeId && first.store.canSend());
   first.store.updateDraft('第二个会话');
   first.close();
   const second = setup(storage);
-  await until(() => second.store.canSend());
+  await until(() => second.store.getSnapshot().listLoaded);
+  second.store.select('b');
+  await until(() => second.store.getSnapshot().activeId && second.store.canSend());
   assert.equal(second.store.getSnapshot().activeId, 'b');
   assert.equal(second.store.getSnapshot().drafts.b, '第二个会话');
   second.store.select('a');
@@ -87,7 +90,7 @@ test('确认接受清对应版本，已知运行断流/重开仅 GET，稀疏历
     return new URL(url).pathname === '/api/threads'
       ? Response.json({data:[thread('a')], next_cursor:null}) : Response.json({data:[]});
   });
-  await until(() => first.store.canSend());
+  await until(() => first.store.getSnapshot().activeId && first.store.canSend());
   first.store.updateDraft('原文'); first.store.send('原文');
   await until(() => stream);
   stream.enqueue(encode('metadata', {thread_id:'a', run_id:'accepted', status:'running'}));
@@ -103,7 +106,7 @@ test('确认接受清对应版本，已知运行断流/重开仅 GET，稀疏历
     if (new URL(url).pathname === '/api/threads') return Response.json({data:[thread('a')], next_cursor:null});
     return Response.json({data:{id:'accepted', thread_id:'a', status:'completed'}});
   });
-  await until(() => second.store.canSend());
+  await until(() => second.store.getSnapshot().activeId && second.store.canSend());
   assert.equal(second.store.getSnapshot().views.a.run.run_id, 'accepted');
   assert.equal(second.store.getSnapshot().drafts.a, '下一条草稿');
   assert.ok(reads.includes('/api/threads/a/runs/accepted'));
@@ -119,7 +122,7 @@ test('旧 pending 在重开后是待核实；查询无消息仍保留，用户�
     return new URL(url).pathname === '/api/threads'
       ? Response.json({data:[thread('a')], next_cursor:null}) : Response.json({data:[]});
   });
-  await until(() => first.store.canSend());
+  await until(() => first.store.getSnapshot().activeId && first.store.canSend());
   first.store.updateDraft('原请求'); first.store.send('原请求');
   // 模拟突然退出，重建前不要让原 owner 将 pending 改成 unknown。
   const second = setup(storage, async (url, init) => {
@@ -157,7 +160,7 @@ test('本次 POST metadata 才确认接受；原文发送，改写后同文的�
     return new URL(url).pathname === '/api/threads'
       ? Response.json({data:[thread('a')], next_cursor:null}) : Response.json({data:[]});
   });
-  await until(() => store.canSend());
+  await until(() => store.getSnapshot().activeId && store.canSend());
   store.updateDraft('  中文\n    缩进\n');
   assert.equal(store.send(store.getSnapshot().drafts.a), true);
   await until(() => stream);
@@ -188,7 +191,7 @@ test('接受前 POST 500 只 GET 核对；同文历史不解锁，人工确认�
     if (path.endsWith('/messages')) return Response.json({data:sent ? [saved] : []});
     return Response.json({data:{id:'existing', thread_id:'a', status:'completed'}});
   });
-  await until(() => store.canSend());
+  await until(() => store.getSnapshot().activeId && store.canSend());
   store.updateDraft(original);
   store.send(original);
   await until(() => store.getSnapshot().views.a.verified && store.getSnapshot().views.a.messages.length);
@@ -216,7 +219,7 @@ test('空白禁发；运行/审批期间编辑草稿，终态不排队、不自�
     return new URL(url).pathname === '/api/threads'
       ? Response.json({data:[thread('a')], next_cursor:null}) : Response.json({data:[]});
   });
-  await until(() => store.canSend());
+  await until(() => store.getSnapshot().activeId && store.canSend());
   assert.equal(store.send(' \n\t '), false);
   assert.equal(posts, 0);
   store.updateDraft('第一条'); store.send('第一条');
@@ -245,7 +248,7 @@ test('接受前解析/网络/HTTP 200 空流均保留未知，GET 不清草稿',
       return new URL(url).pathname === '/api/threads'
         ? Response.json({data:[thread('a')], next_cursor:null}) : Response.json({data:[]});
     });
-    await until(() => store.canSend());
+    await until(() => store.getSnapshot().activeId && store.canSend());
     store.updateDraft('待核对原文'); store.send('待核对原文');
     await until(() => store.getSnapshot().submissions.a?.status === 'unknown' && store.getSnapshot().views.a.verified);
     assert.equal(store.getSnapshot().drafts.a, '待核对原文');
@@ -262,12 +265,12 @@ test('切换中止未确认 POST，迟到接受不能修改旧会话或新会话
     return new URL(url).pathname === '/api/threads'
       ? Response.json({data:[thread('a'), thread('b')], next_cursor:null}) : Response.json({data:[]});
   });
-  await until(() => store.canSend());
+  await until(() => store.getSnapshot().activeId && store.canSend());
   store.updateDraft('a 原文'); store.send('a 原文');
   await until(() => reply);
   store.select('b'); store.updateDraft('b 新草稿');
   reply(new Response(encode('metadata', {thread_id:'a', run_id:'late', status:'running'}), {headers:{'Content-Type':'text/event-stream'}}));
-  await until(() => store.canSend());
+  await until(() => store.getSnapshot().activeId && store.canSend());
   assert.equal(store.getSnapshot().drafts.a, 'a 原文');
   assert.equal(store.getSnapshot().drafts.b, 'b 新草稿');
   assert.equal(store.getSnapshot().submissions.a.status, 'unknown');
@@ -285,7 +288,7 @@ test('503 遵守 Retry-After，400/409/422 不自动重发且保留草稿', asyn
         ? Response.json({data:[thread('a')], next_cursor:null}) : Response.json({data:[]});
     });
     child.after(close);
-    await until(() => store.canSend());
+    await until(() => store.getSnapshot().activeId && store.canSend());
     store.updateDraft('请求正文'); store.send('请求正文');
     await until(() => !store.getSnapshot().views.a.sending);
     assert.equal(store.getSnapshot().drafts.a, '请求正文');
@@ -300,7 +303,7 @@ test('503 遵守 Retry-After，400/409/422 不自动重发且保留草稿', asyn
       assert.equal(store.getSnapshot().views.a.verified, false, 'Retry-After 到期前不绕过等待查询');
       child.mock.timers.tick(300000);
       await until(() => store.getSnapshot().views.a.verified);
-    } else {await until(() => store.canSend()); assert.equal(store.canSend(), true);}
+    } else {await until(() => store.getSnapshot().activeId && store.canSend()); assert.equal(store.canSend(), true);}
     assert.equal(posts, 1);
     close();
   });
@@ -315,7 +318,7 @@ test('本地写入失败保留内存并提示，会话 404 可复制到新会话
     if (missing && url.endsWith('/a/messages')) return Response.json({detail:'deleted'}, {status:404});
     return Response.json({data:[]});
   });
-  await until(() => store.canSend());
+  await until(() => store.getSnapshot().activeId && store.canSend());
   store.updateDraft('  可恢复的文字\n');
   assert.match(store.getSnapshot().storageIssue, /本地保存不可用/);
   missing = true; store.reload();
@@ -336,7 +339,7 @@ test('接受 Run 快照 404 不误报会话删除，恢复线索和下一条草�
     return new URL(url).pathname === '/api/threads'
       ? Response.json({data:[thread('a')], next_cursor:null}) : Response.json({data:[]});
   });
-  await until(() => first.store.canSend());
+  await until(() => first.store.getSnapshot().activeId && first.store.canSend());
   first.store.updateDraft('第一条'); first.store.send('第一条');
   await until(() => stream);
   stream.enqueue(encode('metadata', {thread_id:'a', run_id:'accepted', status:'running'}));
@@ -357,7 +360,7 @@ test('接受 Run 快照 404 不误报会话删除，恢复线索和下一条草�
 
 test('本地存储 API 缺失或被禁用也提示内存保存，文字仍可编辑', async () => {
   const {store, close} = setup(null);
-  await until(() => store.canSend());
+  await until(() => store.getSnapshot().activeId && store.canSend());
   assert.match(store.getSnapshot().storageIssue, /本地保存不可用/);
   store.updateDraft('  内存仍保留\n');
   assert.equal(store.getSnapshot().drafts.a, '  内存仍保留\n');

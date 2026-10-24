@@ -1,3 +1,4 @@
+import { selectConversationWhenListed } from './helpers/select-conversation.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { BackendClient } from '../src/backend-client.ts';
@@ -15,7 +16,7 @@ const encode = value => new TextEncoder().encode(value);
 function makeStore(fetcher) {
   const client = new BackendClient(fetcher);
   client.update(ready);
-  const store = new ConversationStore();
+  const store = new ConversationStore(); selectConversationWhenListed(store);
   store.setSession(client.session);
   return { client, store };
 }
